@@ -39,7 +39,10 @@ jobs:
       - name: Install npm workspaces
         run: npm ci
 
-      - name: Typecheck & test viewer (Vitest)
+      - name: Check the committed OCCT WASM matches its sources
+        run: npm run check:dist --workspace @j3d/occt
+
+      - name: Typecheck & test (Vitest, including OCCT integration tests)
         run: |
           npm run typecheck
           npm test

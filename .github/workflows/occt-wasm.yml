@@ -43,6 +43,11 @@ jobs:
         working-directory: src/J3D.Occt
         run: npm run build:wasm
 
+      - name: Test the new build (Vitest + fixtures)
+        run: |
+          npm run typecheck --workspace @j3d/occt
+          npm test --workspace @j3d/occt
+
       - name: Report artefact sizes
         working-directory: src/J3D.Occt/dist
         run: |
@@ -55,6 +60,7 @@ jobs:
         with:
           name: libcascade-logs
           path: src/J3D.Occt/.libcascade/
+          include-hidden-files: true
           if-no-files-found: ignore
 
       - name: Commit dist

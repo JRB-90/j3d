@@ -6,9 +6,15 @@
   "type": "module",
   "scripts": {
     "build:wasm": "libcascade build && libcascade assemble",
-    "render:wasm": "libcascade build --render-only"
+    "render:wasm": "libcascade build --render-only",
+    "check:dist": "node scripts/check-dist.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc"
   },
   "devDependencies": {
-    "@libcascade/toolchain": "^3.1.0"
+    "@libcascade/toolchain": "^3.1.0",
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4"
   }
 }

@@ -22,6 +22,9 @@ export default defineBuild({
     STACK_SIZE: 8388608,
     WASM_BIGINT: true,
     EVAL_CTORS: 2,
+    // As in Replicad's build: XCAF pulls in OCCT's visualisation toolkit, whose font classes
+    // reference FreeType, which isn't linked. J3D never calls them; the stubs throw if anything did.
+    ERROR_ON_UNDEFINED_SYMBOLS: false,
     EXPORTED_RUNTIME_METHODS: [
       'FS',
       'wasmMemory',

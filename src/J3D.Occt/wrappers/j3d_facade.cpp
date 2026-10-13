@@ -37,8 +37,9 @@
 #include <TDataStd_Name.hxx>
 #include <TDocStd_Document.hxx>
 #include <TopExp.hxx>
-#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
-#include <TopTools_ListOfShape.hxx>
+#include <NCollection_IndexedDataMap.hxx>
+#include <NCollection_List.hxx>
+#include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
@@ -49,7 +50,14 @@
 #include <XCAFPrs_DocumentExplorer.hxx>
 #include <XCAFPrs_Style.hxx>
 
+// The bindgen parses this file without Emscripten's sysroot on the include path; only the real
+// compile sees emscripten.h. Progress reporting is compiled in only when it is available.
+#if __has_include(<emscripten.h>)
 #include <emscripten.h>
+#define J3D_HAS_EMSCRIPTEN 1
+#else
+#define J3D_HAS_EMSCRIPTEN 0
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -86,59 +94,32 @@ constexpr int PhaseMeshing = 3;
 constexpr int PhaseExtracting = 4;
 
 // Neutral grey for parts without a colour, in linear RGB (#B4B9C0 in sRGB).
-const Quantity_ColorRGBA DefaultColor(Quantity_Color(0.456, 0.485, 0.527, Quantity_TOC_RGB), 1.0f);
+inline const Quantity_ColorRGBA DefaultColor(Quantity_Color(0.456, 0.485, 0.527, Quantity_TOC_RGB), 1.0f);
 
 // Reports progress to the worker through `Module.j3dProgress(phase, fraction)` when it is set.
 // Throttled to ~10 Hz; fraction < 0 means indeterminate.
-void reportProgress(int phase, double fraction, bool force = false) {
+inline void reportProgress(int phase, double fraction, bool force = false) {
+#if J3D_HAS_EMSCRIPTEN
+  // A phase change is always reported; repeats within a phase are throttled.
   static double lastReport = 0.0;
+  static int lastPhase = -1;
   const double now = emscripten_get_now();
-  if (!force && now - lastReport < 100.0) {
+  if (!force && phase == lastPhase && now - lastReport < 100.0) {
     return;
   }
   lastReport = now;
+  lastPhase = phase;
   // clang-format off
   EM_ASM({ if (Module['j3dProgress']) Module['j3dProgress']($0, $1); }, phase, fraction);
   // clang-format on
+#else
+  (void)phase;
+  (void)fraction;
+  (void)force;
+#endif
 }
 
-// OCCT progress indicator that forwards transfer progress to reportProgress.
-class ProgressIndicator : public Message_ProgressIndicator {
-public:
-  explicit ProgressIndicator(int phase) : phase_(phase) {}
-
-protected:
-  void Show(const Message_ProgressScope&, const Standard_Boolean isForce) override {
-    reportProgress(phase_, GetPosition(), isForce);
-  }
-
-private:
-  int phase_;
-};
-
-// Read-only, seekable std::streambuf over an existing buffer (zero copy).
-class MemoryStreamBuffer : public std::streambuf {
-public:
-  MemoryStreamBuffer(char* data, std::size_t size) { setg(data, data, data + size); }
-
-protected:
-  pos_type seekoff(off_type offset, std::ios_base::seekdir direction, std::ios_base::openmode) override {
-    char* target = direction == std::ios_base::beg   ? eback() + offset
-                   : direction == std::ios_base::cur ? gptr() + offset
-                                                     : egptr() + offset;
-    if (target < eback() || target > egptr()) {
-      return pos_type(off_type(-1));
-    }
-    setg(eback(), target, egptr());
-    return pos_type(target - eback());
-  }
-
-  pos_type seekpos(pos_type position, std::ios_base::openmode mode) override {
-    return seekoff(off_type(position), std::ios_base::beg, mode);
-  }
-};
-
-bool useParallelMeshing() {
+inline bool useParallelMeshing() {
 #if defined(__EMSCRIPTEN_PTHREADS__)
   const Handle(OSD_ThreadPool)& pool = OSD_ThreadPool::DefaultPool(-1);
   pool->SetNbDefaultThreadsToLaunch(pool->NbThreads());
@@ -148,7 +129,7 @@ bool useParallelMeshing() {
 #endif
 }
 
-std::string labelName(const TDF_Label& label) {
+inline std::string labelName(const TDF_Label& label) {
   Handle(TDataStd_Name) name;
   if (label.IsNull() || !label.FindAttribute(TDataStd_Name::GetID(), name)) {
     return {};
@@ -157,7 +138,7 @@ std::string labelName(const TDF_Label& label) {
   return TCollection_AsciiString(name->Get()).ToCString();
 }
 
-void appendJsonString(std::string& out, const std::string& value) {
+inline void appendJsonString(std::string& out, const std::string& value) {
   out += '"';
   for (const unsigned char c : value) {
     switch (c) {
@@ -179,14 +160,14 @@ void appendJsonString(std::string& out, const std::string& value) {
   out += '"';
 }
 
-void appendNumber(std::string& out, double value) {
+inline void appendNumber(std::string& out, double value) {
   char buffer[32];
   std::snprintf(buffer, sizeof(buffer), "%.9g", std::isfinite(value) ? value : 0.0);
   out += buffer;
 }
 
 // Column-major 4x4 (Three.js Matrix4.fromArray order).
-void appendMatrix(std::string& out, const gp_Trsf& trsf) {
+inline void appendMatrix(std::string& out, const gp_Trsf& trsf) {
   out += '[';
   for (int column = 1; column <= 4; ++column) {
     for (int row = 1; row <= 4; ++row) {
@@ -199,18 +180,18 @@ void appendMatrix(std::string& out, const gp_Trsf& trsf) {
   out += ']';
 }
 
-Quantity_ColorRGBA styleColor(const XCAFPrs_Style& style) {
+inline Quantity_ColorRGBA styleColor(const XCAFPrs_Style& style) {
   return style.IsSetColorSurf() ? style.GetColorSurfRGBA() : DefaultColor;
 }
 
-std::string styleKey(const XCAFPrs_Style& style) {
+inline std::string styleKey(const XCAFPrs_Style& style) {
   if (!style.IsSetColorSurf()) {
     return "-";
   }
   const Quantity_ColorRGBA color = style.GetColorSurfRGBA();
   char buffer[96];
   std::snprintf(buffer, sizeof(buffer), "%.6f,%.6f,%.6f,%.6f", color.GetRGB().Red(), color.GetRGB().Green(),
-                color.GetRGB().Blue(), color.GetAlpha());
+                color.GetRGB().Blue(), color.Alpha());
   return buffer;
 }
 
@@ -387,7 +368,7 @@ public:
       // carry a fine-enough triangulation, so each unique shape is meshed once.
       for (std::size_t i = 0; i < prototypes_.size(); ++i) {
         j3d::reportProgress(j3d::PhaseMeshing, static_cast<double>(i) / prototypes_.size());
-        BRepMesh_IncrementalMesh(prototypes_[i].shape, linearDeflection, Standard_False, angularDeflection, parallel);
+        BRepMesh_IncrementalMesh(prototypes_[i].shape, linearDeflection, false, angularDeflection, parallel);
       }
       linearDeflection_ = linearDeflection;
       angularDeflection_ = angularDeflection;
@@ -421,6 +402,44 @@ public:
   std::string getLastError() const { return lastError_; }
 
 private:
+  // Helpers are private nested classes on purpose: the libcascade bindgen binds every top-level
+  // (and single-namespace) class in this file, but skips private nested types.
+  // OCCT progress indicator that forwards transfer progress to reportProgress.
+  class ProgressIndicator : public Message_ProgressIndicator {
+  public:
+    explicit ProgressIndicator(int phase) : phase_(phase) {}
+
+  protected:
+    void Show(const Message_ProgressScope&, const bool isForce) override {
+      j3d::reportProgress(phase_, GetPosition(), isForce);
+    }
+
+  private:
+    int phase_;
+  };
+
+  // Read-only, seekable std::streambuf over an existing buffer (zero copy).
+  class MemoryStreamBuffer : public std::streambuf {
+  public:
+    MemoryStreamBuffer(char* data, std::size_t size) { setg(data, data, data + size); }
+
+  protected:
+    pos_type seekoff(off_type offset, std::ios_base::seekdir direction, std::ios_base::openmode) override {
+      char* target = direction == std::ios_base::beg   ? eback() + offset
+                     : direction == std::ios_base::cur ? gptr() + offset
+                                                       : egptr() + offset;
+      if (target < eback() || target > egptr()) {
+        return pos_type(off_type(-1));
+      }
+      setg(eback(), target, egptr());
+      return pos_type(target - eback());
+    }
+
+    pos_type seekpos(pos_type position, std::ios_base::openmode mode) override {
+      return seekoff(off_type(position), std::ios_base::beg, mode);
+    }
+  };
+
   struct Prototype {
     TDF_Label label;
     TopoDS_Shape shape;
@@ -437,8 +456,9 @@ private:
     } catch (const std::bad_alloc&) {
       return fail(j3d::StatusOutOfMemory, "Out of memory.");
     } catch (const Standard_Failure& failure) {
-      return fail(j3d::StatusParseFailed, std::string(failure.DynamicType()->Name()) + ": " +
-                                              (failure.GetMessageString() ? failure.GetMessageString() : ""));
+      const char* message = failure.what();
+      return fail(j3d::StatusParseFailed,
+                  message != nullptr && *message != '\0' ? message : "OCCT reported an error while reading the file.");
     } catch (const std::exception& exception) {
       return fail(j3d::StatusInternal, exception.what());
     } catch (...) {
@@ -458,19 +478,19 @@ private:
   }
 
   int importStep(const std::string& fileName) {
-    j3d::MemoryStreamBuffer buffer(input_, inputLength_);
+    MemoryStreamBuffer buffer(input_, inputLength_);
     std::istream stream(&buffer);
 
     STEPCAFControl_Reader reader;
-    reader.SetColorMode(Standard_True);
-    reader.SetNameMode(Standard_True);
-    reader.SetLayerMode(Standard_False);
-    reader.SetPropsMode(Standard_False);
+    reader.SetColorMode(true);
+    reader.SetNameMode(true);
+    reader.SetLayerMode(false);
+    reader.SetPropsMode(false);
     if (reader.ReadStream(fileName.c_str(), stream) != IFSelect_RetDone) {
       return fail(j3d::StatusParseFailed, "Not a readable STEP file.");
     }
 
-    Handle(j3d::ProgressIndicator) progress = new j3d::ProgressIndicator(j3d::PhaseTransferring);
+    Handle(ProgressIndicator) progress = new ProgressIndicator(j3d::PhaseTransferring);
     if (!reader.Transfer(document_, progress->Start())) {
       return fail(j3d::StatusParseFailed, "The STEP file could not be translated.");
     }
@@ -493,16 +513,16 @@ private:
     releaseInput();
 
     IGESCAFControl_Reader reader;
-    reader.SetColorMode(Standard_True);
-    reader.SetNameMode(Standard_True);
-    reader.SetLayerMode(Standard_False);
+    reader.SetColorMode(true);
+    reader.SetNameMode(true);
+    reader.SetLayerMode(false);
     const IFSelect_ReturnStatus status = reader.ReadFile(path);
     std::remove(path);
     if (status != IFSelect_RetDone) {
       return fail(j3d::StatusParseFailed, "Not a readable IGES file.");
     }
 
-    Handle(j3d::ProgressIndicator) progress = new j3d::ProgressIndicator(j3d::PhaseTransferring);
+    Handle(ProgressIndicator) progress = new ProgressIndicator(j3d::PhaseTransferring);
     if (!reader.Transfer(document_, progress->Start())) {
       return fail(j3d::StatusParseFailed, "The IGES file could not be translated.");
     }
@@ -510,19 +530,19 @@ private:
   }
 
   int importBrep(const std::string& fileName) {
-    j3d::MemoryStreamBuffer buffer(input_, inputLength_);
+    MemoryStreamBuffer buffer(input_, inputLength_);
     std::istream stream(&buffer);
 
     TopoDS_Shape shape;
     BRep_Builder builder;
-    Handle(j3d::ProgressIndicator) progress = new j3d::ProgressIndicator(j3d::PhaseTransferring);
+    Handle(ProgressIndicator) progress = new ProgressIndicator(j3d::PhaseTransferring);
     BRepTools::Read(shape, stream, builder, progress->Start());
     if (shape.IsNull()) {
       return fail(j3d::StatusParseFailed, "Not a readable BREP file.");
     }
 
-    const TDF_Label label = shapeTool_->AddShape(shape, Standard_False);
-    TDataStd_Name::Set(label, TCollection_ExtendedString(fileName.c_str(), Standard_True));
+    const TDF_Label label = shapeTool_->AddShape(shape, false);
+    TDataStd_Name::Set(label, TCollection_ExtendedString(fileName.c_str(), true));
     return j3d::StatusOk;
   }
 
@@ -601,7 +621,7 @@ private:
     bool haveFirst = false;
 
     const Quantity_ColorRGBA fallback = j3d::styleColor(prototype.style);
-    for (RWMesh_FaceIterator face(prototype.label, TopLoc_Location(), Standard_True, prototype.style); face.More();
+    for (RWMesh_FaceIterator face(prototype.label, TopLoc_Location(), true, prototype.style); face.More();
          face.Next()) {
       if (face.IsEmptyMesh()) {
         continue;
@@ -621,10 +641,11 @@ private:
         const gp_Dir normal = face.NormalTransformed(node);
         positions.insert(positions.end(), {static_cast<float>(point.X()), static_cast<float>(point.Y()), static_cast<float>(point.Z())});
         normals.insert(normals.end(), {static_cast<float>(normal.X()), static_cast<float>(normal.Y()), static_cast<float>(normal.Z())});
-        colors.insert(colors.end(), {color.GetRGB().Red(), color.GetRGB().Green(), color.GetRGB().Blue(), color.GetAlpha()});
+        colors.insert(colors.end(), {static_cast<float>(color.GetRGB().Red()), static_cast<float>(color.GetRGB().Green()),
+                                     static_cast<float>(color.GetRGB().Blue()), color.Alpha()});
       }
 
-      std::vector<uint32_t>& target = color.GetAlpha() < 0.999f ? translucent : opaque;
+      std::vector<uint32_t>& target = color.Alpha() < 0.999f ? translucent : opaque;
       for (int element = face.ElemLower(); element <= face.ElemUpper(); ++element) {
         const Poly_Triangle triangle = face.TriangleOriented(element);
         for (int corner = 1; corner <= 3; ++corner) {
@@ -646,7 +667,7 @@ private:
     data.uniform_[0] = single.GetRGB().Red();
     data.uniform_[1] = single.GetRGB().Green();
     data.uniform_[2] = single.GetRGB().Blue();
-    data.uniform_[3] = single.GetAlpha();
+    data.uniform_[3] = single.Alpha();
     if (!uniform) {
       data.colorCount_ = static_cast<int>(colors.size());
       data.colors_ = j3d::copyToMalloc(colors);
@@ -662,7 +683,7 @@ private:
                                        static_cast<float>(b.X()), static_cast<float>(b.Y()), static_cast<float>(b.Z())});
     };
 
-    TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+    NCollection_IndexedDataMap<TopoDS_Shape, NCollection_List<TopoDS_Shape>, TopTools_ShapeMapHasher> edgeFaces;
     TopExp::MapShapesAndAncestors(prototype.shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
     for (int i = 1; i <= edgeFaces.Extent(); ++i) {
@@ -671,7 +692,7 @@ private:
         continue;
       }
 
-      const TopTools_ListOfShape& faces = edgeFaces.FindFromIndex(i);
+      const NCollection_List<TopoDS_Shape>& faces = edgeFaces.FindFromIndex(i);
       if (faces.IsEmpty()) {
         appendFreeEdge(edge, addSegment);
         continue;

@@ -6,9 +6,18 @@
 *.ps1 text eol=crlf
 *.sh  text eol=lf
 
+# The OCCT build hashes its C++ sources into dist/*.provenance.json; keep them byte-identical on
+# every platform so CI's staleness check matches locally built binaries.
+src/J3D.Occt/** text=auto eol=lf
+
 # Built OCCT WebAssembly binaries (src/J3D.Occt/dist) are stored in Git LFS.
 *.wasm filter=lfs diff=lfs merge=lfs -text
 
-# Binary CAD/mesh fixtures.
+# CAD/mesh files keep their exact bytes (no line-ending conversion).
+*.step -text
+*.stp  -text
+*.iges -text
+*.igs  -text
+*.brep -text
 *.glb  binary
 *.stl  binary
