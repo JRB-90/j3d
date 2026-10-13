@@ -22,11 +22,14 @@ The theme is dark throughout. **CAD files never leave the user's machine**: all 
 - [ ] Each file becomes its own model in the **model list**, showing its name, format, status, progress, and a cancel button while importing.
 - [ ] BREP models render **shaded faces in the file's colours** (STEP/IGES via XCAF) with **true BREP edges** drawn over them.
 - [ ] Each BREP model shows its **assembly tree** (names, nesting). The tree is read-only.
-- [ ] **Delete** removes the whole model from the scene and the list, and frees its memory (worker terminated, GPU buffers disposed).
+- [ ] glTF loads as GLB, embedded `.gltf`, multi-file `.gltf` (with its `.bin`/textures selected or dropped together), meshopt, Draco and KTX2. OBJ loads with its `.mtl` and textures when they're supplied alongside it.
+- [ ] Semi-transparent colours (STEP/IGES alpha, glTF/MTL opacity) render translucent.
+- [ ] **Delete** asks for confirmation ("Delete *name*?"), then removes the whole model from the scene and the list, and frees its memory (worker terminated, GPU buffers disposed).
 - [ ] Mouse: **left-drag pans, middle-drag pans, right-drag rotates, the wheel zooms** toward the view centre. The browser context menu is suppressed over the canvas.
 - [ ] Touch: one finger rotates, two fingers pinch to zoom and drag to pan.
 - [ ] Rotation is **turntable** (Z stays up, the view never rolls) about the scene centre.
-- [ ] The view **auto-fits** after each import. **Fit all** is available as a button and the `F` key.
+- [ ] The view **auto-fits when the scene goes from empty to its first model**. Later imports don't move the camera. **Fit all** is available as a button and the `F` key.
+- [ ] A clickable **view cube** (top-right) snaps to 26 standard views (6 faces, 12 edges, 8 corners) with an animated transition, keeping the current zoom. A **Home** button goes to isometric and fits all.
 - [ ] The view is **orthographic by default**, with a perspective/orthographic toggle that keeps the framing.
 - [ ] Imports scale up to what **wasm32 (4 GB per model worker)** allows. Exceeding it gives a clear "too large" error rather than a crash.
 - [ ] Works in the latest two versions of desktop **Chrome/Edge, Firefox and Safari**.
@@ -34,13 +37,13 @@ The theme is dark throughout. **CAD files never leave the user's machine**: all 
 
 ### Out of scope for iteration 1
 
-Persistence (models are lost on refresh), users and auth, deployment, picking/selection, highlighting from the tree, part visibility, measurement, sectioning, exploded views, export, mobile/tablet layout, zoom-to-cursor, transparency, Draco/KTX2-compressed glTF, multi-file glTF (external `.bin`/textures).
+Persistence (models are lost on refresh), users and auth, deployment, picking/selection, highlighting from the tree, part visibility, measurement, sectioning, exploded views, export, mobile/tablet layout, zoom-to-cursor, undo.
 
 ---
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13. Items marked *assumption* are my defaults and still need confirmation (§12).
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -63,7 +66,7 @@ Decided with the project owner on 2026-10-13. Items marked *assumption* are my d
 | D17 | Rotation | **Turntable**, fixed up axis | |
 | D18 | Up axis | **Z-up** | glTF (Y-up by spec) is rotated on import. |
 | D19 | Camera extras | Auto-fit on import, Fit all (button + `F`), **ortho default** + toggle | No zoom-to-cursor. |
-| D20 | Model size | **As large as wasm32 allows**: progress, cancellation, worker per model, threaded build available | See R3 and §12 Q1 on the threaded default. |
+| D20 | Model size | **As large as wasm32 allows**: progress, cancellation, worker per model, threaded build available | Threaded default: see D28. |
 | D21 | Import UX | Button + drag and drop, multi-file | |
 | D22 | Browsers | Evergreen Chromium + Firefox + Safari, desktop | |
 | D23 | Testing | xUnit v3 + bUnit, Vitest, Playwright E2E | |
@@ -71,6 +74,15 @@ Decided with the project owner on 2026-10-13. Items marked *assumption* are my d
 | D25 | Deployment | **Local dev only** for now | |
 | D26 | Naming | **`J3D.*`**, root namespace `J3D` | |
 | D27 | Deliverable this session | Plan + solution scaffold (M0) | |
+| D28 | OCCT threading | **Single-threaded by default.** Both variants are built; multi-threaded becomes the default only if the M5 benchmark (S4) shows ≥ 1.3× on our fixtures | COOP/COEP stay on regardless. See R3. |
+| D29 | Delete | **Confirmation dialog** before deleting a loaded model | Cancelling an in-progress import and dismissing a failed entry are immediate. |
+| D30 | Auto-fit | **Only when the scene goes from empty to its first model** | Applies again after every model has been deleted. |
+| D31 | Orientation aid | **Clickable view cube**, top-right: 6 faces + 12 edges + 8 corners = 26 views, plus Home | Animated, keeps zoom. Home = isometric + fit all. New scope beyond rotate/pan/zoom. |
+| D32 | glTF scope | **Everything**: GLB, embedded and multi-file `.gltf`, meshopt, Draco, KTX2 | Draco/Basis decoders are self-hosted (COEP forbids CDNs). |
+| D33 | OBJ materials | **`.mtl` + textures** via the same sidecar mechanism as multi-file glTF | |
+| D34 | Transparency | **Honour alpha** from STEP/IGES colours, glTF and MTL | Translucent faces split into their own sub-meshes. See R10. |
+| D35 | Repo visibility | **Public** (`JRB-90/j3d`) | The repo itself satisfies LGPL source availability for the OCCT build. |
+| D36 | Pushing | Pushed and **draft PR opened** after M0 | |
 
 ---
 
@@ -198,7 +210,8 @@ export default defineBuild({
 
 - Normals come from the surface via `BRepLib_ToolTriangulatedShape::ComputeNormals`. Winding and normals are flipped for `TopAbs_REVERSED` faces.
 - Edges are unique per prototype (`TopExp::MapShapes(..., TopAbs_EDGE)`), taken from `BRep_Tool::PolygonOnTriangulation` so they line up exactly with the shaded mesh. **Seam and degenerate edges are skipped**, and free edges are discretised with `GCPnts_TangentialDeflection`.
-- Colour precedence: face → part (prototype) → instance → parent assembly → default `#B4B9C0`. Colours are passed in **linear RGB** (`Quantity_TOC_RGB`) because Three.js works in linear space and sRGB values would look washed out.
+- Colour precedence: face → part (prototype) → instance → parent assembly → default `#B4B9C0`. Colours are read as **RGBA** (`Quantity_ColorRGBA` via `XCAFDoc_ColorTool`, plus `XCAFDoc_VisMaterial` where present; S1 confirms where OCCT 8 puts STEP transparency) and passed in **linear RGB** (`Quantity_TOC_RGB`), because Three.js works in linear space and sRGB values would look washed out.
+- Faces with alpha < 1 are written to a separate **translucent** index range per prototype, so the viewer can draw opaque and translucent geometry with different materials (D34).
 - Default tessellation uses a linear deflection of 0.1 % of the **model's** bounding-box diagonal (absolute, shared by all parts) and an angular deflection of 0.35 rad. Both are constants in one place, tuned in M5, with no UI in iteration 1.
 - Memory views into WASM memory become invalid when memory grows, so JS must `.slice()` them **before** making any further facade call.
 
@@ -221,7 +234,7 @@ user picks/drops files
 
 **Model worker lifecycle (BREP)**
 
-1. `init`: receives the shared compiled `WebAssembly.Module` and the variant (`single` unless `crossOriginIsolated` and threading is enabled). Instantiates via Emscripten's `instantiateWasm` hook.
+1. `init`: receives the shared compiled `WebAssembly.Module` and the variant (`single` by default (D28); `multi` only if enabled in config and `crossOriginIsolated`). Instantiates via Emscripten's `instantiateWasm` hook.
 2. `import { file, format, options }`: `file.stream()` → chunks copied into `AllocateInput` memory (phase **Reading**, fraction = bytes/size) → `Import` (**Parsing**, indeterminate: OCCT's STEP parse has no progress hook; then **Transferring**, determinate) → `ReleaseInput` → `Mesh` (**Meshing**, determinate) → extract (**Extracting**, per prototype).
 3. Posts `loaded { tree, prototypes: [{ positions, normals, indices, colors?, edges }], instances, bounds, stats, memoryBytes }` with **all typed-array buffers transferred** (zero-copy).
 4. Stays alive, holding the XCAF document, until the model is deleted.
@@ -239,18 +252,29 @@ user picks/drops files
 
 | Code | Cause |
 |---|---|
-| `Unsupported` | Unknown extension, or a feature we don't support (e.g. Draco glTF) |
+| `Unsupported` | Unknown extension, or a feature we don't support (e.g. a glTF extension with no loader) |
+| `MissingFile` | A multi-file glTF/OBJ references a required file (e.g. `.bin`) that wasn't selected with it. The message names the missing files. |
 | `ParseFailed` | The OCCT reader returned failure, or there was a C++ exception (`getExceptionMessage`) |
 | `Empty` | The file parsed but contained no shapes or triangles |
 | `OutOfMemory` | WASM `abort` / `RangeError` / memory growth failure: "Model too large for the browser's 4 GB WebAssembly limit" |
 | `Internal` | Anything else (logged to the console with a stack trace) |
 
+**Sidecar grouping (multi-file glTF and OBJ+MTL, D32/D33).** Each picker selection or drop is one *batch*. Before queueing:
+
+1. Files with a primary extension (`.step … .glb`, `.obj`) become models. Sidecar extensions (`.bin`, `.mtl`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.ktx2`) are held back for matching.
+2. Each `.gltf` / `.obj` (plus its `.mtl`) is scanned for referenced URIs. Sidecars are matched by decoded, case-insensitive file name, ignoring directories, since browsers don't expose paths.
+3. At load time, a `LoadingManager.setURLModifier` maps each referenced URI to a `blob:` URL for the matched `File`. The blob URLs are revoked when loading finishes.
+4. If a **required** buffer (`.bin`) is missing, the import fails with `MissingFile`. If only textures are missing, the model loads untextured with a warning. Sidecars nothing references are reported back as ignored.
+5. `formats.ts` becomes the source of truth for sidecar extensions too, and adds them to the picker's `accept` list.
+
 **Mesh formats** (no OCCT):
 
-- **STL and OBJ** are parsed by `STLLoader.parse` / `OBJLoader.parse` in a transient mesh worker, with buffers transferred back. OBJ is geometry-only (no `.mtl`) and honours vertex colours.
-- **glTF/GLB** uses `GLTFLoader.parse` on the main thread, since it needs the DOM for textures. It supports GLB, self-contained `.gltf` and meshopt. Draco and KTX2 return `Unsupported` in iteration 1.
+- **STL** is parsed by `STLLoader.parse` in a transient mesh worker, with buffers transferred back.
+- **OBJ** uses `OBJLoader` with `MTLLoader` materials and textures when a `.mtl` is supplied; otherwise it's geometry-only and honours vertex colours. It runs on the main thread when textures are involved, otherwise in the mesh worker.
+- **glTF/GLB** uses `GLTFLoader` on the main thread, since it needs the DOM for textures. It supports GLB, embedded and multi-file `.gltf`, `EXT_meshopt_compression` (`MeshoptDecoder`), `KHR_draco_mesh_compression` (`DRACOLoader`) and `KHR_texture_basisu` (`KTX2Loader`, which needs the renderer for format detection).
+- The **Draco and Basis transcoder files** (JS + WASM from `three/examples/jsm/libs`) are copied by Vite into `wwwroot/viewer/decoders/` and served same-origin, because COEP blocks CDNs. Their decoder workers come from `blob:` URLs, which inherit the page's isolation.
 - **Orientation:** glTF is Y-up by spec and is rotated +90° about X. STL and OBJ are assumed to be Z-up, which is the CAD export convention.
-- Mesh models have a flat tree (glTF keeps its node hierarchy) and **no edge overlay**.
+- Mesh models have a flat tree (glTF keeps its node hierarchy) and **no edge overlay**. glTF `alphaMode: BLEND` and MTL `d`/`Tr` opacity are honoured (D34).
 
 ### 6.3 Viewer (`src/J3D.Viewer`)
 
@@ -260,12 +284,13 @@ user picks/drops files
 | Up axis | `Object3D.DEFAULT_UP = (0,0,1)` before creating any camera. `camera.up = (0,0,1)` before constructing camera-controls. |
 | Cameras | One `OrthographicCamera` (default) and one `PerspectiveCamera` (fov 35°). camera-controls' `.camera` is swapped on toggle. Toggling keeps framing by matching the visible height at the target: `h = 2·d·tan(fov/2)` ⇄ ortho frustum/zoom. The maths is unit-tested. |
 | Controls | camera-controls with `mouseButtons = { left: TRUCK, middle: TRUCK, right: ROTATE, wheel: ZOOM (ortho) / DOLLY (persp) }`, `touches = { one: TOUCH_ROTATE, two: TOUCH_ZOOM_TRUCK (ortho) / TOUCH_DOLLY_TRUCK (persp) }` and `dollyToCursor = false`. Polar angle is unclamped apart from the small epsilon camera-controls needs at the poles. `contextmenu` is prevented on the canvas. |
-| Fit all | Computes the union of model bounding boxes, then `controls.fitToBox(box, true, padding)` (smooth). Near and far planes are recomputed from the bounding sphere on every fit and model change. Runs automatically when each import completes, and via the toolbar button or the `F` key (ignored while focus is in an input). |
+| Fit all | Computes the union of model bounding boxes, then `controls.fitToBox(box, true, padding)` (smooth). Near and far planes are recomputed from the bounding sphere on every fit and model change. Runs automatically **only when the scene goes from empty to its first model** (D30), and via the toolbar button or the `F` key (ignored while focus is in an input). |
 | Lighting & materials | `RoomEnvironment` PMREM for image-based light, plus a directional "headlight" that follows the camera. `MeshStandardMaterial` (metalness 0.05, roughness 0.55) with `polygonOffset` so edges draw cleanly on top. Materials are cached and reference-counted per colour. Single-colour parts use material colour; multi-colour parts use `Uint8` normalised vertex colours. |
+| Transparency | Each prototype's translucent index range becomes a second mesh sharing the same vertex buffer, with `transparent: true`, `depthWrite: false` and per-colour `opacity` (RGBA vertex colours if a part mixes alphas). Three.js sorts translucent objects back-to-front each frame. Edges of translucent faces are still drawn. Intersecting translucent parts can show sorting artefacts (R10). |
 | Edges | `LineSegments` with a near-black `LineBasicMaterial` (1 px; WebGL ignores line width). |
 | Instancing | Each prototype's `BufferGeometry` is shared by its instances, and prototypes with many instances (≥ 16) use `InstancedMesh`. If draw calls exceed about 5,000, M5 evaluates `BatchedMesh`. |
 | Render loop | On demand only: render when camera-controls reports an update or transition, when the scene changes, or on resize. Idle cost is zero. Large geometry uploads are spread across frames to avoid jank. |
-| Orientation aid | A small, non-interactive axis triad in the bottom-left corner (*assumption*, §12 Q4). |
+| View cube (D31) | A labelled cube about 110 px across, top-right. It's drawn by the same renderer into a scissored viewport, with its own small orthographic camera that copies the main camera's rotation. Raycasting picks one of **26 regions** (6 faces, 12 edges, 8 corners), highlights it on hover, and on click calls `controls.rotateTo(azimuth, polar, true)`, which animates and keeps distance and zoom. Z-up names: **Top** looks down −Z (+Y up on screen), **Front** looks along +Y, **Right** looks along −X. A **Home** button next to it goes to isometric (front-right-top) and fits all. Top/Bottom use a polar angle of ε / π−ε, because turntable controls can't sit exactly on the pole. |
 | Drag and drop | `dragenter/over/leave/drop` on the host toggles a `j3d-viewport--drop` overlay class and passes `DataTransfer.files` to the import queue. |
 | Disposal | Delete removes the Object3D, disposes geometries and releases material references, then re-renders. **The camera doesn't move on delete.** |
 | Test hook | `window.__j3dTest` (camera state, model count, frame counter) is exposed only in Development, for Playwright. |
@@ -280,7 +305,7 @@ user picks/drops files
 |---|---|
 | `MainLayout` | `MudThemeProvider` (dark-only `J3DTheme`), app bar, persistent model drawer, main content |
 | `Toolbar` | **Import** (a `MudButton HtmlTag="label"` for a hidden `<input type=file multiple>`; a native label click needs no JS user-activation trickery), **Fit all**, **Projection** toggle |
-| `ModelList` / `ModelListItem` | Name, format chip, kind (BREP/mesh), status, `MudProgressLinear` (determinate or indeterminate by phase), memory, **Cancel** (while importing) / **Delete** (when ready or failed), lazy `MudTreeView` for the assembly |
+| `ModelList` / `ModelListItem` | Name, format chip, kind (BREP/mesh), status, `MudProgressLinear` (determinate or indeterminate by phase), memory, lazy `MudTreeView` for the assembly. Actions: **Cancel** while importing (immediate), **Delete** when ready (confirmation via `IDialogService.ShowMessageBoxAsync`: "Delete *name*?", with a red Delete button and Cancel; D29), **Dismiss** when failed (immediate). |
 | `Viewport` | Owns the viewer module's lifetime; receives callbacks through `DotNetObjectReference` |
 
 **State:** `SceneState` (singleton; per-tab in WASM) holds `ImmutableDictionary<ModelId, ModelEntry>` and raises `Changed`. Components subscribe in `OnInitialized` and unsubscribe in `Dispose`. All transitions (Queued → Importing(phase, fraction) → Ready | Failed → removed) are pure methods, unit-tested without a renderer.
@@ -328,7 +353,7 @@ user picks/drops files
 
 ## 7. Licensing
 
-OCCT and libcascade are **LGPL-2.1 with the Open CASCADE exception**. Three.js, camera-controls and MudBlazor are MIT. The OCCT WASM ships as a separate, replaceable file loaded at runtime (dynamic-linking style), and its full build recipe (config, facade source, toolchain digest, provenance) is in this repo. M5 adds `THIRD-PARTY-NOTICES.md` and an **About / licences** dialog. *This isn't legal advice. Get a review before any public deployment.*
+OCCT and libcascade are **LGPL-2.1 with the Open CASCADE exception**. Three.js, camera-controls and MudBlazor are MIT, and the Draco decoder is Apache-2.0. The OCCT WASM ships as a separate, replaceable file loaded at runtime (dynamic-linking style), and its full build recipe (config, facade source, toolchain digest, provenance) is in this **public** repo (D35), which covers source availability. M5 adds `THIRD-PARTY-NOTICES.md` and an **About / licences** dialog. *This isn't legal advice. Get a review before any public deployment.*
 
 ---
 
@@ -340,7 +365,7 @@ OCCT and libcascade are **LGPL-2.1 with the Open CASCADE exception**. Three.js, 
 | OCCT integration | **Vitest** + the real `dist/` WASM under Node 22+ | Import each fixture → prototype, instance and triangle counts, names, colours, bounds, error codes, memory release |
 | C# unit / component | **xUnit v3 + bUnit 2** | `SceneState` transitions, `ModelFormat` behaviour, `ModelList` / `Toolbar` / `Viewport` rendering and interop calls (bUnit JS interop in strict mode) |
 | Host | **xUnit v3 + WebApplicationFactory** | COOP/COEP on pages and assets, `.wasm` MIME type and compression |
-| E2E | **Playwright for .NET** + `WebApplicationFactory.UseKestrel()` (.NET 10), Chromium/Firefox/WebKit | Import via picker and via drag and drop (synthetic `DataTransfer`), list status, non-background canvas pixels, delete, cancel, `F` key, projection toggle, mouse pan/rotate/zoom changing camera state (test hook), `crossOriginIsolated`, no console errors. Runs against the **Release** build to catch trimming issues in interop DTOs. |
+| E2E | **Playwright for .NET** + `WebApplicationFactory.UseKestrel()` (.NET 10), Chromium/Firefox/WebKit | Import via picker and via drag and drop (synthetic `DataTransfer`), multi-file glTF and OBJ+MTL batches including the `MissingFile` path, list status, non-background canvas pixels, translucent part rendering, delete with confirm (and cancelling the dialog), cancel import, first-model auto-fit only, `F` key, projection toggle, view cube face/edge/corner clicks and Home, mouse pan/rotate/zoom changing camera state (test hook), `crossOriginIsolated`, no console errors. Runs against the **Release** build to catch trimming issues in interop DTOs. |
 
 Notes:
 
@@ -376,22 +401,23 @@ Solution and props, CPM, `.editorconfig`, LFS attributes, Blazor Web App (Intera
 
 - Spikes **S2** (memory ceiling per browser) and **S3** (progress channel in both variants).
 - `ModelManager`, import queue (concurrency 2), model worker host, shared module compilation, typed protocol, chunked file streaming, extraction to transferables, progress, cancel, error mapping including OOM detection.
-- Mesh worker (STL/OBJ), main-thread glTF path, Y-up conversion.
+- RGBA colour extraction with translucent index ranges.
+- Mesh worker (STL/OBJ), main-thread glTF path (meshopt, Draco, KTX2 with self-hosted decoders), sidecar grouping for multi-file glTF and OBJ+MTL, Y-up conversion.
 - **Exit:** every fixture imports in all three browsers, with progress and a working cancel. A generated 200 MB STEP either loads or fails cleanly with `OutOfMemory`.
 
 ### M3 — Viewer
 
-- Renderer, Z-up, both cameras with a framing-preserving toggle, camera-controls mapping (D16/D17), fit-all (auto, button, `F`), lighting and materials, colour handling, BREP edges, instancing, axis triad, on-demand rendering, resize, drag-and-drop overlay, disposal, test hook.
-- **Exit:** manual checklist of acceptance criteria 3 and 6–10 passes. Vitest covers the camera maths.
+- Renderer, Z-up, both cameras with a framing-preserving toggle, camera-controls mapping (D16/D17), fit-all (first model, button, `F`), lighting and materials, colour handling, transparency, BREP edges, instancing, view cube + Home, on-demand rendering, resize, drag-and-drop overlay, disposal, test hook.
+- **Exit:** manual checklist of the rendering and navigation acceptance criteria passes. Vitest covers camera maths and view cube region → (azimuth, polar) mapping.
 
 ### M4 — Blazor UI
 
-- `SceneState`, `ViewerInterop`, `Toolbar`, `ModelList`/`ModelListItem` with lazy tree, snackbar errors, unsupported-browser notices (no WebGL2; not cross-origin isolated → single-threaded notice in the console only).
+- `SceneState`, `ViewerInterop`, `Toolbar`, `ModelList`/`ModelListItem` with lazy tree, delete confirmation dialog, snackbar errors, unsupported-browser notices (no WebGL2; not cross-origin isolated → single-threaded notice in the console only).
 - **Exit:** bUnit coverage of all components and state transitions. The full user flow works by hand.
 
 ### M5 — Hardening
 
-- Spike **S4** (threaded vs single benchmark) → decide the default variant (§12 Q1).
+- Spike **S4** (threaded vs single benchmark): single-threaded stays the default unless multi shows ≥ 1.3× (D28).
 - Large-model runs and tuning (tessellation constants, chunked uploads, `BatchedMesh` if needed, dropping CPU copies of GPU-resident buffers if memory-bound).
 - Full Playwright suite ×3 browsers in CI, Safari-specific fixes, `THIRD-PARTY-NOTICES.md` and About dialog, README/dev docs.
 - **Exit:** every acceptance criterion in §1 is ticked.
@@ -404,23 +430,24 @@ Solution and props, CPM, `.editorconfig`, LFS attributes, Blazor Web App (Intera
 |---|---|---|
 | R1 | The libcascade toolchain is young (v3.x) | Replicad depends on it too. Pin the image digest. Keep the facade small and toolchain-agnostic so a plain Emscripten OCCT build is a fallback. |
 | R2 | The 4 GB wasm32 ceiling. OCCT's STEP parse can peak at many times the file size, so the practical limit may be roughly 200–400 MB of STEP. | Stream input into WASM, free it before meshing, one heap per model, explicit `OutOfMemory` error. S2 measures the real limit per browser. |
-| R3 | The **threaded build barely helps our workload**: libcascade reports 1.33× for STEP import + mesh and **1.06× for meshing alone**. Each worker's pthread pool also costs `PTHREAD_POOL_SIZE × 8 MB` of stack, multiplied by one worker per model. | Ship both variants (as Replicad does) and keep COOP/COEP, but **recommend single-threaded as the default** unless S4 shows ≥ 1.3× on our fixtures (§12 Q1). |
+| R3 | The **threaded build barely helps our workload**: libcascade reports 1.33× for STEP import + mesh and **1.06× for meshing alone**. Each worker's pthread pool also costs `PTHREAD_POOL_SIZE × 8 MB` of stack, multiplied by one worker per model. | **Decided (D28):** ship both variants, keep COOP/COEP, default to single-threaded unless S4 shows ≥ 1.3× on our fixtures. |
 | R4 | Safari quirks (WASM exception handling flavour, SAB, WebGL) | S1 checks the `exceptions: 'wasm'` output on Safari early. WebKit is in the E2E matrix from M0. |
 | R5 | Blazor WASM trimming breaks interop DTO deserialisation in Release | E2E runs Release. DTOs are simple records with string enums. |
 | R6 | Main-thread jank when uploading huge geometry | Spread uploads across frames, render on demand, instancing. |
 | R7 | IGES has no stream reader, so it needs a MEMFS copy (2× input memory) | Acceptable, since IGES files are typically smaller. Documented. |
 | R8 | Git LFS quota and bandwidth | Cache LFS objects in CI; WASM changes are infrequent. |
 | R9 | Changing the symbol set locally needs Docker (not installed; WSL2 is) | Rely on the CI workflow. Docker Desktop with the WSL2 backend is optional. |
+| R10 | Translucent rendering: per-object sorting can't resolve intersecting or interleaved translucent parts, and many translucent parts add sorting cost | Accept artefacts for iteration 1 (the usual CAD-viewer trade-off). Order-independent transparency is a later option. Fixture with nested translucent parts for E2E. |
+| R11 | View cube vs turntable at the poles: exactly-Top/Bottom views are degenerate for azimuth/polar controls | Use polar ε / π−ε with a fixed azimuth so +Y is up on screen. Unit-test the 26 region mappings. |
+| R12 | Draco/Basis decoders add ~1–2 MB of assets and their own worker/WASM loading paths | Load lazily, only when a file needs them. Same-origin under COEP (covered by host tests). |
 
 ---
 
-## 12. Open questions
+## 12. Remaining assumptions
 
-1. **Threaded default.** Given R3, I recommend **single-threaded by default**, with the threaded variant kept available and decided by benchmark S4. OK?
-2. **Delete without confirmation** (*assumption*). Models are session-only and easy to re-import, so delete is immediate, with a snackbar. Do you want a confirm dialog?
-3. **Auto-fit on every import completion** (*assumption*), even if you've moved the camera in the meantime. Alternative: auto-fit only if the camera hasn't moved since the import started.
-4. **Axis triad** (*assumption*). Included as a small orientation aid for turntable Z-up navigation. Keep it?
-5. **glTF scope** (*assumption*). GLB, self-contained `.gltf` and meshopt only. Draco/KTX2 and multi-file `.gltf` are deferred.
-6. **Transparency** (*assumption*). STEP colour alpha is ignored (opaque) in iteration 1.
-7. **Repository visibility.** Is `JRB-90/j3d` public? This affects how LGPL source availability is satisfied and the Actions/LFS quotas.
-8. **Pushing.** M1's WASM build runs in GitHub Actions, so this branch has to be pushed. May I push it and open a draft PR when M1 starts?
+All eight open questions from the first draft are answered (D28–D36). These smaller defaults follow from those answers and are open to change:
+
+1. **Cancel and dismiss don't confirm.** Only deleting a *loaded* model shows the confirmation dialog (D29). Cancelling an in-progress import and dismissing a failed entry are immediate, since there's nothing loaded to lose.
+2. **Home = isometric + fit all.** Clicking a view cube region keeps the current zoom (D31); the Home button also re-frames everything.
+3. **Isometric is front-right-top**, i.e. the camera looks from (+X, −Y, +Z) toward the target.
+4. **Missing textures don't fail an import.** A multi-file glTF/OBJ with missing textures loads untextured with a warning; only a missing `.bin` fails (`MissingFile`).
