@@ -1,0 +1,16 @@
+{
+  "name": "j3d",
+  "private": true,
+  "description": "npm workspaces for the J3D browser-side code. The .NET build drives these via MSBuild; see docs/plan.md.",
+  "workspaces": [
+    "src/J3D.Viewer"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  }
+}

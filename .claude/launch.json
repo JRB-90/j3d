@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "j3d-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/J3D.Web", "--launch-profile", "http"],
+      "port": 5274
+    }
+  ]
+}

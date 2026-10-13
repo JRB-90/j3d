@@ -1,0 +1,14 @@
+# Normalise line endings; let Git decide per platform.
+* text=auto
+
+# Windows-only scripts keep CRLF, shell scripts keep LF.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.sh  text eol=lf
+
+# Built OCCT WebAssembly binaries (src/J3D.Occt/dist) are stored in Git LFS.
+*.wasm filter=lfs diff=lfs merge=lfs -text
+
+# Binary CAD/mesh fixtures.
+*.glb  binary
+*.stl  binary

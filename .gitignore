@@ -426,3 +426,15 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# --- J3D ---
+# Vite output (built by MSBuild from src/J3D.Viewer)
+src/J3D.Web.Client/wwwroot/viewer/
+# libcascade toolchain scratch (src/J3D.Occt)
+.libcascade/
+# Playwright / Vitest artefacts
+playwright-report/
+test-results/
+coverage/
+# Claude Code local settings
+.claude/settings.local.json

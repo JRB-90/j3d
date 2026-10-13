@@ -1,0 +1,38 @@
+/* Global page styles. Component styles live in *.razor.css; theme colours live in J3DTheme.cs. */
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background-color: #121417;
+}
+
+/* App shell (see J3D.Web.Client/Layout/MainLayout.razor) */
+.j3d-appbar {
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.j3d-drawer {
+    border-right: 1px solid var(--mud-palette-divider);
+}
+
+.j3d-main {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+h1:focus {
+    outline: none;
+}
+
+.blazor-error-boundary {
+    background: #b32121;
+    padding: 1rem;
+    color: white;
+}
+
+    .blazor-error-boundary::after {
+        content: "An error has occurred.";
+    }
