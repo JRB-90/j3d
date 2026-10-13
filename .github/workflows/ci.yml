@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Dispatched by occt-wasm.yml after it commits a new build (GITHUB_TOKEN pushes don't trigger CI).
+  workflow_dispatch:
 
 permissions:
   contents: read
