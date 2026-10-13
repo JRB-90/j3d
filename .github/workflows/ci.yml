@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-test:
+    name: Build & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm workspaces
+        run: npm ci
+
+      - name: Typecheck & test viewer (Vitest)
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Build solution
+        run: dotnet build J3D.slnx -c Release
+
+      - name: Test client (xUnit + bUnit)
+        run: dotnet test --project tests/J3D.Web.Client.Tests -c Release --no-build
+
+      - name: Test host (xUnit + WebApplicationFactory)
+        run: dotnet test --project tests/J3D.Web.Tests -c Release --no-build
+
+  e2e:
+    name: E2E (${{ matrix.browser }})
+    needs: build-test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm workspaces
+        run: npm ci
+
+      - name: Build E2E tests
+        run: dotnet build tests/J3D.E2E.Tests -c Release
+
+      - name: Install Playwright browser
+        run: pwsh tests/J3D.E2E.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps ${{ matrix.browser }}
+
+      - name: Run E2E tests
+        run: dotnet test --project tests/J3D.E2E.Tests -c Release --no-build
+        env:
+          BROWSER: ${{ matrix.browser }}

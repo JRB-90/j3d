@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" />
+    <PackageReference Include="MudBlazor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="J3D.Web.Client.Tests" />
+  </ItemGroup>
+
+  <!--
+    Viewer (TypeScript + Vite) integration.
+    The Vite build in src/J3D.Viewer emits ES modules into wwwroot/viewer, which is git-ignored.
+    Set -p:SkipViewerBuild=true to build the .NET side only (e.g. when running `npm run dev` separately).
+  -->
+  <PropertyGroup>
+    <ViewerProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\J3D.Viewer'))\</ViewerProjectDir>
+    <ViewerOutputDir>$(MSBuildThisFileDirectory)wwwroot\viewer\</ViewerOutputDir>
+    <ViewerEntryFile>$(ViewerOutputDir)j3d-viewer.js</ViewerEntryFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ViewerSource Include="$(ViewerProjectDir)src\**\*.ts" Exclude="$(ViewerProjectDir)src\**\*.test.ts" />
+    <ViewerSource Include="$(ViewerProjectDir)package.json;$(ViewerProjectDir)tsconfig.json;$(ViewerProjectDir)vite.config.ts" />
+    <ViewerSource Include="$(RepoRoot)package-lock.json" />
+    <Content Remove="wwwroot\viewer\**" />
+  </ItemGroup>
+
+  <Target Name="J3DNpmInstall"
+          Condition="'$(SkipViewerBuild)' != 'true' And !Exists('$(RepoRoot)node_modules\.package-lock.json')">
+    <Exec Command="npm ci" WorkingDirectory="$(RepoRoot)" />
+  </Target>
+
+  <Target Name="J3DBuildViewer"
+          DependsOnTargets="J3DNpmInstall"
+          BeforeTargets="AssignTargetPaths;ResolveStaticWebAssetsInputs"
+          Condition="'$(SkipViewerBuild)' != 'true'"
+          Inputs="@(ViewerSource)"
+          Outputs="$(ViewerEntryFile)">
+    <Exec Command="npm run build --workspace @j3d/viewer" WorkingDirectory="$(RepoRoot)" />
+  </Target>
+
+  <!-- Files produced during the build are not in the evaluation-time Content glob, so add them explicitly. -->
+  <Target Name="J3DIncludeViewerOutput" AfterTargets="J3DBuildViewer" BeforeTargets="AssignTargetPaths;ResolveStaticWebAssetsInputs">
+    <ItemGroup>
+      <Content Include="wwwroot\viewer\**" />
+    </ItemGroup>
+  </Target>
+
+</Project>

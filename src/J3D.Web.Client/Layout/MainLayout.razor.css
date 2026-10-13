@@ -1,0 +1,27 @@
+/* Shell layout classes (.j3d-appbar, .j3d-drawer, .j3d-main) are global in wwwroot/app.css:
+   the layout's root elements are MudBlazor components, so scoped ::deep selectors have no anchor here. */
+
+#blazor-error-ui {
+    background: #3a1e1e;
+    color: #f2d7d7;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.5);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 2000;
+}
+
+    #blazor-error-ui .reload {
+        color: #9cc8ff;
+    }
+
+    #blazor-error-ui .dismiss {
+        cursor: pointer;
+        position: absolute;
+        right: 0.75rem;
+        top: 0.5rem;
+    }

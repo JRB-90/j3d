@@ -1,0 +1,17 @@
+.j3d-viewport {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    /* Matches the renderer's clear gradient so there is no flash before the first frame. */
+    background: linear-gradient(180deg, #2a2f37 0%, #15181c 100%);
+    touch-action: none;
+    user-select: none;
+}
+
+    .j3d-viewport ::deep canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        outline: none;
+    }
