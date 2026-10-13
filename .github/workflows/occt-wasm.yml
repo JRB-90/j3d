@@ -1,0 +1,87 @@
+name: OCCT WASM
+
+# Builds the custom OCCT WebAssembly (src/J3D.Occt) with the libcascade toolchain container and
+# commits dist/ back to the branch (*.wasm via Git LFS). See docs/plan.md §6.1.
+
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+    paths:
+      - src/J3D.Occt/libcascade.config.ts
+      - src/J3D.Occt/wrappers/**
+      - src/J3D.Occt/package.json
+      - .github/workflows/occt-wasm.yml
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: occt-wasm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build OCCT WASM
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm workspaces
+        run: npm ci
+
+      - name: Build (all variants) and assemble
+        working-directory: src/J3D.Occt
+        run: npm run build:wasm
+
+      - name: Test the new build (Vitest + fixtures)
+        run: |
+          npm run typecheck --workspace @j3d/occt
+          npm test --workspace @j3d/occt
+
+      - name: Report artefact sizes
+        working-directory: src/J3D.Occt/dist
+        run: |
+          ls -la
+          for f in *.wasm; do echo "$f: $(stat -c%s "$f") bytes raw, $(gzip -9c "$f" | wc -c) bytes gzip"; done
+
+      - name: Upload container logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: libcascade-logs
+          path: src/J3D.Occt/.libcascade/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+      - name: Commit dist
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git lfs install --local
+          git add src/J3D.Occt/dist
+          if git diff --cached --quiet; then
+            echo "No changes to dist."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "Build OCCT WASM for ${GITHUB_SHA::7}"
+          git push
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      # Pushes made with GITHUB_TOKEN don't trigger workflows, but workflow_dispatch does.
+      - name: Run CI on the new commit
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref "$GITHUB_REF_NAME"

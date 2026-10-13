@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branch:** `feature/iteration-1-cad-viewer` · **Status:** M0 (scaffold) complete; M1–M5 planned · **Last updated:** 2026-10-13
+> **Branches:** one per milestone (M0 `feature/iteration-1-cad-viewer`, M1 `feature/m1-occt-wasm`) · **Status:** M0 (scaffold) and M1 (OCCT WASM build) complete; M2–M5 planned · **Last updated:** 2026-10-13
 
 ---
 
@@ -83,6 +83,8 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D34 | Transparency | **Honour alpha** from STEP/IGES colours, glTF and MTL | Translucent faces split into their own sub-meshes. See R10. |
 | D35 | Repo visibility | **Public** (`JRB-90/j3d`) | The repo itself satisfies LGPL source availability for the OCCT build. |
 | D36 | Pushing | Pushed and **draft PR opened** after M0 | |
+| D37 | Delivery | **One PR per milestone**, squash-merged into `main` | M0 merged as #1. |
+| D38 | Local OCCT builds | **Docker Desktop** (WSL2 backend) for fast facade iteration | CI still builds and commits `dist/`. |
 
 ---
 
@@ -174,52 +176,43 @@ Node ≥ 22 is required (libcascade toolchain, Vite 8).
 
 ### 6.1 OCCT WebAssembly build (`src/J3D.Occt`)
 
-**Approach (following Replicad):** use the taucad `opencascade.js` toolchain to link a **trimmed** OCCT 8.0.1 WASM. It contains only the classes we use plus a **project-owned C++ facade**. Replicad's build lives in `packages/replicad-opencascadejs` and runs the `ghcr.io/taucad/opencascade.js` Docker image with a symbol list and C++ wrappers. We do the same with `@libcascade/toolchain`'s typed `libcascade.config.ts`.
+**Approach (following Replicad):** use the taucad `opencascade.js` toolchain (`@libcascade/toolchain` 3.1, OCCT 8.0.1, image pinned by digest) to link a **trimmed** OCCT WASM. It contains only a **project-owned C++ facade**, written the way Replicad writes its wrappers: plain C++ classes that the toolchain's bindgen exposes to JS (`scope: 'all'`, so bindings *and* TypeScript declarations are generated). Bulk data is returned as malloc'd arrays whose addresses and lengths JS reads directly out of WASM memory. See [`libcascade.config.ts`](../src/J3D.Occt/libcascade.config.ts) and [`wrappers/j3d_facade.cpp`](../src/J3D.Occt/wrappers/j3d_facade.cpp).
 
-```ts
-// src/J3D.Occt/libcascade.config.ts (sketch)
-export default defineBuild({
-  name: 'j3d_occt',
-  bindings: [ /* minimal: Standard_Failure, Message_ProgressRange, … — most work goes through the facade */ ],
-  customBindings: [{ file: 'wrappers/j3d_facade.cpp', symbols: ['J3DDocument', 'J3DProgress'], scope: 'main' }],
-  settings: {
-    MODULARIZE: true, EXPORT_ES6: true, ENVIRONMENT: ['worker', 'node'],
-    ALLOW_MEMORY_GROWTH: true, INITIAL_MEMORY: '64MB', MAXIMUM_MEMORY: '4GB',
-    EXPORTED_RUNTIME_METHODS: ['FS', 'getExceptionMessage', 'incrementExceptionRefcount', 'decrementExceptionRefcount'],
-  },
-  compilerFlags: { optimize: 'O3', simd: true, exceptions: 'wasm', noEntry: true },
-  variants: [{ name: 'single' }, { name: 'multi' /* pthreads; see toolchain multi-threading guide */ }],
-});
-```
+**Why a C++ facade rather than calling the OCCT API from JS:** extracting triangulations face by face through embind costs millions of JS↔WASM calls on large models. The facade does import, meshing and extraction **inside C++** and hands JS contiguous buffers to copy once into transferable `ArrayBuffer`s. Binding only two classes also lets the linker drop unused OCCT code: the trimmed build is **15.4 MB** (single) / **15.0 MB** (multi) raw, against 42.7 MB for the full prebuilt libcascade.
 
-**Why a C++ facade rather than calling the OCCT API from JS:** extracting triangulations face by face through embind costs millions of JS↔WASM calls on large models. The facade does import, meshing and extraction **inside C++**, writes contiguous buffers, and hands JS `typed_memory_view`s. JS copies those once into transferable `ArrayBuffer`s. Because the bound surface is small, the WASM is small too, and `libcascade check` keeps TS usage in line with the bindings.
-
-**Facade API (C++, embind `scope: 'main'`, TS declarations hand-written):**
+**Facade API** (generated TS: `dist/j3d_occt_<variant>.d.ts`; typed wrapper: [`src/facade.ts`](../src/J3D.Occt/src/facade.ts) → `OcctModel.load(module, source, format, fileName, options)`):
 
 | Member | Purpose |
 |---|---|
-| `uintptr_t AllocateInput(size_t bytes)` / `ReleaseInput()` | JS streams the `File` into WASM memory in chunks; no extra JS-side copy |
-| `ImportResult Import(Format, ImportOptions)` | STEP: `STEPCAFControl_Reader::ReadStream` → XCAF `TDocStd_Document`. IGES: `IGESCAFControl_Reader` (MEMFS file, since there's no stream API). BREP: `BRepTools::Read(istream)`. A custom zero-copy `std::streambuf` reads the input buffer directly. |
-| `void Mesh(MeshParams)` | `BRepMesh_IncrementalMesh` once per **unique prototype shape** (XCAF referred shapes), not per instance |
-| `val GetTree()` | Flat node array: `name`, `parent`, `prototype` index, 4×4 location, colour |
-| `int PrototypeCount()` / `val GetFaces(i)` / `val GetEdges(i)` | Per-prototype positions/normals/indices (+ optional per-vertex colour) and edge line segments |
-| `Bounds()`, `MemoryBytes()` | For fit-all and the model list's memory figure |
-| `J3DProgress : Message_ProgressIndicator` | Phase and fraction reporting (§6.2) |
+| `J3DModel.allocateInput(bytes)` / `releaseInput()` | JS streams the `File` into WASM memory in chunks (no extra JS-side copy). Addresses are `unsigned int` because they can exceed 2 GB. |
+| `J3DModel.importFile(format, fileName)` | STEP: `STEPCAFControl_Reader::ReadStream` over a zero-copy `std::streambuf` → XCAF document. IGES: `IGESCAFControl_Reader` via an in-memory file (no stream API). BREP: `BRepTools::Read(istream)`, then added to an XCAF document so every format takes the same path. Returns a status code; `getLastError()` explains failures. |
+| `J3DModel.mesh(linearDeflectionRatio, angularDeflection)` | Walks the document with `XCAFPrs_DocumentExplorer` (styles inherited through the assembly), collects unique **prototypes** (referred part + effective style) and meshes each unique shape once with `BRepMesh_IncrementalMesh` |
+| `J3DModel.getSceneJson()` | `{ nodes: [{ name, parent, prototype }], instances: [{ node, prototype, matrix }] }`; matrices are world transforms, column-major |
+| `J3DModel.getPrototypeCount()` / `extractPrototype(i)` → `J3DMeshData` | Positions, normals, opaque-then-translucent indices, per-vertex RGBA (only when a part has several colours, otherwise one uniform colour) and BREP edge segments |
+| `Module.j3dProgress(phase, fraction)` | Set by JS; called from C++ (`EM_ASM`) for Parsing/Transferring/Meshing/Extracting. Phase changes are always reported, repeats are throttled to 10 Hz. |
 
 **Extraction rules**
 
-- Normals come from the surface via `BRepLib_ToolTriangulatedShape::ComputeNormals`. Winding and normals are flipped for `TopAbs_REVERSED` faces.
-- Edges are unique per prototype (`TopExp::MapShapes(..., TopAbs_EDGE)`), taken from `BRep_Tool::PolygonOnTriangulation` so they line up exactly with the shaded mesh. **Seam and degenerate edges are skipped**, and free edges are discretised with `GCPnts_TangentialDeflection`.
-- Colour precedence: face → part (prototype) → instance → parent assembly → default `#B4B9C0`. Colours are read as **RGBA** (`Quantity_ColorRGBA` via `XCAFDoc_ColorTool`, plus `XCAFDoc_VisMaterial` where present; S1 confirms where OCCT 8 puts STEP transparency) and passed in **linear RGB** (`Quantity_TOC_RGB`), because Three.js works in linear space and sRGB values would look washed out.
+- Faces come from OCCT's own `RWMesh_FaceIterator` (as in its glTF exporter): oriented triangles, transformed nodes, and normals computed from the surface when the triangulation has none.
+- Edges are unique per prototype, taken from `BRep_Tool::PolygonOnTriangulation` so they line up exactly with the shaded mesh. **Seam and degenerate edges are skipped**, and free edges are discretised with `GCPnts_TangentialDeflection`.
+- Colour precedence: face → part → instance → parent assembly → default `#B4B9C0`, as resolved by the face iterator and document explorer. Colours are passed as **linear RGBA**, because Three.js works in linear space and sRGB values would look washed out. STEP transparency (`SURFACE_STYLE_TRANSPARENT`) arrives as the colour's alpha.
 - Faces with alpha < 1 are written to a separate **translucent** index range per prototype, so the viewer can draw opaque and translucent geometry with different materials (D34).
 - Default tessellation uses a linear deflection of 0.1 % of the **model's** bounding-box diagonal (absolute, shared by all parts) and an angular deflection of 0.35 rad. Both are constants in one place, tuned in M5, with no UI in iteration 1.
-- Memory views into WASM memory become invalid when memory grows, so JS must `.slice()` them **before** making any further facade call.
+- Memory views into WASM memory become invalid when memory grows, so `facade.ts` copies each one (`.slice()`) before making any further call.
+
+**Toolchain constraints found in M1** (worth knowing before touching the facade):
+
+- The bindgen binds **every top-level and single-namespace class** in a custom file. Helpers must be **private nested classes** (which it skips), and free functions must be `inline`, because the file is compiled into several translation units.
+- The bindgen parses the file without Emscripten's headers, so `emscripten.h` is included only under `__has_include`.
+- XCAF pulls in OCCT's visualisation toolkit, whose font code references FreeType. As in Replicad's build, `ERROR_ON_UNDEFINED_SYMBOLS` is off; nothing calls it.
+- OCCT 8 API differences from 7.x: `Quantity_ColorRGBA::Alpha()`, `Standard_Failure::what()` (no `DynamicType()`), and `Standard_True/False` and the `TopTools_*` collection typedefs are deprecated.
+- `libcascade check` (symbol drift guard) isn't used: the TypeScript never references OCCT symbols directly, only the two facade classes.
 
 **Build pipeline**
 
-- `.github/workflows/occt-wasm.yml` runs on `workflow_dispatch`, and on pushes touching `src/J3D.Occt/**` (excluding `dist/`). It uses ubuntu-latest with Docker. Steps: `npx libcascade build` → `npx libcascade assemble` → run the Vitest OCCT integration tests against the new build → commit `dist/` (LFS) back to the branch. It then invokes `ci.yml` via `workflow_call`, because pushes made with `GITHUB_TOKEN` don't trigger workflows.
-- **Staleness guard in `ci.yml`:** compare the SHA-256 of the config and C++ sources against the hashes recorded in `dist/*.provenance.json`, and fail with "OCCT WASM is stale, run the OCCT WASM workflow" if they differ. Also run `npx libcascade check src` (symbol drift guard).
-- The toolchain image is pinned by digest, and its provenance and build manifest are committed alongside the binaries.
+- **Locally** (Docker Desktop): `npm run build:wasm --workspace @j3d/occt`. A compile error comes back in about 30 seconds; a full link plus `wasm-opt` takes about 6–7 minutes per variant.
+- **CI:** `.github/workflows/occt-wasm.yml` runs on `workflow_dispatch` and on pushes touching the config, wrappers or package. It builds both variants and assembles them, runs the Vitest OCCT tests against the new build, commits `dist/` (`*.wasm` via LFS) back to the branch, then dispatches `ci.yml`, because pushes made with `GITHUB_TOKEN` don't trigger workflows.
+- **Staleness guard in `ci.yml`:** `npm run check:dist` renders the config and compares it and the C++ sources with the hashes recorded in `dist/*.provenance.json`. `src/J3D.Occt/**` is checked out with LF line endings on every platform so the hashes are stable.
 - Fork PRs can't commit back. That's acceptable for a single-maintainer repo.
 
 ### 6.2 Import pipeline (worker per model)
@@ -376,7 +369,7 @@ Notes:
 
 ## 9. CI/CD
 
-- **`ci.yml`** (in M0): on PRs and pushes to `main`. Steps: `npm ci` → typecheck → Vitest → `dotnet build -c Release` → client and host tests. Then an E2E matrix `[chromium, firefox, webkit]` with `playwright.ps1 install --with-deps`. Checkout uses `lfs: true`. M1 adds the OCCT staleness guard, `libcascade check`, and an LFS object cache to save bandwidth quota.
+- **`ci.yml`** (in M0): on PRs and pushes to `main`. Steps: `npm ci` → typecheck → Vitest → `dotnet build -c Release` → client and host tests. Then an E2E matrix `[chromium, firefox, webkit]` with `playwright.ps1 install --with-deps`. Checkout uses `lfs: true`. Since M1 it also runs the OCCT staleness guard and the OCCT integration tests. An LFS object cache to save bandwidth quota is still to do.
 - **`occt-wasm.yml`** (M1): see §6.1.
 - No deployment pipeline (D25).
 
@@ -389,17 +382,17 @@ Notes:
 Solution and props, CPM, `.editorconfig`, LFS attributes, Blazor Web App (Interactive WASM) with the MudBlazor dark shell, COOP/COEP middleware, Vite/TS viewer workspace built by MSBuild into `wwwroot/viewer`, `Viewport` ⇄ module interop wiring with a capability report, `ModelFormat` (C#) and `formats.ts` (TS), test projects (xUnit v3 / bUnit / WAF / Playwright), and CI.
 **Verified locally:** build has 0 warnings; 21 .NET tests and 17 Vitest tests pass; the app runs cross-origin isolated with the viewer module loaded. E2E is compiled but not run locally (Playwright browsers not installed).
 
-### M1 — OCCT WASM build
+### M1 — OCCT WASM build ✅ ([JRB-90/j3d#2](https://github.com/JRB-90/j3d/pull/2))
 
-- Spikes **S1** (toolchain, XCAF, facade, size, Safari WASM exceptions) and **S5** (Vite worker + WASM asset under Blazor static assets).
-- `src/J3D.Occt` workspace: `libcascade.config.ts`, `j3d_facade.cpp` + `.d.ts`, `single` + `multi` variants.
-- `occt-wasm.yml`, first committed `dist/` (LFS), staleness guard.
-- Fixtures ([tests/fixtures](../tests/fixtures/README.md)) and Vitest OCCT integration tests in Node.
-- **Exit:** CI builds the WASM, and Node tests import every BREP fixture with the expected tree, colours and triangle counts.
+- `src/J3D.Occt` workspace: `libcascade.config.ts` (`single` default + `multi`), C++ facade (`J3DModel`, `J3DMeshData`), typed TS wrapper (`OcctModel`), committed `dist/` (LFS), `check:dist` staleness guard, fixture generator.
+- `occt-wasm.yml` (build → test → commit → dispatch CI) and the staleness check in `ci.yml`.
+- Fixtures for BREP/STEP/IGES ([tests/fixtures](../tests/fixtures/README.md)) and 8 Vitest integration tests running the real WASM under Node: box geometry and edges, per-face colours, assembly tree with a shared prototype and instance transforms, translucency, every progress phase, `ParseFailed`, Blob streaming, IGES colours.
+- Spike **S1** outcome: toolchain, XCAF, facade and size verified (§6.1). The trimmed build is about a third of the full libcascade size. The Safari check of WASM exceptions moves to M2, where a browser harness exists.
+- **Exit met:** the WASM builds locally and in CI, and the Node tests import every OCCT fixture with the expected tree, colours and triangle counts.
 
 ### M2 — Import pipeline
 
-- Spikes **S2** (memory ceiling per browser) and **S3** (progress channel in both variants).
+- Spikes **S2** (memory ceiling per browser), **S3** (progress channel in both variants) and **S5** (Vite worker + WASM asset under Blazor static assets), plus the WebKit/Safari check of WASM exceptions carried over from S1.
 - `ModelManager`, import queue (concurrency 2), model worker host, shared module compilation, typed protocol, chunked file streaming, extraction to transferables, progress, cancel, error mapping including OOM detection.
 - RGBA colour extraction with translucent index ranges.
 - Mesh worker (STL/OBJ), main-thread glTF path (meshopt, Draco, KTX2 with self-hosted decoders), sidecar grouping for multi-file glTF and OBJ+MTL, Y-up conversion.

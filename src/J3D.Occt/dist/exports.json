@@ -1,0 +1,30 @@
+{
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./init": {
+      "types": "./dist/init.d.ts",
+      "default": "./dist/init.js"
+    },
+    "./single": {
+      "types": "./dist/variant.d.ts",
+      "default": "./dist/j3d_occt_single.js"
+    },
+    "./single/init": {
+      "types": "./dist/init.single.d.ts",
+      "default": "./dist/init.single.js"
+    },
+    "./single/wasm": "./dist/j3d_occt_single.wasm",
+    "./multi": {
+      "types": "./dist/variant.d.ts",
+      "default": "./dist/j3d_occt_multi.js"
+    },
+    "./multi/init": {
+      "types": "./dist/init.multi.d.ts",
+      "default": "./dist/init.multi.js"
+    },
+    "./multi/wasm": "./dist/j3d_occt_multi.wasm"
+  }
+}
