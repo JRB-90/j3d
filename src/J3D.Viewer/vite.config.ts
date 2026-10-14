@@ -28,7 +28,7 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2022',
     sourcemap: true,
-    // The mesh chunk is three plus its loaders, fetched only on the first mesh import.
+    // The mesh chunk is three's loaders, fetched only on the first mesh import.
     chunkSizeWarningLimit: 1000,
     // An app build rather than library mode: library mode inlines every asset, including the 15 MB
     // OCCT WebAssembly binary, as base64 (spike S5).
@@ -40,6 +40,8 @@ export default defineConfig({
         entryFileNames: '[name].js',
         chunkFileNames: 'chunks/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash][extname]',
+        // three's core, shared by the viewer and the lazily loaded mesh importers.
+        codeSplitting: { groups: [{ name: 'three', test: /[\\/]node_modules[\\/]three[\\/]build[\\/]/ }] },
       },
     },
   },

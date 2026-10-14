@@ -1,4 +1,5 @@
 import {
+  DoubleSide,
   Group,
   LineBasicMaterial,
   Material,
@@ -6,6 +7,7 @@ import {
   PointsMaterial,
   type Object3D,
 } from 'three';
+import { NeutralGrey, SurfaceMetalness, SurfaceRoughness } from '../../view/surface';
 import { ModelImportError } from '../errors';
 import type { MeshWorkerRequest, MeshWorkerResponse, WorkerMeshFormat } from '../protocol';
 import { liveWorkers, type ImportRequest, type ImportRunner } from '../runner';
@@ -17,8 +19,8 @@ import { buildObject, type SerializedMaterial, type SerializedMeshScene, type Se
 
 export type MeshRunnerOptions = GltfImportOptions;
 
-/** Neutral grey for parts without a colour of their own (docs/plan.md §6.6). */
-export const DefaultMeshColor = 0xb4b9c0;
+/** Neutral grey for meshes without a colour of their own, as for BREP parts (decision D46). */
+export const DefaultMeshColor = NeutralGrey;
 
 /**
  * Mesh formats: STL and OBJ are parsed in a transient mesh worker and rebuilt here; glTF loads on the
@@ -127,8 +129,10 @@ function materialFor(source: SerializedMaterial, kind: SerializedObjectKind, lib
             color: colour,
             vertexColors: source.vertexColors,
             flatShading: source.flatShading,
-            metalness: 0.05,
-            roughness: 0.55,
+            metalness: SurfaceMetalness,
+            roughness: SurfaceRoughness,
+            // STL and OBJ files often mix up their triangles' winding.
+            side: DoubleSide,
             ...transparency,
           });
   if (fromLibrary) {
