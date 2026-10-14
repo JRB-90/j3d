@@ -66,9 +66,23 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     /// <summary>The viewer's camera (src/J3D.Viewer/src/view/viewer.ts, CameraState).</summary>
     protected async Task<CameraState> CameraAsync() => await EvaluateAsync<CameraState>("() => window.__j3dTest.camera()");
 
-    /// <summary>Waits until no transition or drag is moving the camera.</summary>
-    protected Task WaitForCameraRestAsync() =>
-        Page.WaitForFunctionAsync("() => !window.__j3dTest.camera().moving", null, new PageWaitForFunctionOptions { Timeout = 10_000 });
+    /// <summary>
+    /// Waits until no transition or drag is moving the camera and the last requested frame is drawn.
+    /// The timeout is generous because CI's Firefox renders in software, several pages at once.
+    /// </summary>
+    protected async Task WaitForCameraRestAsync()
+    {
+        try
+        {
+            await Page.WaitForFunctionAsync("() => !window.__j3dTest.camera().moving", null, new PageWaitForFunctionOptions { Timeout = 30_000 });
+        }
+        catch (TimeoutException)
+        {
+            // Say whether frames were still being drawn (slow) or not at all (a stalled loop).
+            var state = await Page.EvaluateAsync<string>("() => JSON.stringify({ camera: window.__j3dTest.camera(), frames: window.__j3dTest.frames() })");
+            throw new TimeoutException($"The camera didn't come to rest: {state}");
+        }
+    }
 
     protected Task<int> FramesAsync() => Page.EvaluateAsync<int>("() => window.__j3dTest.frames()");
 
