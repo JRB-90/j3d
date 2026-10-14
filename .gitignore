@@ -438,3 +438,7 @@ test-results/
 coverage/
 # Claude Code local settings
 .claude/settings.local.json
+# ...but OBJ mesh fixtures are not C++ object files (the template above ignores *.obj)
+!tests/fixtures/**/*.obj
+# Large generated fixtures (npm run fixtures:large)
+tests/fixtures/large/

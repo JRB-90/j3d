@@ -9,7 +9,7 @@ CAD files never leave your machine.
 
 ## Prerequisites
 
-- .NET SDK 10.0.301+ (`global.json`)
+- .NET SDK 10.0.402+ (`global.json`)
 - Node.js 22+ (npm workspaces drive the TypeScript viewer build)
 - Git LFS (`git lfs install`), because the OCCT WebAssembly binaries are stored in LFS
 - *Optional:* Docker, only for rebuilding the OCCT WASM locally (CI normally does this)
@@ -37,10 +37,18 @@ dotnet test --project tests/J3D.Web.Client.Tests
 dotnet test --project tests/J3D.Web.Tests
 ```
 
-End-to-end tests need Playwright browsers once (`pwsh tests/J3D.E2E.Tests/bin/Debug/net10.0/playwright.ps1 install`), then:
+End-to-end tests need Playwright browsers once (`pwsh tests/J3D.E2E.Tests/bin/Debug/net10.0/playwright.ps1 install`), then
+(`BROWSER` picks `chromium`, `firefox` or `webkit`):
 
 ```bash
 dotnet test --project tests/J3D.E2E.Tests
+```
+
+Large-model tests are on demand: generate STEP files of the sizes you want (in MB), then name the same sizes in `J3D_LARGE_FIXTURES`
+for `npm test` and the E2E tests. See [tests/fixtures/README.md](tests/fixtures/README.md).
+
+```bash
+npm run fixtures:large -- 200 700
 ```
 
 ## Layout

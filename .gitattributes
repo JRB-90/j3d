@@ -19,5 +19,11 @@ src/J3D.Occt/** text=auto eol=lf
 *.iges -text
 *.igs  -text
 *.brep -text
+*.obj  -text
+*.mtl  -text
+*.gltf -text
 *.glb  binary
 *.stl  binary
+*.bin  binary
+*.png  binary
+*.ktx2 binary

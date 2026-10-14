@@ -31,6 +31,9 @@
     <ViewerSource Include="$(ViewerProjectDir)src\**\*.ts" Exclude="$(ViewerProjectDir)src\**\*.test.ts" />
     <ViewerSource Include="$(ViewerProjectDir)package.json;$(ViewerProjectDir)tsconfig.json;$(ViewerProjectDir)vite.config.ts" />
     <ViewerSource Include="$(RepoRoot)package-lock.json" />
+    <!-- The viewer bundles the OCCT facade and the single-threaded WASM build (decision D40). -->
+    <ViewerSource Include="$(RepoRoot)src\J3D.Occt\src\facade.ts;$(RepoRoot)src\J3D.Occt\package.json" />
+    <ViewerSource Include="$(RepoRoot)src\J3D.Occt\dist\j3d_occt_single.*" />
     <Content Remove="wwwroot\viewer\**" />
   </ItemGroup>
 

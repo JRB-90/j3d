@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectFormat, fileInputAccept, kindOf, type ModelFormat } from './formats';
+import { detectFormat, extensionOf, fileInputAccept, isSidecar, kindOf, type ModelFormat } from './formats';
 
 describe('detectFormat', () => {
   it.each<[string, ModelFormat]>([
@@ -29,8 +29,24 @@ describe('kindOf', () => {
   });
 });
 
+describe('isSidecar', () => {
+  it.each(['scene.bin', 'part.MTL', 'albedo.png', 'a.jpg', 'a.jpeg', 'a.webp', 'basecolor.ktx2'])('accepts %s', (fileName) => {
+    expect(isSidecar(fileName)).toBe(true);
+  });
+
+  it.each(['part.step', 'scene.gltf', 'notes.txt', 'texture.tga', 'bin'])('rejects %s', (fileName) => {
+    expect(isSidecar(fileName)).toBe(false);
+  });
+});
+
+describe('extensionOf', () => {
+  it('returns the lowercase last extension, or nothing', () => {
+    expect([extensionOf('A.B.STEP'), extensionOf('README'), extensionOf('.hidden')]).toEqual(['.step', '', '.hidden']);
+  });
+});
+
 describe('fileInputAccept', () => {
-  it('lists every supported extension', () => {
-    expect(fileInputAccept).toBe('.step,.stp,.iges,.igs,.brep,.stl,.obj,.gltf,.glb');
+  it('lists every model and sidecar extension', () => {
+    expect(fileInputAccept).toBe('.step,.stp,.iges,.igs,.brep,.stl,.obj,.gltf,.glb,.bin,.mtl,.png,.jpg,.jpeg,.webp,.ktx2');
   });
 });

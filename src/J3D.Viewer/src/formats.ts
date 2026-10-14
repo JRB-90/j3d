@@ -21,12 +21,27 @@ const formatsByExtension: ReadonlyMap<string, ModelFormat> = new Map<string, Mod
 
 export const supportedExtensions: readonly string[] = [...formatsByExtension.keys()];
 
+/**
+ * Files that are only used next to a model that references them: glTF buffers, OBJ material
+ * libraries and textures (docs/plan.md §6.2, sidecar grouping).
+ */
+export const sidecarExtensions: readonly string[] = ['.bin', '.mtl', '.png', '.jpg', '.jpeg', '.webp', '.ktx2'];
+
 /** Value for an <c>&lt;input type="file" accept="…"&gt;</c> attribute. */
-export const fileInputAccept: string = supportedExtensions.join(',');
+export const fileInputAccept: string = [...supportedExtensions, ...sidecarExtensions].join(',');
+
+/** The lowercase extension including the dot, or an empty string. */
+export function extensionOf(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  return dot < 0 ? '' : fileName.slice(dot).toLowerCase();
+}
 
 export function detectFormat(fileName: string): ModelFormat | undefined {
-  const dot = fileName.lastIndexOf('.');
-  return dot < 0 ? undefined : formatsByExtension.get(fileName.slice(dot).toLowerCase());
+  return formatsByExtension.get(extensionOf(fileName));
+}
+
+export function isSidecar(fileName: string): boolean {
+  return sidecarExtensions.includes(extensionOf(fileName));
 }
 
 export function kindOf(format: ModelFormat): ModelKind {
