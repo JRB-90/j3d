@@ -5,7 +5,13 @@ on:
     branches: [main]
   pull_request:
   # Dispatched by occt-wasm.yml after it commits a new build (GITHUB_TOKEN pushes don't trigger CI).
+  # Run by hand with large_fixtures (e.g. "200") to add the on-demand large-model tests (spike S2).
   workflow_dispatch:
+    inputs:
+      large_fixtures:
+        description: Large STEP sizes in MB to generate and import, comma-separated (empty to skip)
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -17,6 +23,8 @@ concurrency:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Empty unless dispatched with large_fixtures; the large-model tests skip themselves when it is.
+  J3D_LARGE_FIXTURES: ${{ inputs.large_fixtures }}
 
 jobs:
   build-test:
@@ -24,8 +32,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # Git LFS objects (the OCCT WASM) are cached by content to save LFS bandwidth quota.
+      - name: List Git LFS objects
+        run: git lfs ls-files --long | cut -d ' ' -f1 | sort > .lfs-assets-id
+
+      - name: Cache Git LFS objects
+        uses: actions/cache@v6
         with:
-          lfs: true
+          path: .git/lfs/objects
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+
+      - name: Fetch Git LFS objects
+        run: git lfs pull
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -41,6 +60,10 @@ jobs:
 
       - name: Check the committed OCCT WASM matches its sources
         run: npm run check:dist --workspace @j3d/occt
+
+      - name: Generate large STEP fixtures
+        if: env.J3D_LARGE_FIXTURES != ''
+        run: npm run fixtures:large -- ${J3D_LARGE_FIXTURES//,/ }
 
       - name: Typecheck & test (Vitest, including OCCT integration tests)
         run: |
@@ -66,8 +89,19 @@ jobs:
         browser: [chromium, firefox, webkit]
     steps:
       - uses: actions/checkout@v7
+
+      # Git LFS objects (the OCCT WASM) are cached by content to save LFS bandwidth quota.
+      - name: List Git LFS objects
+        run: git lfs ls-files --long | cut -d ' ' -f1 | sort > .lfs-assets-id
+
+      - name: Cache Git LFS objects
+        uses: actions/cache@v6
         with:
-          lfs: true
+          path: .git/lfs/objects
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+
+      - name: Fetch Git LFS objects
+        run: git lfs pull
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -83,6 +117,10 @@ jobs:
 
       - name: Build E2E tests
         run: dotnet build tests/J3D.E2E.Tests -c Release
+
+      - name: Generate large STEP fixtures
+        if: env.J3D_LARGE_FIXTURES != ''
+        run: npm run fixtures:large -- ${J3D_LARGE_FIXTURES//,/ }
 
       - name: Install Playwright browser
         run: pwsh tests/J3D.E2E.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps ${{ matrix.browser }}

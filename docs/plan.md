@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone (M0 `feature/iteration-1-cad-viewer`, M1 `feature/m1-occt-wasm`) · **Status:** M0 (scaffold) and M1 (OCCT WASM build) complete; M2–M5 planned · **Last updated:** 2026-10-13
+> **Branches:** one per milestone, squash-merged (M2 `feature/m2-import-pipeline`) · **Status:** M0 (scaffold) and M1 (OCCT WASM build) merged; M2 (import pipeline) in review; M3–M5 planned · **Last updated:** 2026-10-14
 
 ---
 
@@ -129,7 +129,7 @@ flowchart LR
 - **Blazor owns the UI chrome and app state; TypeScript owns everything 3D.** Mesh data never crosses into .NET: the interop only carries small DTOs (ids, progress, tree, stats).
 - **One Web Worker per BREP model.** Each gets its own 4 GB wasm32 heap, deleting or cancelling is just `worker.terminate()` (all memory freed instantly), and a crash or out-of-memory error in one model can't affect the others. The compiled `WebAssembly.Module` is compiled once and posted to each worker, so there's no recompilation.
 - **The BREP stays alive in its worker after import.** Iteration 1 doesn't need it, but it's the foundation for picking, measurement and sectioning later.
-- **Files go straight from `<input>`/drop to the worker** (`File` objects are cloneable). The main thread never holds file bytes.
+- **Files go straight from `<input>`/drop to the worker** (`File` objects are cloneable), so the main thread never holds the bytes of a BREP, STL or OBJ file. glTF is the exception: three's GLTFLoader needs the DOM for textures, so it reads and parses on the main thread.
 - **Cross-origin isolated page** (COOP `same-origin`, COEP `require-corp`). This enables `SharedArrayBuffer` for the threaded OCCT variant and the progress channel. As a result, nothing may be loaded from third-party origins, so there are no CDNs or web fonts.
 
 ---
@@ -225,26 +225,30 @@ Node ≥ 22 is required (libcascade toolchain, Vite 8).
 ### 6.2 Import pipeline (worker per model)
 
 ```
-user picks/drops files
-  → viewer: detectFormat() (formats.ts), reject unsupported → OnImportRejected
-  → ModelManager.enqueue(file): id = crypto.randomUUID(), status Queued → OnModelQueued
+user picks/drops files (dropped folders expanded recursively, D43)
+  → planBatch(): models, sidecars held back for matching, unsupported files → rejected
+  → ModelManager.importFiles(batch): id = crypto.randomUUID(), status queued → queued event
   → at most N concurrent imports (default 2); others wait in the queue
-  → spawn model worker (BREP) or mesh worker (STL/OBJ) / main-thread GLTFLoader (glTF)
+  → runner per format: model worker (BREP) · mesh worker + main-thread rebuild (STL/OBJ) · main-thread GLTFLoader (glTF)
+  → loaded | failed event; once every model of the batch has finished, its unused sidecars → rejected
 ```
+
+**As built (M2).** The pipeline lives in `src/J3D.Viewer/src/import/`. Each format has an `ImportRunner` (`request → { result, dispose() }`); `dispose()` both cancels a running import and frees a loaded model, so the `ModelManager` treats cancel and delete the same way. The OCCT runner is in the entry chunk; the mesh runners (and Three.js) are in a chunk loaded on the first mesh import. Until the Blazor UI arrives in M4, the `ModelManager`'s events go to a Development-only test hook (`window.__j3dTest`, enabled by a `<meta name="j3d-test-hook">` that the host renders only in Development), which the Playwright tests drive (D39).
 
 **Model worker lifecycle (BREP)**
 
-1. `init`: receives the shared compiled `WebAssembly.Module` and the variant (`single` by default (D28); `multi` only if enabled in config and `crossOriginIsolated`). Instantiates via Emscripten's `instantiateWasm` hook.
-2. `import { file, format, options }`: `file.stream()` → chunks copied into `AllocateInput` memory (phase **Reading**, fraction = bytes/size) → `Import` (**Parsing**, indeterminate: OCCT's STEP parse has no progress hook; then **Transferring**, determinate) → `ReleaseInput` → `Mesh` (**Meshing**, determinate) → extract (**Extracting**, per prototype).
-3. Posts `loaded { tree, prototypes: [{ positions, normals, indices, colors?, edges }], instances, bounds, stats, memoryBytes }` with **all typed-array buffers transferred** (zero-copy).
+1. The main thread compiles the OCCT module once per page (`WebAssembly.compileStreaming`, falling back to `compile` if the MIME type is wrong) and posts the compiled `WebAssembly.Module` with each import. The worker instantiates it through Emscripten's `instantiateWasm` hook, so no worker fetches or compiles the 15 MB binary. Only the `single` variant is wired in (D40).
+2. `import { file, format, module }`: `file.stream()` → chunks copied into `AllocateInput` memory (phase **Reading**, fraction = bytes/size) → `Import` (**Parsing**, indeterminate: OCCT's STEP parse has no progress hook; then **Transferring**, determinate) → `ReleaseInput` → `Mesh` (**Meshing**, determinate) → extract (**Extracting**, per prototype).
+3. Posts `loaded { scene: { nodes, instances, prototypes }, bounds, stats, memoryBytes }` with **all typed-array buffers transferred** (zero-copy). Bounds and counts are computed in the worker, before the transfer.
 4. Stays alive, holding the XCAF document, until the model is deleted.
+5. OCCT's own console output (`print`/`printErr`) goes to `console.debug`/`console.warn` with an `[OCCT]` prefix: it explains parse failures but isn't an app error.
 
 **Progress channel** (spike S3)
 
 - `J3DProgress::Show()` is throttled to about 10 Hz.
-- Single-threaded variant: `Show()` runs on the worker thread and calls `postMessage` through `EM_ASM`. The page's event loop is free, so messages arrive while the worker is busy.
-- Threaded variant: `Show()` may run on a pthread, so it writes phase and fraction into a static slot in **shared** WASM memory instead. The worker posts that `SharedArrayBuffer` and its offset to the page once, and the viewer polls it every animation frame.
-- Both paths sit behind a TS `ProgressChannel` interface. The viewer throttles .NET callbacks to 10 Hz or less.
+- Single-threaded variant (the only one wired in, D40): `Show()` runs on the worker thread and calls `Module.j3dProgress` through `EM_ASM`, which `postMessage`s to the page. The page's event loop is free, so messages arrive while the worker is busy in WASM. **Verified in M2** in Chromium and WebKit: every phase arrives, in order.
+- `throttleProgress` (in the workers and again per model in the `ModelManager`) always passes a phase change and a phase's end, drops exact repeats, and otherwise limits updates to one per 100 ms, so .NET will see at most 10 Hz per model.
+- Threaded variant (M5, only if S4 wins): `Show()` may run on a pthread, so it would write phase and fraction into a static slot in **shared** WASM memory; the worker posts that `SharedArrayBuffer` and its offset to the page once, and the viewer polls it every animation frame.
 
 **Cancellation and deletion:** `worker.terminate()` in both cases. It's instant and frees the entire WASM heap. A cancelled model's list entry is removed.
 
@@ -256,25 +260,26 @@ user picks/drops files
 | `MissingFile` | A multi-file glTF/OBJ references a required file (e.g. `.bin`) that wasn't selected with it. The message names the missing files. |
 | `ParseFailed` | The OCCT reader returned failure, or there was a C++ exception (`getExceptionMessage`) |
 | `Empty` | The file parsed but contained no shapes or triangles |
-| `OutOfMemory` | WASM `abort` / `RangeError` / memory growth failure: "Model too large for the browser's 4 GB WebAssembly limit" |
+| `OutOfMemory` | WASM `abort` / `RangeError` / memory growth failure: "Model too large for the browser's 4 GB WebAssembly limit". OCCT's readers catch their own allocation failures and report an unreadable file, so a reader failure with the heap above 90 % of its 4 GB ceiling also counts as `OutOfMemory` (found by S2). |
 | `Internal` | Anything else (logged to the console with a stack trace) |
 
 **Sidecar grouping (multi-file glTF and OBJ+MTL, D32/D33).** Each picker selection or drop is one *batch*. Before queueing:
 
 1. Files with a primary extension (`.step … .glb`, `.obj`) become models. Sidecar extensions (`.bin`, `.mtl`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.ktx2`) are held back for matching.
-2. Each `.gltf` / `.obj` (plus its `.mtl`) is scanned for referenced URIs. Sidecars are matched by decoded, case-insensitive file name, ignoring directories, since browsers don't expose paths.
-3. At load time, a `LoadingManager.setURLModifier` maps each referenced URI to a `blob:` URL for the matched `File`. The blob URLs are revoked when loading finishes.
-4. If a **required** buffer (`.bin`) is missing, the import fails with `MissingFile`. If only textures are missing, the model loads untextured with a warning. Sidecars nothing references are reported back as ignored.
-5. `formats.ts` becomes the source of truth for sidecar extensions too, and adds them to the picker's `accept` list.
+2. References are resolved as each model loads: a glTF's `buffers[].uri` up front (from its JSON, or a GLB's JSON chunk); everything else on demand. Sidecars match by decoded, case-insensitive **relative path** first (files from a dropped folder keep their folder-relative path, D43), then by **file name** alone, since picked files carry no folder information.
+3. A `LoadingManager.setURLModifier` maps each referenced URI to a `blob:` URL for the matched `File`. The blob URLs are revoked when loading finishes. `data:`, `blob:` and `http(s):` URLs pass through untouched.
+4. If a **required** buffer (`.bin`) is missing, the import fails with `MissingFile` before anything loads. A missing texture or `.mtl` is a warning: the texture is replaced by a 1×1 white PNG (so nothing is requested from the server) and the model loads untextured. Individually chosen sidecars that nothing referenced are reported as rejected once every model of the batch has finished; files found inside a dropped folder are skipped silently.
+5. `formats.ts` is the source of truth for sidecar extensions too, and adds them to the picker's `accept` list.
 
 **Mesh formats** (no OCCT):
 
-- **STL** is parsed by `STLLoader.parse` in a transient mesh worker, with buffers transferred back.
-- **OBJ** uses `OBJLoader` with `MTLLoader` materials and textures when a `.mtl` is supplied; otherwise it's geometry-only and honours vertex colours. It runs on the main thread when textures are involved, otherwise in the mesh worker.
-- **glTF/GLB** uses `GLTFLoader` on the main thread, since it needs the DOM for textures. It supports GLB, embedded and multi-file `.gltf`, `EXT_meshopt_compression` (`MeshoptDecoder`), `KHR_draco_mesh_compression` (`DRACOLoader`) and `KHR_texture_basisu` (`KTX2Loader`, which needs the renderer for format detection).
-- The **Draco and Basis transcoder files** (JS + WASM from `three/examples/jsm/libs`) are copied by Vite into `wwwroot/viewer/decoders/` and served same-origin, because COEP blocks CDNs. Their decoder workers come from `blob:` URLs, which inherit the page's isolation.
+- **STL** is parsed by `STLLoader.parse` in a transient mesh worker, with buffers transferred back and rebuilt on the main thread. A single STL mesh is its own tree root, named after the file.
+- **OBJ** geometry is **always** parsed by `OBJLoader` in the mesh worker, which also reports the file's `mtllib` names. The main thread then loads those `.mtl` files and their textures with `MTLLoader` (it needs the DOM for images) and assigns the materials by name. Without a `.mtl`, objects get the neutral grey and honour vertex colours.
+- **glTF/GLB** uses `GLTFLoader` on the main thread, since it needs the DOM for textures. It supports GLB, embedded and multi-file `.gltf`, `EXT_meshopt_compression` (`MeshoptDecoder`), `KHR_draco_mesh_compression` (`DRACOLoader`) and `KHR_texture_basisu` (`KTX2Loader`). A file whose `extensionsRequired` lists anything three can't load fails with `Unsupported`. Lights and cameras in the file are dropped.
+- **KTX2** transcoding needs a renderer to pick a GPU format. Until M3 provides the real one, a throwaway `WebGLRenderer` probes the GPU and is disposed (`GltfImportOptions.getRenderer` takes the real one later).
+- The **Draco and Basis decoders** need no copying: three r186's loaders locate them with `new URL(…, import.meta.url)`, so Vite emits them into `viewer/assets/` and they're served same-origin, as COEP requires. They're fetched only when a file uses them (R12).
 - **Orientation:** glTF is Y-up by spec and is rotated +90° about X. STL and OBJ are assumed to be Z-up, which is the CAD export convention.
-- Mesh models have a flat tree (glTF keeps its node hierarchy) and **no edge overlay**. glTF `alphaMode: BLEND` and MTL `d`/`Tr` opacity are honoured (D34).
+- Mesh models arrive as a ready Three.js object with the loaders' own materials (M3 decides the final material policy) and have **no edge overlay**. Their tree is the file's object hierarchy. glTF `alphaMode: BLEND` and MTL `d`/`Tr` opacity are honoured (D34).
 
 ### 6.3 Viewer (`src/J3D.Viewer`)
 
@@ -291,9 +296,9 @@ user picks/drops files
 | Instancing | Each prototype's `BufferGeometry` is shared by its instances, and prototypes with many instances (≥ 16) use `InstancedMesh`. If draw calls exceed about 5,000, M5 evaluates `BatchedMesh`. |
 | Render loop | On demand only: render when camera-controls reports an update or transition, when the scene changes, or on resize. Idle cost is zero. Large geometry uploads are spread across frames to avoid jank. |
 | View cube (D31) | A labelled cube about 110 px across, top-right. It's drawn by the same renderer into a scissored viewport, with its own small orthographic camera that copies the main camera's rotation. Raycasting picks one of **26 regions** (6 faces, 12 edges, 8 corners), highlights it on hover, and on click calls `controls.rotateTo(azimuth, polar, true)`, which animates and keeps distance and zoom. Z-up names: **Top** looks down −Z (+Y up on screen), **Front** looks along +Y, **Right** looks along −X. A **Home** button next to it goes to isometric (front-right-top) and fits all. Top/Bottom use a polar angle of ε / π−ε, because turntable controls can't sit exactly on the pole. |
-| Drag and drop | `dragenter/over/leave/drop` on the host toggles a `j3d-viewport--drop` overlay class and passes `DataTransfer.files` to the import queue. |
+| Drag and drop | `dragenter/over/leave/drop` on the host toggles a `j3d-viewport--drop` overlay class and, from the `drop` handler, synchronously calls the viewer's `importDrop(dataTransfer)` (M2), which expands dropped folders (D43) and queues the batch. |
 | Disposal | Delete removes the Object3D, disposes geometries and releases material references, then re-renders. **The camera doesn't move on delete.** |
-| Test hook | `window.__j3dTest` (camera state, model count, frame counter) is exposed only in Development, for Playwright. |
+| Test hook | `window.__j3dTest` is exposed only in Development (the host renders `<meta name="j3d-test-hook">`), for Playwright. Since M2 it drives imports (a hidden file input), records model events, lists models and live workers, and can hold OCCT imports so cancel is testable. M3 adds camera state and a frame counter. |
 
 ### 6.4 Blazor client (`src/J3D.Web.Client`)
 
@@ -361,22 +366,23 @@ OCCT and libcascade are **LGPL-2.1 with the Open CASCADE exception**. Three.js, 
 
 | Layer | Tooling | What it covers |
 |---|---|---|
-| TS unit | **Vitest** (Node) | Format detection, worker message protocol, camera ortho⇄persp maths, fit/near-far maths, colour conversion, tree flattening, queue and concurrency |
-| OCCT integration | **Vitest** + the real `dist/` WASM under Node 22+ | Import each fixture → prototype, instance and triangle counts, names, colours, bounds, error codes, memory release |
+| TS unit | **Vitest** (Node) | Format and sidecar detection, batch planning and sidecar matching, folder-drop expansion, the `ModelManager` (queue, concurrency, cancel, delete, events) with fake runners, progress throttling, error mapping, BREP bounds, STL/OBJ parsing and rebuilding, glTF without textures or Draco (GLB, meshopt, `MissingFile`, `Unsupported`); from M3, camera ortho⇄persp maths, fit/near-far maths and colour conversion |
+| OCCT integration | **Vitest** + the real `dist/` WASM under Node 22+ | Import each fixture → prototype, instance and triangle counts, names, colours, bounds, error codes, memory release. On demand: generated large STEP files (`J3D_LARGE_FIXTURES`, see below) |
 | C# unit / component | **xUnit v3 + bUnit 2** | `SceneState` transitions, `ModelFormat` behaviour, `ModelList` / `Toolbar` / `Viewport` rendering and interop calls (bUnit JS interop in strict mode) |
-| Host | **xUnit v3 + WebApplicationFactory** | COOP/COEP on pages and assets, `.wasm` MIME type and compression |
-| E2E | **Playwright for .NET** + `WebApplicationFactory.UseKestrel()` (.NET 10), Chromium/Firefox/WebKit | Import via picker and via drag and drop (synthetic `DataTransfer`), multi-file glTF and OBJ+MTL batches including the `MissingFile` path, list status, non-background canvas pixels, translucent part rendering, delete with confirm (and cancelling the dialog), cancel import, first-model auto-fit only, `F` key, projection toggle, view cube face/edge/corner clicks and Home, mouse pan/rotate/zoom changing camera state (test hook), `crossOriginIsolated`, no console errors. Runs against the **Release** build to catch trimming issues in interop DTOs. |
+| Host | **xUnit v3 + WebApplicationFactory** | COOP/COEP on pages and assets, the OCCT `.wasm` served as `application/wasm`, the test-hook `<meta>` only in Development |
+| E2E | **Playwright for .NET** + `WebApplicationFactory.UseKestrel()` (.NET 10), Chromium/Firefox/WebKit | **Since M2** (through the test hook): every fixture imports with the expected structure, counts and Z-up bounds; progress phases in order; `ParseFailed` through a C++ exception; multi-file glTF and OBJ+MTL batches, including `MissingFile` and a missing texture; unsupported files rejected; two imports at a time; cancelling a running import and deleting a loaded model terminate their workers; no console errors. **From M3/M4:** import via drag and drop, list status, non-background canvas pixels, translucent part rendering, delete with confirm (and cancelling the dialog), cancel import, first-model auto-fit only, `F` key, projection toggle, view cube face/edge/corner clicks and Home, mouse pan/rotate/zoom changing camera state (test hook), `crossOriginIsolated`, no console errors. Runs against the **Release** build to catch trimming issues in interop DTOs. |
 
 Notes:
 
 - Playwright for .NET has no `toHaveScreenshot` (visual comparison is Node-only), so canvas checks use **pixel sampling** (`page.screenshot` + decode) instead of baseline images.
-- Large-model tests (100 MB+ generated STEP) run on demand or nightly, not on every PR.
+- **Large-model tests** run on demand, never on every PR: `npm run fixtures:large -- 200 700` generates STEP files into the git-ignored `tests/fixtures/large/`, and setting `J3D_LARGE_FIXTURES=200,700` enables both the Node test (`src/J3D.Occt/src/large.test.ts`) and the E2E test (`LargeModelTests`). In CI, dispatch `ci.yml` with the `large_fixtures` input.
+- **Firefox locally:** Playwright's Firefox 155 build doesn't start on the development machine (Windows build 26300: "side-by-side configuration is incorrect", a missing `mozglue` assembly, even after a clean reinstall), so Firefox E2E runs only in CI (Linux). Chromium and WebKit run locally.
 
 ---
 
 ## 9. CI/CD
 
-- **`ci.yml`** (in M0): on PRs and pushes to `main`. Steps: `npm ci` → typecheck → Vitest → `dotnet build -c Release` → client and host tests. Then an E2E matrix `[chromium, firefox, webkit]` with `playwright.ps1 install --with-deps`. Checkout uses `lfs: true`. Since M1 it also runs the OCCT staleness guard and the OCCT integration tests. An LFS object cache to save bandwidth quota is still to do.
+- **`ci.yml`** (in M0): on PRs and pushes to `main`. Steps: `npm ci` → typecheck → Vitest → `dotnet build -c Release` → client and host tests. Then an E2E matrix `[chromium, firefox, webkit]` with `playwright.ps1 install --with-deps`. Since M1 it also runs the OCCT staleness guard and the OCCT integration tests. Since M2, Git LFS objects are cached by content (`actions/cache` keyed on `git lfs ls-files`) instead of fetched on every checkout (R8), and a manual `workflow_dispatch` with `large_fixtures` (e.g. `200,700`) also generates and imports large STEP files in every job.
 - **`occt-wasm.yml`** (M1): see §6.1.
 - No deployment pipeline (D25).
 
@@ -397,13 +403,23 @@ Solution and props, CPM, `.editorconfig`, LFS attributes, Blazor Web App (Intera
 - Spike **S1** outcome: toolchain, XCAF, facade and size verified (§6.1). The trimmed build is about a third of the full libcascade size. The Safari check of WASM exceptions moves to M2, where a browser harness exists.
 - **Exit met:** the WASM builds locally and in CI, and the Node tests import every OCCT fixture with the expected tree, colours and triangle counts.
 
-### M2 — Import pipeline
+### M2 — Import pipeline (in review, `feature/m2-import-pipeline`)
 
-- Spikes **S2** (memory ceiling per browser), **S3** (progress channel in both variants) and **S5** (Vite worker + WASM asset under Blazor static assets), plus the WebKit/Safari check of WASM exceptions carried over from S1.
-- `ModelManager`, import queue (concurrency 2), model worker host, shared module compilation, typed protocol, chunked file streaming, extraction to transferables, progress, cancel, error mapping including OOM detection.
-- RGBA colour extraction with translucent index ranges.
-- Mesh worker (STL/OBJ), main-thread glTF path (meshopt, Draco, KTX2 with self-hosted decoders), sidecar grouping for multi-file glTF and OBJ+MTL, Y-up conversion.
-- **Exit:** every fixture imports in all three browsers, with progress and a working cancel. A generated 200 MB STEP either loads or fails cleanly with `OutOfMemory`.
+Scope as decided at the start of M2: a **headless** pipeline driven by a Development-only test hook (D39), single-threaded OCCT only (D40).
+
+- **Pipeline** (§6.2 "As built"): `ModelManager` with batch planning, sidecar matching and folder-drop expansion; import queue (concurrency 2); OCCT model worker per BREP model with the module compiled once and shared; transient mesh worker for STL/OBJ; main-thread glTF (meshopt, Draco, KTX2) and MTL materials; typed worker protocol; chunked file streaming; transferable results; throttled progress; cancel and delete by worker termination; error codes including `OutOfMemory`.
+- **Fixtures:** licence-free mesh fixtures from `src/J3D.Viewer/scripts/generate-mesh-fixtures.mjs` (D44) and `npm run fixtures:large` for large STEP files.
+- **Tests:** 80 Vitest unit tests in the viewer; 12 E2E tests passing in Chromium and WebKit (Firefox runs in CI only, §8); host tests for the test hook and the `.wasm` MIME type; on-demand large-model tests.
+- **Housekeeping (D45):** SDK 10.0.402 / ASP.NET 10.0.13 (10.0.9 now fails NuGet's audit with two high-severity advisories), LFS cache in CI, merged milestone branches deleted.
+
+**Spike outcomes**
+
+- **S5 (Vite worker + WASM under Blazor static assets):** Vite's library mode inlines every asset, so it would have embedded the 15 MB WASM as base64. The viewer is now an **app build** with a single JS entry (`j3d-viewer.js`, exports preserved), hashed chunks, workers and assets under `wwwroot/viewer/`, and relative asset URLs (`base: './'`). The worker imports the Emscripten glue (`@j3d/occt/single`), whose `new URL('…wasm', import.meta.url)` and the main thread's `?url` import resolve to **one** emitted WASM file. Blazor's `MapStaticAssets` serves it as `application/wasm`, so `compileStreaming` works; the compiled `WebAssembly.Module` posts to workers in Chromium and WebKit. The glue's Node-only `import('node:module')` gets a stub in the worker build.
+- **S3 (progress channel):** the single-threaded `postMessage` path works as designed (§6.2); the shared-memory path for the threaded variant is deferred with it (D40).
+- **S2 (memory ceiling):** with the worst-case generator (thousands of unique parts, no instancing), the peak WASM heap is **about 7× the STEP file size** and linear: 25 MB → 191 MB, 50 → 359, 100 → 679, **200 MB → 1,457 MB**. So the practical ceiling for such files is roughly **550–600 MB of STEP**. 200 MB loads in Chromium in 28 s and WebKit in 37 s (Node: 30 s; mostly OCCT's transfer phase). 700 MB fails cleanly with `OutOfMemory` in Node, Chromium and WebKit, **after a fix**: OCCT's STEP reader caught its own allocation failure and reported "not a readable STEP file", so a reader failure with the heap above 90 % of 4 GB is now reported as `OutOfMemory` (`facade.ts`). Firefox numbers come from a CI run.
+- **WebKit WASM exceptions (from S1):** `invalid.step` fails with `ParseFailed` through a C++ exception in Playwright WebKit, so `exceptions: 'wasm'` works there. Real Safari remains unverified (D42).
+
+**Exit:** every fixture imports in Chromium and WebKit locally, with progress and a working cancel; Firefox is covered by CI. A generated 200 MB STEP loads (and a 700 MB one fails cleanly with `OutOfMemory`).
 
 ### M3 — Viewer
 
@@ -429,25 +445,28 @@ Solution and props, CPM, `.editorconfig`, LFS attributes, Blazor Web App (Intera
 | # | Risk | Mitigation |
 |---|---|---|
 | R1 | The libcascade toolchain is young (v3.x) | Replicad depends on it too. Pin the image digest. Keep the facade small and toolchain-agnostic so a plain Emscripten OCCT build is a fallback. |
-| R2 | The 4 GB wasm32 ceiling. OCCT's STEP parse can peak at many times the file size, so the practical limit may be roughly 200–400 MB of STEP. | Stream input into WASM, free it before meshing, one heap per model, explicit `OutOfMemory` error. S2 measures the real limit per browser. |
+| R2 | The 4 GB wasm32 ceiling. OCCT's STEP parse can peak at many times the file size. **Measured in S2:** about 7× for many small unique parts, so roughly 550–600 MB of STEP. | Stream input into WASM, free it before meshing, one heap per model, explicit `OutOfMemory` error, including when OCCT's reader hides an allocation failure (§10 M2). |
 | R3 | The **threaded build barely helps our workload**: libcascade reports 1.33× for STEP import + mesh and **1.06× for meshing alone**. Each worker's pthread pool also costs `PTHREAD_POOL_SIZE × 8 MB` of stack, multiplied by one worker per model. | **Decided (D28):** ship both variants, keep COOP/COEP, default to single-threaded unless S4 shows ≥ 1.3× on our fixtures. |
-| R4 | Safari quirks (WASM exception handling flavour, SAB, WebGL) | S1 checks the `exceptions: 'wasm'` output on Safari early. WebKit is in the E2E matrix from M0. |
+| R4 | Safari quirks (WASM exception handling flavour, SAB, WebGL) | WebKit is in the E2E matrix from M0. Since M2, `exceptions: 'wasm'`, posting a compiled module to workers and every fixture are verified in Playwright WebKit. Real Safari is untested until there's a Mac (D42). |
 | R5 | Blazor WASM trimming breaks interop DTO deserialisation in Release | E2E runs Release. DTOs are simple records with string enums. |
 | R6 | Main-thread jank when uploading huge geometry | Spread uploads across frames, render on demand, instancing. |
 | R7 | IGES has no stream reader, so it needs a MEMFS copy (2× input memory) | Acceptable, since IGES files are typically smaller. Documented. |
-| R8 | Git LFS quota and bandwidth | Cache LFS objects in CI; WASM changes are infrequent. |
-| R9 | Changing the symbol set locally needs Docker (not installed; WSL2 is) | Rely on the CI workflow. Docker Desktop with the WSL2 backend is optional. |
+| R8 | Git LFS quota and bandwidth | LFS objects are cached in CI since M2; WASM changes are infrequent. |
+| R9 | Changing the symbol set locally needs Docker | Docker Desktop (WSL2 backend) is installed for local builds (D38); CI still builds and commits `dist/`. |
 | R10 | Translucent rendering: per-object sorting can't resolve intersecting or interleaved translucent parts, and many translucent parts add sorting cost | Accept artefacts for iteration 1 (the usual CAD-viewer trade-off). Order-independent transparency is a later option. Fixture with nested translucent parts for E2E. |
 | R11 | View cube vs turntable at the poles: exactly-Top/Bottom views are degenerate for azimuth/polar controls | Use polar ε / π−ε with a fixed azimuth so +Y is up on screen. Unit-test the 26 region mappings. |
-| R12 | Draco/Basis decoders add ~1–2 MB of assets and their own worker/WASM loading paths | Load lazily, only when a file needs them. Same-origin under COEP (covered by host tests). |
+| R12 | Draco/Basis decoders add ~1–2 MB of assets and their own worker/WASM loading paths | Vite emits them same-origin automatically (three locates them via `import.meta.url`), and they're fetched only when a file uses them. The Draco and KTX2 fixtures load in Chromium and WebKit. |
 
 ---
 
 ## 12. Remaining assumptions
 
-All eight open questions from the first draft are answered (D28–D36). These smaller defaults follow from those answers and are open to change:
+All eight open questions from the first draft are answered (D28–D36). These smaller defaults follow from those answers (5–7 from M2) and are open to change:
 
 1. **Cancel and dismiss don't confirm.** Only deleting a *loaded* model shows the confirmation dialog (D29). Cancelling an in-progress import and dismissing a failed entry are immediate, since there's nothing loaded to lose.
 2. **Home = isometric + fit all.** Clicking a view cube region keeps the current zoom (D31); the Home button also re-frames everything.
 3. **Isometric is front-right-top**, i.e. the camera looks from (+X, −Y, +Z) toward the target.
-4. **Missing textures don't fail an import.** A multi-file glTF/OBJ with missing textures loads untextured with a warning; only a missing `.bin` fails (`MissingFile`).
+4. **Missing textures don't fail an import.** A multi-file glTF/OBJ with missing textures loads untextured with a warning; only a missing `.bin` fails (`MissingFile`). A missing `.mtl` is likewise a warning, and the OBJ gets default materials.
+5. **Files inside a dropped folder are reported only if they matter.** Unsupported or unused files found inside a dropped folder (READMEs, thumbnails) are skipped silently; files picked or dropped individually are reported as rejected.
+6. **glTF lights and cameras are dropped** on import: J3D lights the scene itself (M3).
+7. **A reader failure close to the 4 GB ceiling is `OutOfMemory`.** OCCT doesn't distinguish the two, and above 90 % of the heap the file is almost certainly too large rather than malformed.

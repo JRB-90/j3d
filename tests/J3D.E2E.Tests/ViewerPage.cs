@@ -11,7 +11,7 @@ namespace J3D.E2E.Tests;
 /// </summary>
 public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixture<J3DAppFixture>
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    protected static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly List<string> _consoleErrors = [];
 

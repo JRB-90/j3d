@@ -12,6 +12,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "fixtures:large": "node src/J3D.Occt/scripts/generate-large-step.mjs"
   }
 }

@@ -101,6 +101,16 @@ export interface ImportOptions {
 export const DefaultLinearDeflectionRatio = 0.001;
 export const DefaultAngularDeflection = 0.35;
 
+/** The WASM heap's ceiling: MAXIMUM_MEMORY in libcascade.config.ts. */
+export const MaximumHeapBytes = 4 * 2 ** 30;
+
+/**
+ * OCCT's readers catch their own allocation failures and report an unreadable file instead. A
+ * failure with the heap grown this close to its ceiling is reported as out of memory (spike S2: a
+ * 700 MB STEP failed as "not readable" with the heap at 3.9 of 4 GB).
+ */
+export const OutOfMemoryHeapFraction = 0.9;
+
 export class OcctImportError extends Error {
   constructor(
     readonly status: ImportStatus,
@@ -132,8 +142,9 @@ export class OcctModel implements Disposable {
     module.j3dProgress = onProgress ? (phase, fraction) => onProgress(phase as ImportPhase, fraction) : undefined;
     try {
       await writeInput(module, handle, source, onProgress);
-      check(handle, handle.importFile(format, fileName));
+      check(module, handle, handle.importFile(format, fileName));
       check(
+        module,
         handle,
         handle.mesh(options.linearDeflectionRatio ?? DefaultLinearDeflectionRatio, options.angularDeflection ?? DefaultAngularDeflection),
       );
@@ -196,10 +207,14 @@ async function writeInput(
   onProgress?.(ImportPhase.Reading, 1);
 }
 
-function check(handle: J3DModelHandle, status: number): void {
-  if (status !== ImportStatus.Ok) {
-    throw new OcctImportError(status as ImportStatus, handle.getLastError() || 'Import failed.');
+function check(module: OcctModule, handle: J3DModelHandle, status: number): void {
+  if (status === ImportStatus.Ok) {
+    return;
   }
+  if (status !== ImportStatus.OutOfMemory && module.wasmMemory.buffer.byteLength >= MaximumHeapBytes * OutOfMemoryHeapFraction) {
+    throw new OcctImportError(ImportStatus.OutOfMemory, `Out of memory (${handle.getLastError() || 'import failed'}).`);
+  }
+  throw new OcctImportError(status as ImportStatus, handle.getLastError() || 'Import failed.');
 }
 
 function extractPrototype(module: OcctModule, handle: J3DModelHandle, index: number): PrototypeMesh {
