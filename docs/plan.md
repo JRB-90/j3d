@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged (M4 `feature/m4-blazor-ui`) · **Status:** M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline) and M3 (viewer) merged; M4 (Blazor UI) in progress; M5 planned · **Last updated:** 2026-10-14
+> **Branches:** one per milestone, squash-merged (M5 `feature/m5-hardening`) · **Status:** M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer) and M4 (Blazor UI) merged; M5 (hardening) in progress · **Last updated:** 2026-10-14
 
 ---
 
@@ -462,7 +462,7 @@ Scope as decided at the start of M3 (D46–D50):
 - **Tests:** 117 Vitest tests in the viewer (camera maths, the 26 view cube regions, the BREP builder, MTL normalisation, the drop fallback); 26 bUnit tests (`Toolbar`, `Viewport`, `ViewerSession`); E2E `RenderingTests`, `NavigationTests` and `ImportUiTests` (§8), passing locally in Chromium and WebKit.
 - **Manual checklist** (D50, in the built-in browser): import input (`accept`, `multiple`, label); drop overlay and a multi-file glTF drop; STEP colours with BREP edges; translucency (STEP, glTF and MTL); every mesh variant (STL, OBJ+MTL with texture, GLB, multi-file glTF, Draco, meshopt, KTX2) with no warnings; pan, zoom, view cube faces with hover highlight, Home, `F`, Fit all, the projection toggle keeping the visible height exactly; zero frames while idle. Touch was checked only with synthetic pointer events (no touch device).
 
-### M4 — Blazor UI (in progress, `feature/m4-blazor-ui`)
+### M4 — Blazor UI ✅ ([JRB-90/j3d#5](https://github.com/JRB-90/j3d/pull/5), squash-merged as `55092bb`)
 
 Scope as decided at the start of M4 (D52–D59): the model list as described in §6.4, with a compact item (D52), a collapsed tree on every model (D53), snackbars for failures and rejections (D54), progress per phase (D55), and models in import order (D57). M2/M3's E2E tests keep the test hook (D59).
 
@@ -477,7 +477,7 @@ Scope as decided at the start of M4 (D52–D59): the model list as described in 
 - **Tests:** 121 Vitest tests in the viewer; 94 client tests (`SceneState`, `ModelTree`, display formatting, the interop JSON, `ModelList`, `ModelListItem`, the `Viewport`'s callbacks); E2E `ModelListTests` (§8), with all 42 E2E tests passing locally in Chromium and WebKit.
 - **Manual checklist** (D58, in the built-in browser): a mixed batch listed in order; each phase of a 25 MB STEP's import (Reading, an indeterminate Parsing, then Transferring, Meshing and Extracting) ending at "191 MB · 16.3k triangles · 1.4k parts"; a long name ellipsised; load warnings in the tooltip; the failure and rejection snackbars; the delete dialog's Cancel and Delete (scene and worker cleared); cancelling a held import; the tree opening a level at a time, with paging on the 1,358-part model; the drawer scrolling a long list.
 
-### M5 — Hardening
+### M5 — Hardening (in progress, `feature/m5-hardening`)
 
 - Spike **S4** (threaded vs single benchmark): single-threaded stays the default unless multi shows ≥ 1.3× (D28).
 - Large-model runs and tuning (tessellation constants, chunked uploads, `BatchedMesh` if needed, dropping CPU copies of GPU-resident buffers if memory-bound).
