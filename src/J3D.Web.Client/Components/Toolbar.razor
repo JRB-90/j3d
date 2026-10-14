@@ -1,0 +1,41 @@
+<div class="j3d-toolbar" data-testid="toolbar">
+    @* A native label opens the file picker, so no JS user-activation trickery is needed (docs/plan.md §6.4).
+       The viewer sets the input's accept list and imports what is picked. *@
+    <input @ref="_input"
+           id="@InputId"
+           type="file"
+           multiple
+           class="j3d-visually-hidden"
+           disabled="@(!Session.IsReady)"
+           data-testid="import-input" />
+    <MudButton HtmlTag="label"
+               for="@InputId"
+               StartIcon="@Icons.Material.Filled.FileOpen"
+               Color="Color.Inherit"
+               Disabled="@(!Session.IsReady)"
+               data-testid="import-button">
+        Import
+    </MudButton>
+
+    <MudTooltip Text="Fit all (F)">
+        <MudButton StartIcon="@Icons.Material.Filled.FitScreen"
+                   Color="Color.Inherit"
+                   Disabled="@(!Session.IsReady)"
+                   OnClick="FitAllAsync"
+                   data-testid="fit-all-button">
+            Fit all
+        </MudButton>
+    </MudTooltip>
+
+    <MudToggleGroup T="Projection"
+                    Value="Session.Projection"
+                    ValueChanged="SetProjectionAsync"
+                    Size="Size.Small"
+                    Color="Color.Primary"
+                    Disabled="@(!Session.IsReady)"
+                    Class="j3d-projection"
+                    data-testid="projection">
+        <MudToggleItem Value="Projection.Orthographic" Text="Orthographic" />
+        <MudToggleItem Value="Projection.Perspective" Text="Perspective" />
+    </MudToggleGroup>
+</div>

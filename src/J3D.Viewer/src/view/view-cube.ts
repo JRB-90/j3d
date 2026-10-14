@@ -63,7 +63,8 @@ export class ViewCube {
     for (const region of ViewRegions) {
       const [x, y, z] = region.direction.map(span) as [number, number][];
       const geometry = new BoxGeometry(x![1] - x![0] - Seam, y![1] - y![0] - Seam, z![1] - z![0] - Seam);
-      const material = new MeshBasicMaterial({ color: region.kind === 'face' ? FaceColour : BandColour });
+      // Flat UI colours: no tone mapping.
+      const material = new MeshBasicMaterial({ color: region.kind === 'face' ? FaceColour : BandColour, toneMapped: false });
       const cell = new Mesh(geometry, material);
       cell.position.set((x![0] + x![1]) / 2, (y![0] + y![1]) / 2, (z![0] + z![1]) / 2);
       cell.userData['region'] = region;
@@ -188,7 +189,7 @@ export class ViewCube {
     texture.colorSpace = SRGBColorSpace;
     texture.anisotropy = 4;
     const size = 2 - 2 * Band;
-    const mesh = new Mesh(new PlaneGeometry(size, size), new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }));
+    const mesh = new Mesh(new PlaneGeometry(size, size), new MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, toneMapped: false }));
     const right = new Vector3(...label.right);
     const up = new Vector3(...label.up);
     const normal = new Vector3(...region.direction);

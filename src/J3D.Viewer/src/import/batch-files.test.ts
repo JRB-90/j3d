@@ -56,6 +56,22 @@ describe('filesFromDataTransfer', () => {
     expect(await filesFromDataTransfer(drop)).toEqual([{ file: plain, path: 'scan.stl' }]);
   });
 
+  it("uses the drop's own File when a top-level file entry can't be read (WebKit)", async () => {
+    const plain = new File(['x'], 'scan.stl');
+    const unreadable = {
+      isFile: true,
+      isDirectory: false,
+      name: 'scan.stl',
+      fullPath: '/scan.stl',
+      file: (_: unknown, reject: (error: Error) => void) => reject(new Error('NotFoundError: Path does not exist')),
+    };
+    const drop = dataTransfer([unreadable, file('/part.step')], [plain]);
+    expect((await filesFromDataTransfer(drop)).map((f) => [f.path, f.file])).toEqual([
+      ['scan.stl', plain],
+      ['part.step', expect.any(File)],
+    ]);
+  });
+
   it('ignores non-file items such as dragged text', async () => {
     const drop = { items: [{ kind: 'string' }], files: [] } as unknown as DataTransfer;
     expect(await filesFromDataTransfer(drop)).toEqual([]);

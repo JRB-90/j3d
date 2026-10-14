@@ -73,7 +73,9 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   const importDrop = async (dataTransfer: DataTransfer) => {
     models.importFiles(await filesFromDataTransfer(dataTransfer));
   };
-  const removeDropTarget = installDropTarget(host, (dataTransfer) => void importDrop(dataTransfer));
+  const removeDropTarget = installDropTarget(host, (dataTransfer) => {
+    importDrop(dataTransfer).catch((error: unknown) => console.error('J3D: the dropped files could not be read.', error));
+  });
   const removeTestHook = testControls ? installTestHook(models, testControls, attachFileInput, view) : undefined;
 
   host.dataset['viewerReady'] = 'true';

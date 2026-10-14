@@ -23,6 +23,30 @@ body {
     flex-direction: column;
 }
 
+.j3d-appbar .j3d-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 24px;
+}
+
+    .j3d-appbar .j3d-toolbar .j3d-projection {
+        margin-left: 12px;
+    }
+
+/* Hidden but still focusable and clickable through its label (unlike display: none in some browsers). */
+.j3d-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 h1:focus {
     outline: none;
 }

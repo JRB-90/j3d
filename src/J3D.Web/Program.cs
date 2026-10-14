@@ -1,14 +1,14 @@
 using J3D.Web;
+using J3D.Web.Client;
 using J3D.Web.Components;
-using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveWebAssemblyComponents();
 
-// Needed for server-side prerendering of MudBlazor components.
-builder.Services.AddMudServices();
+// Needed for server-side prerendering of the client's components (MudBlazor and the viewer session).
+builder.Services.AddJ3DClient();
 
 var app = builder.Build();
 

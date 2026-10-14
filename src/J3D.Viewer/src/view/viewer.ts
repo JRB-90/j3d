@@ -3,6 +3,7 @@ import {
   Box3,
   DirectionalLight,
   Matrix4,
+  NeutralToneMapping,
   Object3D,
   OrthographicCamera,
   PerspectiveCamera,
@@ -44,9 +45,14 @@ import { HomeRegion, regionView, type ViewRegion } from './view-regions';
 
 CameraControls.install({ THREE: { Vector2, Vector3, Vector4, Quaternion, Matrix4, Spherical, Box3, Sphere, Raycaster } });
 
-/** Image-based light from three's RoomEnvironment, plus a headlight that follows the camera (docs/plan.md §6.3). */
-const EnvironmentIntensity = 0.8;
-const HeadlightIntensity = 1.2;
+/**
+ * Image-based light from three's RoomEnvironment, plus a headlight that follows the camera
+ * (docs/plan.md §6.3), under Khronos PBR Neutral tone mapping, which keeps base colours true and
+ * rolls off highlights instead of clipping them. Tuned so the neutral grey reads as itself on the
+ * faces turned to the viewer and the top faces aren't blown out.
+ */
+const EnvironmentIntensity = 0.6;
+const HeadlightIntensity = 2.5;
 /** Where the headlight sits relative to the view: up and to the left of the viewer. */
 const HeadlightDirection = new Vector3(-0.35, 0.5, 1).normalize();
 
@@ -113,6 +119,7 @@ export class Viewer {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0); // transparent over the viewport's CSS gradient
     renderer.autoClear = false; // the view cube is drawn over the scene in the same frame
+    renderer.toneMapping = NeutralToneMapping;
     this.renderer = renderer;
     const canvas = renderer.domElement;
     canvas.dataset['testid'] = 'viewer-canvas';
@@ -288,6 +295,15 @@ export class Viewer {
 
   get hoveredRegion(): ViewRegion | undefined {
     return this.viewCube.hoveredRegion;
+  }
+
+  /** Where a world point appears on screen, in client coordinates (for tests). */
+  projectToClient(point: Vector3Tuple): { x: number; y: number } {
+    const camera = this.camera;
+    camera.updateMatrixWorld();
+    const ndc = new Vector3(...point).project(camera);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return { x: rect.left + ((ndc.x + 1) / 2) * rect.width, y: rect.top + ((1 - ndc.y) / 2) * rect.height };
   }
 
   /** Schedules a redraw (scene changes, resize, hover). Idle cost is zero: nothing runs between requests. */

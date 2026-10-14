@@ -57,6 +57,8 @@ export interface TestHook {
   viewCubePoint(region: string): { x: number; y: number } | null;
   /** The highlighted view cube region, if any. */
   hoveredRegion(): string | null;
+  /** Where a world point is on screen (client coordinates), or null without WebGL2. */
+  project(point: [number, number, number]): { x: number; y: number } | null;
 }
 
 export interface TestHookControls {
@@ -120,6 +122,7 @@ export function installTestHook(
       return (region && viewer?.viewCubePointOf(region)) ?? null;
     },
     hoveredRegion: () => viewer?.hoveredRegion?.id ?? null,
+    project: (point) => viewer?.projectToClient(point) ?? null,
   };
   controls.hook = hook;
   window.__j3dTest = hook;

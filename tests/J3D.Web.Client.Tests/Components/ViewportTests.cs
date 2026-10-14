@@ -5,13 +5,13 @@ namespace J3D.Web.Client.Tests.Components;
 
 public sealed class ViewportTests : BunitTestBase
 {
-    private readonly BunitJSModuleInterop _module;
+    private readonly BunitJSModuleInterop _viewer;
 
     public ViewportTests()
     {
         JSInterop.Mode = JSRuntimeMode.Strict;
-        _module = JSInterop.SetupModule(Viewport.ModulePath);
-        _module.SetupModule(invocation => invocation.Identifier == "createViewer");
+        _viewer = SetupViewerModule();
+        _viewer.SetupVoid("dispose").SetVoidResult();
     }
 
     [Fact]
@@ -19,7 +19,7 @@ public sealed class ViewportTests : BunitTestBase
     {
         var cut = Render<Viewport>();
 
-        var invocation = Assert.Single(_module.Invocations, static i => i.Identifier == "createViewer");
+        var invocation = Assert.Single(JSInterop.Invocations, static i => i.Identifier == "createViewer");
         Assert.Equal(2, invocation.Arguments.Count);
         Assert.NotNull(cut.Find("[data-testid=viewport]"));
     }
@@ -35,15 +35,29 @@ public sealed class ViewportTests : BunitTestBase
 
         Assert.Equal(new ViewerCapabilities(false, true), reported);
         Assert.Contains("WebGL2", cut.Find(".mud-alert").TextContent, StringComparison.Ordinal);
+        Assert.False(Session.IsReady);
     }
 
     [Fact]
-    public async Task Shows_no_warning_when_supported()
+    public async Task Shows_no_warning_and_shares_the_viewer_when_supported()
     {
         var cut = Render<Viewport>();
 
         await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
 
         Assert.Empty(cut.FindAll(".mud-alert"));
+        Assert.True(Session.IsReady);
+    }
+
+    [Fact]
+    public async Task Disposes_the_viewer_and_leaves_the_session()
+    {
+        var cut = Render<Viewport>();
+        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
+
+        await DisposeComponentsAsync();
+
+        Assert.Single(_viewer.Invocations, static i => i.Identifier == "dispose");
+        Assert.False(Session.IsReady);
     }
 }
