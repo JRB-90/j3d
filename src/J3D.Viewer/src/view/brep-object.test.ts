@@ -1,5 +1,5 @@
 import type { ImportedScene, PrototypeMesh } from '@j3d/occt/facade';
-import { InstancedBufferGeometry, InstancedMesh, LineSegments, Mesh, type MeshStandardMaterial } from 'three';
+import { BatchedMesh, Group, InstancedBufferGeometry, InstancedMesh, LineSegments, Matrix4, type MeshStandardMaterial } from 'three';
 import { describe, expect, it } from 'vitest';
 import { buildBrepObject, InstancingThreshold, toUnorm8 } from './brep-object';
 import { MaterialCache } from './materials';
@@ -30,34 +30,53 @@ function scene(prototypes: PrototypeMesh[], placements: number[]): ImportedScene
 }
 
 describe('buildBrepObject', () => {
-  it('places each instance of a prototype with its world matrix and shares the geometry', () => {
+  const batches = (object: Group) => object.children.filter((c): c is BatchedMesh => c instanceof BatchedMesh);
+  const lines = (object: Group) => object.children.filter((c): c is LineSegments => c instanceof LineSegments);
+  const translationAt = (batch: BatchedMesh, instance: number) => batch.getMatrixAt(instance, new Matrix4()).elements[12];
+
+  it('batches the placements of a prototype, sharing its geometry, with their edges in model space', () => {
     const materials = new MaterialCache();
     const { object } = buildBrepObject('model.step', scene([prototype()], [0, 0]), materials);
 
     expect(object.name).toBe('model.step');
-    const meshes = object.children.filter((c): c is Mesh => c instanceof Mesh);
-    const lines = object.children.filter((c): c is LineSegments => c instanceof LineSegments);
-    expect(meshes.map((m) => m.name)).toEqual(['part 0', 'part 1']);
-    expect(lines).toHaveLength(2);
-    expect(meshes[0]!.geometry).toBe(meshes[1]!.geometry);
-    expect(meshes[1]!.matrix.elements[12]).toBe(1);
-    expect(meshes[1]!.matrixAutoUpdate).toBe(false);
+    const [batch] = batches(object) as [BatchedMesh];
+    expect(batches(object)).toHaveLength(1);
+    expect(batch.instanceCount).toBe(2);
+    expect([batch.getGeometryIdAt(0), batch.getGeometryIdAt(1)]).toEqual([0, 0]);
+    expect([translationAt(batch, 0), translationAt(batch, 1)]).toEqual([0, 1]);
+    expect(batch.sortObjects).toBe(false);
+
+    // One edge segment per placement, the second moved 1 along x.
+    const [edges] = lines(object) as [LineSegments];
+    expect(lines(object)).toHaveLength(1);
+    expect([...edges.geometry.getAttribute('position').array]).toEqual([0, 0, 0, 1, 0, 0, 1, 0, 0, 2, 0, 0]);
     expect(materials.size).toBe(2); // one surface, one edge material
   });
 
-  it('draws the translucent index range with a second, transparent material', () => {
+  it('draws parts that share a material in one batch, and a part of another colour in its own', () => {
+    const grey = prototype();
+    const red: PrototypeMesh = { ...prototype(), uniformColor: [0.8, 0.05, 0.05, 1] };
+    const { object } = buildBrepObject('m', scene([grey, prototype(), red], [0, 1, 2]), new MaterialCache());
+
+    const [first, second] = batches(object) as [BatchedMesh, BatchedMesh];
+    expect(batches(object)).toHaveLength(2);
+    expect(first.instanceCount).toBe(2);
+    expect([first.getGeometryIdAt(0), first.getGeometryIdAt(1)]).toEqual([0, 1]);
+    expect(second.instanceCount).toBe(1);
+    expect(lines(object)).toHaveLength(1);
+  });
+
+  it('draws the translucent index range in a second, transparent and sorted batch', () => {
     const materials = new MaterialCache();
     const { object } = buildBrepObject('m', scene([prototype({ translucentFrom: 3, colours: true })], [0]), materials);
 
-    const mesh = object.children.find((c): c is Mesh => c instanceof Mesh)!;
-    expect(mesh.geometry.groups).toEqual([
-      { start: 0, count: 3, materialIndex: 0 },
-      { start: 3, count: 3, materialIndex: 1 },
-    ]);
-    const [opaque, translucent] = mesh.material as MeshStandardMaterial[];
-    expect([opaque!.transparent, translucent!.transparent]).toEqual([false, true]);
-    expect([opaque!.vertexColors, translucent!.depthWrite]).toEqual([true, false]);
-    const colour = mesh.geometry.getAttribute('color');
+    const [opaque, translucent] = batches(object) as [BatchedMesh, BatchedMesh];
+    const [opaqueMaterial, translucentMaterial] = [opaque.material, translucent.material] as MeshStandardMaterial[];
+    expect([opaqueMaterial!.transparent, translucentMaterial!.transparent]).toEqual([false, true]);
+    expect([opaqueMaterial!.vertexColors, translucentMaterial!.depthWrite]).toEqual([true, false]);
+    expect([opaque.sortObjects, translucent.sortObjects]).toEqual([false, true]);
+    expect([opaque.getGeometryRangeAt(0)!.indexCount, translucent.getGeometryRangeAt(0)!.indexCount]).toEqual([3, 3]);
+    const colour = opaque.geometry.getAttribute('color');
     expect([colour.itemSize, colour.normalized, colour.array.constructor]).toEqual([4, true, Uint8Array]);
   });
 
@@ -65,10 +84,11 @@ describe('buildBrepObject', () => {
     const materials = new MaterialCache();
     const { object } = buildBrepObject('m', scene([prototype({ translucentFrom: 0, alpha: 0.25 })], [0]), materials);
 
-    const material = object.children.find((c): c is Mesh => c instanceof Mesh)!.material as MeshStandardMaterial;
+    const [batch] = batches(object) as [BatchedMesh];
+    expect(batches(object)).toHaveLength(1);
+    const material = batch.material as MeshStandardMaterial;
     expect(material.transparent).toBe(true);
     expect(material.opacity).toBe(0.25);
-    expect(object.children.find((c): c is Mesh => c instanceof Mesh)!.geometry.groups).toEqual([]);
   });
 
   it(`instances a prototype placed ${InstancingThreshold} times or more, including its edges`, () => {
@@ -80,12 +100,12 @@ describe('buildBrepObject', () => {
     const mesh = object.children[0] as InstancedMesh;
     expect(mesh).toBeInstanceOf(InstancedMesh);
     expect(mesh.count).toBe(InstancingThreshold);
-    const lines = object.children[1] as LineSegments;
-    const geometry = lines.geometry as InstancedBufferGeometry;
+    const edges = object.children[1] as LineSegments;
+    const geometry = edges.geometry as InstancedBufferGeometry;
     expect(geometry).toBeInstanceOf(InstancedBufferGeometry);
     expect(geometry.instanceCount).toBe(InstancingThreshold);
     expect(geometry.getAttribute('instanceMatrix').array[16 + 12]).toBe(1);
-    expect((lines.material as { defines?: object }).defines).toEqual({ USE_INSTANCING: '' });
+    expect((edges.material as { defines?: object }).defines).toEqual({ USE_INSTANCING: '' });
   });
 
   it('shares materials between models and frees them with the last one', () => {
@@ -95,7 +115,7 @@ describe('buildBrepObject', () => {
     expect(materials.size).toBe(2);
 
     let disposed = 0;
-    a.object.children.forEach((c) => (c as Mesh).geometry.addEventListener('dispose', () => disposed++));
+    a.object.children.forEach((c) => (c as BatchedMesh | LineSegments).geometry.addEventListener('dispose', () => disposed++));
     a.dispose();
     expect(a.object.children).toHaveLength(0);
     expect(disposed).toBe(2);
@@ -107,6 +127,7 @@ describe('buildBrepObject', () => {
   it('skips prototypes nothing places', () => {
     const { object } = buildBrepObject('m', scene([prototype(), prototype()], [1]), new MaterialCache());
     expect(object.children).toHaveLength(2);
+    expect((object.children[0] as BatchedMesh).instanceCount).toBe(1);
   });
 });
 
