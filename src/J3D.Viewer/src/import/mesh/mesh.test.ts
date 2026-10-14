@@ -4,7 +4,7 @@
 /// <reference types="node" />
 
 import { readFileSync } from 'node:fs';
-import { BufferGeometry, Mesh, type Material, type Object3D } from 'three';
+import { BufferGeometry, DoubleSide, Mesh, MeshPhongMaterial, MeshStandardMaterial, Texture, type Material, type Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ModelFormat } from '../../formats';
 import { ModelImportError } from '../errors';
@@ -13,6 +13,7 @@ import { SidecarSet, type BatchFile } from '../sidecars';
 import { describeMeshModel, disposeObject } from './describe';
 import { importGltf } from './gltf-import';
 import { buildScene } from './mesh-import';
+import { toStandardMaterial } from './obj-materials';
 import { parseObj, parseStl } from './parse';
 
 const fixture = (path: string) => new Uint8Array(readFileSync(new URL(`../../../../../tests/fixtures/${path}`, import.meta.url)));
@@ -133,5 +134,29 @@ describe('importGltf', () => {
   it('fails with ParseFailed for a file that is not glTF', async () => {
     const req = { ...request('part.glb', 'gltf'), file: new File(['not json'], 'broken.gltf') };
     await expect(importGltf(req, {}, [])).rejects.toMatchObject({ code: 'ParseFailed' });
+  });
+});
+
+describe('MTL materials', () => {
+  it('become Standard materials that keep colour, texture, opacity and vertex colours (D46)', () => {
+    const map = new Texture();
+    const phong = new MeshPhongMaterial({ name: 'Glass', color: 0x4d99ff, map, opacity: 0.4, transparent: true, vertexColors: true });
+    let disposed = false;
+    phong.addEventListener('dispose', () => (disposed = true));
+
+    const standard = toStandardMaterial(phong);
+
+    expect(standard).toBeInstanceOf(MeshStandardMaterial);
+    expect(standard).toMatchObject({ name: 'Glass', map, opacity: 0.4, transparent: true, vertexColors: true, side: DoubleSide });
+    expect([standard.metalness, standard.roughness]).toEqual([0.05, 0.55]);
+    expect(standard.color.getHex()).toBe(0x4d99ff);
+    expect(disposed).toBe(true);
+  });
+
+  it('are double-sided Standard materials in the neutral grey without an MTL', () => {
+    const root = buildScene(parseStl(fixture('part.stl'), 'part.stl'), 'part.stl');
+    const material = (root as Mesh).material as MeshStandardMaterial;
+    expect(material).toBeInstanceOf(MeshStandardMaterial);
+    expect(material.side).toBe(DoubleSide);
   });
 });

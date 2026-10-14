@@ -6,16 +6,15 @@ namespace J3D.Web.Client.Components;
 
 /// <summary>
 /// Hosts the Three.js viewer. The viewer, its camera controls and all model data live in the
-/// TypeScript module; this component owns its lifetime and relays callbacks to .NET.
+/// TypeScript module; this component owns its lifetime, relays callbacks to .NET and shares it with
+/// the toolbar through the <see cref="ViewerSession"/>.
 /// </summary>
-public sealed partial class Viewport(IJSRuntime js) : IAsyncDisposable
+public sealed partial class Viewport(IJSRuntime js, ViewerSession session) : IAsyncDisposable
 {
-    internal const string ModulePath = "./viewer/j3d-viewer.js";
-
     private ElementReference _host;
-    private IJSObjectReference? _module;
-    private IJSObjectReference? _viewer;
+    private ViewerInterop? _viewer;
     private DotNetObjectReference<Viewport>? _selfReference;
+    private bool _disposed;
 
     /// <summary>Raised once the viewer has started and reported the browser's capabilities.</summary>
     [Parameter]
@@ -31,38 +30,45 @@ public sealed partial class Viewport(IJSRuntime js) : IAsyncDisposable
         }
 
         _selfReference = DotNetObjectReference.Create(this);
-        _module = await js.InvokeAsync<IJSObjectReference>("import", ModulePath);
-        _viewer = await _module.InvokeAsync<IJSObjectReference>("createViewer", _host, _selfReference);
+        var viewer = await ViewerInterop.CreateAsync(js, _host, _selfReference);
+        if (_disposed)
+        {
+            await viewer.DisposeAsync();
+            return;
+        }
+
+        _viewer = viewer;
+        AttachToSession();
     }
 
     [JSInvokable]
     public async Task OnViewerReady(ViewerCapabilities capabilities)
     {
         Capabilities = capabilities;
+        AttachToSession();
         await OnReady.InvokeAsync(capabilities);
         StateHasChanged();
     }
 
     public async ValueTask DisposeAsync()
     {
-        try
+        _disposed = true;
+        if (_viewer is not null)
         {
-            if (_viewer is not null)
-            {
-                await _viewer.InvokeVoidAsync("dispose");
-                await _viewer.DisposeAsync();
-            }
-
-            if (_module is not null)
-            {
-                await _module.DisposeAsync();
-            }
-        }
-        catch (JSDisconnectedException)
-        {
-            // The page is going away; there is nothing left to clean up on the JS side.
+            session.Detach(_viewer);
+            await _viewer.DisposeAsync();
+            _viewer = null;
         }
 
         _selfReference?.Dispose();
+    }
+
+    /// <summary>The viewer reports its capabilities while it starts, so either may be known first.</summary>
+    private void AttachToSession()
+    {
+        if (_viewer is not null && Capabilities is not null)
+        {
+            session.Attach(_viewer, Capabilities);
+        }
     }
 }

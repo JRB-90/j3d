@@ -13,16 +13,17 @@ export function filesFromInput(input: HTMLInputElement): BatchFile[] {
  * once the event has been dispatched, so the entries are taken before the first `await`.
  */
 export function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<BatchFile[]> {
+  const dropped = [...dataTransfer.files];
   const entries = [...dataTransfer.items]
     .filter((item) => item.kind === 'file')
     .map((item) => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null));
   if (entries.length === 0 || entries.some((entry) => entry === null)) {
-    return Promise.resolve([...dataTransfer.files].map((file) => ({ file, path: file.name })));
+    return Promise.resolve(dropped.map((file) => ({ file, path: file.name })));
   }
-  return collect(entries as FileSystemEntry[]);
+  return collect(entries as FileSystemEntry[], dropped);
 }
 
-async function collect(entries: readonly FileSystemEntry[]): Promise<BatchFile[]> {
+async function collect(entries: readonly FileSystemEntry[], dropped: readonly File[]): Promise<BatchFile[]> {
   const files: BatchFile[] = [];
   const visit = async (entry: FileSystemEntry, inFolder: boolean): Promise<void> => {
     if (entry.isFile) {
@@ -40,7 +41,17 @@ async function collect(entries: readonly FileSystemEntry[]): Promise<BatchFile[]
   };
 
   for (const entry of entries) {
-    await visit(entry, false);
+    try {
+      await visit(entry, false);
+    } catch (error) {
+      // WebKit hands out entries for files that aren't on disk (a file dragged from another app, or
+      // a drop built by a test) and then can't read them. The drop's own File still can be.
+      const file = entry.isFile ? dropped.find((f) => f.name === entry.name) : undefined;
+      if (!file) {
+        throw error;
+      }
+      files.push({ file, path: file.name });
+    }
   }
   return files;
 }

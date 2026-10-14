@@ -1,9 +1,11 @@
-// Development-only hook for the Playwright tests (docs/plan.md §6.3). It records model events and
-// exposes the model list, because iteration 1's UI for both arrives in later milestones.
+// Development-only hook for the Playwright tests (docs/plan.md §6.3). It records model events,
+// exposes the model list (whose UI arrives in M4) and reports the camera and rendering state.
 
 import type { ModelEntry, ModelManager } from './import/model-manager';
 import { liveWorkers } from './import/runner';
 import type { Bounds, ImportError, ImportPhase, ModelStats, TreeNode } from './import/types';
+import { findRegion } from './view/view-regions';
+import type { CameraState, Viewer } from './view/viewer';
 
 /** Present only when the host renders `<meta name="j3d-test-hook">` (the Development environment). */
 export function isTestHookEnabled(): boolean {
@@ -45,6 +47,22 @@ export interface TestHook {
   models(): TestModel[];
   remove(id: string): boolean;
   liveWorkers(): number;
+  /** False when the browser has no WebGL2, so nothing is drawn. */
+  readonly rendering: boolean;
+  /** The camera, or null without WebGL2. */
+  camera(): CameraState | null;
+  /** Frames drawn so far: rendering is on demand, so this stays still while nothing changes. */
+  frames(): number;
+  /** Where a view cube region (e.g. `top-front-right`) is on screen, or null when it faces away. */
+  viewCubePoint(region: string): { x: number; y: number } | null;
+  /** The highlighted view cube region, if any. */
+  hoveredRegion(): string | null;
+  /** Where a world point is on screen (client coordinates), or null without WebGL2. */
+  project(point: [number, number, number]): { x: number; y: number } | null;
+  /** Whether the browser has taken the renderer's WebGL context away (null without WebGL2). */
+  contextLost(): boolean | null;
+  /** The models the viewer has in its scene, with their object counts. */
+  scene(): { id: string; name: string; objects: number; visible: boolean }[];
 }
 
 export interface TestHookControls {
@@ -73,6 +91,7 @@ export function installTestHook(
   manager: ModelManager,
   controls: ReturnType<typeof createTestHookControls>,
   attachFileInput: (input: HTMLInputElement) => () => void,
+  viewer: Viewer | undefined,
 ): () => void {
   const events: TestEvent[] = [];
   const unsubscribe = manager.subscribe({
@@ -99,6 +118,17 @@ export function installTestHook(
     models: () => manager.models.map(toTestModel),
     remove: (id) => manager.remove(id),
     liveWorkers: () => liveWorkers.count,
+    rendering: viewer !== undefined,
+    camera: () => viewer?.cameraState() ?? null,
+    frames: () => viewer?.frameCount ?? 0,
+    viewCubePoint: (id) => {
+      const region = findRegion(id);
+      return (region && viewer?.viewCubePointOf(region)) ?? null;
+    },
+    hoveredRegion: () => viewer?.hoveredRegion?.id ?? null,
+    project: (point) => viewer?.projectToClient(point) ?? null,
+    contextLost: () => viewer?.renderer.getContext().isContextLost() ?? null,
+    scene: () => viewer?.sceneSummary() ?? [],
   };
   controls.hook = hook;
   window.__j3dTest = hook;
