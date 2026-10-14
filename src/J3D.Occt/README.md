@@ -12,6 +12,8 @@ following Replicad's approach: a trimmed build plus project-owned C++ wrappers. 
 | `dist/` | Built `j3d_occt_{single,multi}` glue, `.wasm` (Git LFS), types, provenance. **Committed, never hand-edited.** |
 | `scripts/check-dist.mjs` | Fails if `dist/` wasn't built from the current config and C++ (used by CI) |
 | `scripts/generate-fixtures.mjs` | Regenerates the OCCT fixtures in `tests/fixtures` |
+| `scripts/generate-large-step.mjs` | Writes large STEP files (block or curved copies) into the git-ignored `tests/fixtures/large/` (`npm run fixtures:large`) |
+| `scripts/benchmark-threads.mjs` | Spike S4: imports files with both variants, one process per import, and compares them phase by phase (`npm run benchmark:threads`) |
 
 ## Commands
 
