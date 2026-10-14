@@ -1,0 +1,70 @@
+.j3d-model {
+    padding: 4px 4px 8px 16px;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.j3d-model-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+}
+
+.j3d-model-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.j3d-model-format {
+    flex: none;
+    padding: 0 6px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 4px;
+    font-size: 0.6875rem;
+    line-height: 18px;
+    letter-spacing: 0.04em;
+    color: var(--mud-palette-text-secondary);
+}
+
+.j3d-model-kind {
+    flex: none;
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.j3d-model-detail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-right: 12px;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.j3d-model-error {
+    display: block;
+    color: var(--mud-palette-error);
+}
+
+.j3d-model ::deep .j3d-model-progress {
+    margin: 6px 12px 2px 0;
+}
+
+.j3d-model ::deep .j3d-model-tree-toggle {
+    margin: 2px 0 0 -8px;
+    text-transform: none;
+    color: var(--mud-palette-text-secondary);
+}
+
+.j3d-model ::deep .j3d-model-tree {
+    margin-right: 8px;
+    font-size: 0.8125rem;
+}
+
+.j3d-model ::deep .j3d-model-tree-more .mud-treeview-item-content {
+    color: var(--mud-palette-primary);
+}

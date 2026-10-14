@@ -1,0 +1,128 @@
+<div class="j3d-model j3d-model--@StatusName" data-testid="model-item" data-status="@StatusName">
+    <div class="j3d-model-header">
+        <span class="j3d-model-name" title="@Model.Summary.FileName" data-testid="model-name">@Model.Summary.FileName</span>
+        <span class="j3d-model-format" data-testid="model-format">@Model.Summary.Format.DisplayName</span>
+        @if (KindLabel != Model.Summary.Format.DisplayName)
+        {
+            <span class="j3d-model-kind" data-testid="model-kind">@KindLabel</span>
+        }
+        @if (Model.IsPending)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                           Size="Size.Small"
+                           title="Cancel import"
+                           aria-label="@($"Cancel importing {Model.Summary.FileName}")"
+                           OnClick="RemoveAsync"
+                           data-testid="cancel-model" />
+        }
+        else if (Model.Status == ModelStatus.Loaded)
+        {
+            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                           Size="Size.Small"
+                           title="Delete"
+                           aria-label="@($"Delete {Model.Summary.FileName}")"
+                           OnClick="RemoveAsync"
+                           data-testid="delete-model" />
+        }
+        else
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                           Size="Size.Small"
+                           title="Dismiss"
+                           aria-label="@($"Dismiss {Model.Summary.FileName}")"
+                           OnClick="RemoveAsync"
+                           data-testid="dismiss-model" />
+        }
+    </div>
+
+    @switch (Model.Status)
+    {
+        case ModelStatus.Queued:
+            <div class="j3d-model-detail" data-testid="model-status">Queued</div>
+            break;
+
+        case ModelStatus.Importing:
+            <div class="j3d-model-detail" data-testid="model-status">@ProgressText</div>
+            <MudProgressLinear Color="Color.Primary"
+                               Size="Size.Small"
+                               Rounded="true"
+                               Value="@Percent"
+                               Indeterminate="@(Model.Fraction is null)"
+                               Class="j3d-model-progress"
+                               data-testid="model-progress" />
+            break;
+
+        case ModelStatus.Loaded when Model.Info is { } info:
+            <div class="j3d-model-detail" data-testid="model-status">
+                <span>@StatsText(info)</span>
+                @if (info.Warnings.Count > 0)
+                {
+                    <MudTooltip>
+                        <TooltipContent>
+                            @foreach (var warning in info.Warnings)
+                            {
+                                <div>@warning</div>
+                            }
+                        </TooltipContent>
+                        <ChildContent>
+                            <span role="img" aria-label="@string.Join(" ", info.Warnings)" data-testid="model-warnings">
+                                <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning" Size="Size.Small" />
+                            </span>
+                        </ChildContent>
+                    </MudTooltip>
+                }
+            </div>
+            <MudButton Variant="Variant.Text"
+                       Size="Size.Small"
+                       StartIcon="@(_treeOpen ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
+                       aria-expanded="@(_treeOpen ? "true" : "false")"
+                       OnClick="ToggleTree"
+                       Class="j3d-model-tree-toggle"
+                       data-testid="model-tree-toggle">
+                @TreeLabel
+            </MudButton>
+            @if (_treeOpen && _roots is not null)
+            {
+                <MudTreeView T="int?"
+                             Items="_roots"
+                             ServerData="LoadChildrenAsync"
+                             ReadOnly="true"
+                             Dense="true"
+                             ExpandOnClick="true"
+                             Class="j3d-model-tree"
+                             data-testid="model-tree">
+                    <ItemTemplate>
+                        @if (IsShowMore(context))
+                        {
+                            <MudTreeViewItem Value="@context.Value"
+                                             Text="@context.Text"
+                                             Icon="@Icons.Material.Filled.MoreHoriz"
+                                             CanExpand="false"
+                                             ReadOnly="true"
+                                             OnClick="@(() => ShowMore(context))"
+                                             Class="j3d-model-tree-more"
+                                             data-testid="model-tree-more" />
+                        }
+                        else
+                        {
+                            <MudTreeViewItem Value="@context.Value"
+                                             Text="@context.Text"
+                                             Icon="@context.Icon"
+                                             CanExpand="@context.Expandable"
+                                             Items="@context.Children"
+                                             @bind-Expanded="@context.Expanded"
+                                             ReadOnly="true"
+                                             data-testid="model-tree-node" />
+                        }
+                    </ItemTemplate>
+                </MudTreeView>
+            }
+            break;
+
+        case ModelStatus.Failed when Model.Error is { } error:
+            <div class="j3d-model-detail j3d-model-error" data-testid="model-status">
+                <strong>@error.Code.DisplayName</strong>: @error.Message
+            </div>
+            break;
+    }
+</div>

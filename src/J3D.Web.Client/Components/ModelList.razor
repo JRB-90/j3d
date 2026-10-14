@@ -1,0 +1,28 @@
+<section class="j3d-model-list" aria-label="Models" data-testid="model-list">
+    <MudText Typo="Typo.subtitle2" Class="px-4 pt-4 pb-2 mud-text-secondary">Models</MudText>
+    @if (Scene.Models.IsEmpty)
+    {
+        <MudText Typo="Typo.body2" Class="px-4 mud-text-disabled" data-testid="model-list-empty">No models imported.</MudText>
+    }
+    else
+    {
+        @foreach (var model in Scene.Models)
+        {
+            <ModelListItem @key="model.Id" Model="model" OnRemove="RemoveAsync" />
+        }
+    }
+</section>
+
+@* MessageBoxOptions can't colour the buttons, so the confirmation is an inline message box whose Yes
+   button is the red Delete (D29). *@
+<MudMessageBox @ref="_confirmDelete" Title="Delete model" CancelText="Cancel">
+    <MessageContent>Delete <strong>@_deleteName</strong>?</MessageContent>
+    <YesButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.Delete"
+                   data-testid="confirm-delete">
+            Delete
+        </MudButton>
+    </YesButton>
+</MudMessageBox>

@@ -1,3 +1,4 @@
+using J3D.Web.Client.Models;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 
@@ -35,6 +36,9 @@ public sealed class ViewerInterop : IAsyncDisposable
 
     /// <summary>Imports the files picked in <paramref name="input"/>; the viewer sets its <c>accept</c> list.</summary>
     public ValueTask AttachFileInputAsync(ElementReference input) => _viewer.InvokeVoidAsync("attachFileInput", input);
+
+    /// <summary>Cancels an import, deletes a loaded model or dismisses a failed one; the viewer then reports it removed.</summary>
+    public ValueTask RemoveModelAsync(ModelId id) => _viewer.InvokeVoidAsync("removeModel", id.Value);
 
     /// <summary>Frames every model, keeping the view direction.</summary>
     public ValueTask FitAllAsync() => _viewer.InvokeVoidAsync("fitAll");

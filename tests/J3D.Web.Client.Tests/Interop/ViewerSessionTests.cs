@@ -1,4 +1,5 @@
 using J3D.Web.Client.Interop;
+using J3D.Web.Client.Models;
 
 namespace J3D.Web.Client.Tests.Interop;
 
@@ -10,6 +11,7 @@ public sealed class ViewerSessionTests : BunitTestBase
     {
         _viewer = SetupViewerModule();
         _viewer.SetupVoid("setProjection", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("removeModel", static _ => true).SetVoidResult();
     }
 
     [Fact]
@@ -27,6 +29,19 @@ public sealed class ViewerSessionTests : BunitTestBase
         Assert.False(Session.IsReady);
         Assert.Null(Session.Capabilities);
         Assert.Equal(2, changes);
+    }
+
+    [Fact]
+    public async Task Removes_models_through_the_viewer_even_without_webgl2()
+    {
+        await Session.RemoveModelAsync(new ModelId("m0"));
+        Assert.DoesNotContain(_viewer.Invocations, static i => i.Identifier == "removeModel");
+
+        await StartViewerAsync(webGl2: false);
+        await Session.RemoveModelAsync(new ModelId("m1"));
+
+        var invocation = Assert.Single(_viewer.Invocations, static i => i.Identifier == "removeModel");
+        Assert.Equal(["m1"], invocation.Arguments);
     }
 
     [Fact]

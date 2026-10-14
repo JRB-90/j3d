@@ -1,4 +1,6 @@
 using J3D.Web.Client.Interop;
+using J3D.Web.Client.State;
+using MudBlazor;
 using MudBlazor.Services;
 
 namespace J3D.Web.Client;
@@ -12,7 +14,13 @@ public static class ClientServices
         /// prerenders those components.
         /// </summary>
         public IServiceCollection AddJ3DClient() => services
-            .AddMudServices()
-            .AddScoped<ViewerSession>();
+            .AddMudServices(options =>
+            {
+                // Bottom right keeps snackbars clear of the view cube and the model list.
+                options.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomRight;
+                options.SnackbarConfiguration.VisibleStateDuration = 6000;
+            })
+            .AddScoped<ViewerSession>()
+            .AddScoped<SceneState>();
     }
 }
