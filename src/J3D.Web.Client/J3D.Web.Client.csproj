@@ -5,6 +5,8 @@
     <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Publishing trims (TrimMode partial); the analyzer turns anything trim-unsafe in this code into a build error (D65). -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
   </PropertyGroup>
 
   <ItemGroup>

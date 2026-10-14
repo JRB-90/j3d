@@ -133,6 +133,10 @@ jobs:
       - name: Build E2E tests
         run: dotnet build tests/J3D.E2E.Tests -c Release
 
+      # The tests run against the published app, so they exercise the trimmed code that ships (D65).
+      - name: Publish the app
+        run: dotnet publish src/J3D.Web -c Release -o "$RUNNER_TEMP/j3d-app"
+
       - name: Generate large STEP fixtures
         if: env.J3D_LARGE_FIXTURES != ''
         run: npm run fixtures:large -- ${J3D_LARGE_FIXTURES//,/ }
@@ -154,6 +158,7 @@ jobs:
           fi
         env:
           BROWSER: ${{ matrix.browser }}
+          J3D_E2E_APP: ${{ runner.temp }}/j3d-app
 
       # The screenshots the pixel checks sampled (ViewerPage.SamplePixelsAsync), to see what was drawn.
       - name: Upload E2E screenshots
