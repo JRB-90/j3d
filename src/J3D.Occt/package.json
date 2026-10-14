@@ -4,6 +4,14 @@
   "private": true,
   "description": "Custom OCCT 8 WebAssembly build for J3D (libcascade toolchain) and its TypeScript facade.",
   "type": "module",
+  "exports": {
+    "./facade": "./src/facade.ts",
+    "./single": {
+      "types": "./dist/variant.d.ts",
+      "default": "./dist/j3d_occt_single.js"
+    },
+    "./single/wasm": "./dist/j3d_occt_single.wasm"
+  },
   "scripts": {
     "build:wasm": "libcascade build && libcascade assemble",
     "render:wasm": "libcascade build --render-only",

@@ -9,7 +9,7 @@ CAD files never leave your machine.
 
 ## Prerequisites
 
-- .NET SDK 10.0.301+ (`global.json`)
+- .NET SDK 10.0.402+ (`global.json`)
 - Node.js 22+ (npm workspaces drive the TypeScript viewer build)
 - Git LFS (`git lfs install`), because the OCCT WebAssembly binaries are stored in LFS
 - *Optional:* Docker, only for rebuilding the OCCT WASM locally (CI normally does this)

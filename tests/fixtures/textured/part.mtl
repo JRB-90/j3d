@@ -1,0 +1,8 @@
+# J3D test fixture
+newmtl Checker
+Kd 1 1 1
+map_Kd checker.png
+
+newmtl Glass
+Kd 0.3 0.6 1
+d 0.4
