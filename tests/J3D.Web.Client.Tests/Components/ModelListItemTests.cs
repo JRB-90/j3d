@@ -127,7 +127,7 @@ public sealed class ModelListItemTests : BunitTestBase
         List<TreeNode> tree = [new("Group", Parent: -1, Prototype: -1)];
         tree.AddRange(Enumerable.Range(1, 150).Select(static i => new TreeNode($"Inner {i}", Parent: 0, Prototype: 0)));
         tree.AddRange(Enumerable.Range(1, 249).Select(static i => new TreeNode($"Loose {i}", Parent: -1, Prototype: 0)));
-        var cut = RenderItem(Queued().AsLoaded(Info() with { Tree = tree }));
+        var cut = RenderItem(Queued().AsLoaded(Info() with { Tree = TreeColumns.From(tree) }));
         Assert.Equal(100, ModelListItem.TreePageSize);
 
         cut.Find("[data-testid=model-tree-toggle]").Click();

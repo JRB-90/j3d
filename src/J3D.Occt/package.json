@@ -16,6 +16,7 @@
     "build:wasm": "libcascade build && libcascade assemble",
     "render:wasm": "libcascade build --render-only",
     "check:dist": "node scripts/check-dist.mjs",
+    "benchmark:threads": "node scripts/benchmark-threads.mjs",
     "test": "vitest run",
     "typecheck": "tsc"
   },

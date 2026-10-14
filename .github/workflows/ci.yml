@@ -6,7 +6,8 @@ on:
   pull_request:
   # Dispatched by occt-wasm.yml after it commits a new build (GITHUB_TOKEN pushes don't trigger CI).
   # Run by hand with large_fixtures (e.g. "200") to add the on-demand large-model tests (spike S2),
-  # or with one browser to repeat its E2E job cheaply when checking a flaky test (R14).
+  # or with one browser to repeat its E2E job cheaply when checking a flaky test (R14). Dispatched
+  # with threads_benchmark, it runs only the threading benchmark (spike S4, D61, D69).
   workflow_dispatch:
     inputs:
       large_fixtures:
@@ -18,6 +19,10 @@ on:
         type: choice
         default: all
         options: [all, chromium, firefox, webkit]
+      threads_benchmark:
+        description: "S4 only: files under tests/fixtures to import with both OCCT builds, space-separated (large/large-<MB>mb.step and large/curved-<MB>mb.step are generated)"
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -36,7 +41,10 @@ env:
 jobs:
   build-test:
     name: Build & unit tests
-    runs-on: ubuntu-latest
+    if: inputs.threads_benchmark == ''
+    # Pinned (D68): ubuntu-latest moves to 26.04 from 2026-10-19, and headed Firefox under Xvfb
+    # (D47, D51) is known to work on 24.04. Moving on is a deliberate change.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -89,7 +97,7 @@ jobs:
   e2e:
     name: E2E (${{ matrix.browser }})
     needs: build-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -125,6 +133,10 @@ jobs:
       - name: Build E2E tests
         run: dotnet build tests/J3D.E2E.Tests -c Release
 
+      # The tests run against the published app, so they exercise the trimmed code that ships (D65).
+      - name: Publish the app
+        run: dotnet publish src/J3D.Web -c Release -o "$RUNNER_TEMP/j3d-app"
+
       - name: Generate large STEP fixtures
         if: env.J3D_LARGE_FIXTURES != ''
         run: npm run fixtures:large -- ${J3D_LARGE_FIXTURES//,/ }
@@ -146,6 +158,7 @@ jobs:
           fi
         env:
           BROWSER: ${{ matrix.browser }}
+          J3D_E2E_APP: ${{ runner.temp }}/j3d-app
 
       # The screenshots the pixel checks sampled (ViewerPage.SamplePixelsAsync), to see what was drawn.
       - name: Upload E2E screenshots
@@ -155,3 +168,48 @@ jobs:
           name: e2e-screenshots-${{ matrix.browser }}
           path: tests/J3D.E2E.Tests/bin/Release/net10.0/screenshots/
           if-no-files-found: ignore
+
+  # Spike S4: the 4-core runner decides whether threaded OCCT becomes the default (D69). The tables
+  # go to the job summary.
+  threads-benchmark:
+    name: Threading benchmark (S4)
+    if: inputs.threads_benchmark != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      # Git LFS objects (the OCCT WASM) are cached by content to save LFS bandwidth quota.
+      - name: List Git LFS objects
+        run: git lfs ls-files --long | cut -d ' ' -f1 | sort > .lfs-assets-id
+
+      - name: Cache Git LFS objects
+        uses: actions/cache@v6
+        with:
+          path: .git/lfs/objects
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+
+      - name: Fetch Git LFS objects
+        run: git lfs pull
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm workspaces
+        run: npm ci
+
+      - name: Generate large STEP files
+        run: |
+          for file in $THREADS_BENCHMARK; do
+            if [[ $file =~ ^large/large-([0-9]+)mb\.step$ ]]; then npm run fixtures:large -- "${BASH_REMATCH[1]}"; fi
+            if [[ $file =~ ^large/curved-([0-9]+)mb\.step$ ]]; then npm run fixtures:large -- --curved "${BASH_REMATCH[1]}"; fi
+          done
+        env:
+          THREADS_BENCHMARK: ${{ inputs.threads_benchmark }}
+
+      - name: Benchmark single- vs multi-threaded OCCT
+        run: npm run --silent benchmark:threads --workspace @j3d/occt -- $THREADS_BENCHMARK | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          THREADS_BENCHMARK: ${{ inputs.threads_benchmark }}

@@ -1,5 +1,6 @@
 import type { ImportedScene, PrototypeMesh, SceneInstance } from '@j3d/occt/facade';
 import {
+  BatchedMesh,
   BufferAttribute,
   BufferGeometry,
   Group,
@@ -8,10 +9,11 @@ import {
   InstancedMesh,
   LineSegments,
   Matrix4,
-  Mesh,
+  Vector3,
   type Material,
+  type MeshStandardMaterial,
 } from 'three';
-import type { MaterialCache } from './materials';
+import type { LinearRgba, MaterialCache } from './materials';
 
 /** Prototypes placed at least this many times are drawn with one instanced draw call (docs/plan.md §6.3). */
 export const InstancingThreshold = 16;
@@ -22,15 +24,24 @@ export interface BrepObject {
   dispose(): void;
 }
 
+/** The surfaces drawn with one material: each prototype range once, and an instance per placement. */
+interface Batch {
+  geometries: BufferGeometry[];
+  placements: { geometry: number; matrix: readonly number[] }[];
+}
+
 /**
- * Builds the Three.js objects of an imported BREP model: one shared geometry per prototype, placed
- * by each instance's world matrix, with its translucent index range drawn by a second material and
- * its BREP edges drawn over it (docs/plan.md §6.3).
+ * Builds the Three.js objects of an imported BREP model (docs/plan.md §6.3). A prototype placed
+ * {@link InstancingThreshold} times or more is one InstancedMesh, with instanced edges. Everything
+ * else is batched, so a model of thousands of parts costs a few draw calls rather than two per part
+ * (decision D63): one BatchedMesh per surface material, holding each prototype's index range once and
+ * an instance per placement, and one LineSegments of all their edges, already transformed. A
+ * prototype's translucent index range is drawn with its own, transparent material (D34).
  */
 export function buildBrepObject(name: string, scene: ImportedScene, materials: MaterialCache): BrepObject {
   const root = new Group();
   root.name = name;
-  const geometries: BufferGeometry[] = [];
+  const owned: { dispose(): void }[] = [];
   const used: Material[] = [];
 
   const instancesOf = new Map<number, SceneInstance[]>();
@@ -43,85 +54,151 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
     }
   }
 
+  const batches = new Map<MeshStandardMaterial, Batch>();
+  const looseEdges: { edges: Float32Array; matrix: readonly number[] }[] = [];
+
   scene.prototypes.forEach((prototype, index) => {
     const instances = instancesOf.get(index);
     if (!instances) {
       return;
     }
-    const nameOf = (instance: SceneInstance) => scene.nodes[instance.node]?.name ?? '';
-    const instanced = instances.length >= InstancingThreshold;
-
-    if (prototype.indices.length > 0) {
-      const geometry = surfaceGeometry(prototype);
-      geometries.push(geometry);
-      const material = surfaceMaterials(prototype, materials);
-      used.push(...(Array.isArray(material) ? material : [material]));
-      if (instanced) {
-        const mesh = new InstancedMesh(geometry, material, instances.length);
-        mesh.name = nameOf(instances[0]!);
-        instances.forEach((instance, i) => mesh.setMatrixAt(i, new Matrix4().fromArray(instance.matrix)));
-        mesh.computeBoundingSphere();
-        root.add(mesh);
-      } else {
-        for (const instance of instances) {
-          root.add(place(new Mesh(geometry, material), instance, nameOf(instance)));
-        }
-      }
+    if (instances.length >= InstancingThreshold) {
+      const nameOf = (instance: SceneInstance) => scene.nodes[instance.node]?.name ?? '';
+      root.add(...instancedObjects(prototype, instances, nameOf(instances[0]!), materials, owned, used));
+      return;
     }
 
-    if (prototype.edges.length > 0) {
-      const material = materials.edges(instanced);
+    for (const range of surfaceRanges(prototype)) {
+      const material = materials.surface(prototype.colors ? null : prototype.uniformColor, range.translucent);
       used.push(material);
-      if (instanced) {
-        const geometry = instancedEdgeGeometry(prototype, instances);
-        geometries.push(geometry);
-        const lines = new LineSegments(geometry, material);
-        lines.name = `${nameOf(instances[0]!)} edges`;
-        // The geometry's bounds don't account for the instance transforms.
-        lines.frustumCulled = false;
-        root.add(lines);
-      } else {
-        const geometry = new BufferGeometry();
-        geometry.setAttribute('position', new BufferAttribute(prototype.edges, 3));
-        geometries.push(geometry);
-        for (const instance of instances) {
-          root.add(place(new LineSegments(geometry, material), instance, `${nameOf(instance)} edges`));
-        }
+      let batch = batches.get(material);
+      if (!batch) {
+        batch = { geometries: [], placements: [] };
+        batches.set(material, batch);
+      }
+      const geometry = batch.geometries.push(range.geometry) - 1;
+      for (const instance of instances) {
+        batch.placements.push({ geometry, matrix: instance.matrix });
+      }
+    }
+    if (prototype.edges.length > 0) {
+      for (const instance of instances) {
+        looseEdges.push({ edges: prototype.edges, matrix: instance.matrix });
       }
     }
   });
+
+  const matrix = new Matrix4();
+  for (const [material, { geometries, placements }] of batches) {
+    const vertices = geometries.reduce((sum, g) => sum + g.getAttribute('position').count, 0);
+    const indices = geometries.reduce((sum, g) => sum + g.index!.count, 0);
+    const batch = new BatchedMesh(placements.length, vertices, indices, material);
+    batch.name = `${name} surfaces`;
+    // Back to front for translucent parts; opaque ones gain nothing from sorting.
+    batch.sortObjects = material.transparent;
+    const ids = geometries.map((geometry) => batch.addGeometry(geometry));
+    for (const placement of placements) {
+      batch.setMatrixAt(batch.addInstance(ids[placement.geometry]!), matrix.fromArray(placement.matrix));
+    }
+    batch.computeBoundingSphere();
+    root.add(batch);
+    owned.push(batch);
+  }
+
+  if (looseEdges.length > 0) {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new BufferAttribute(transformedEdges(looseEdges), 3));
+    owned.push(geometry);
+    const material = materials.edges(false);
+    used.push(material);
+    const lines = new LineSegments(geometry, material);
+    lines.name = `${name} edges`;
+    root.add(lines);
+  }
 
   return {
     object: root,
     dispose() {
       root.clear();
-      for (const geometry of geometries) {
-        geometry.dispose();
+      for (const object of owned) {
+        object.dispose();
       }
       for (const material of used) {
         materials.release(material);
       }
-      geometries.length = 0;
+      owned.length = 0;
       used.length = 0;
     },
   };
 }
 
-function place<T extends Mesh | LineSegments>(object: T, instance: SceneInstance, name: string): T {
-  object.name = name;
-  object.matrixAutoUpdate = false;
-  object.matrix.fromArray(instance.matrix);
-  return object;
+/** An InstancedMesh of a much-placed prototype and one LineSegments of its instanced edges. */
+function instancedObjects(
+  prototype: PrototypeMesh,
+  instances: SceneInstance[],
+  name: string,
+  materials: MaterialCache,
+  owned: { dispose(): void }[],
+  used: Material[],
+): (InstancedMesh | LineSegments)[] {
+  const objects: (InstancedMesh | LineSegments)[] = [];
+  if (prototype.indices.length > 0) {
+    const geometry = surfaceGeometry(prototype);
+    owned.push(geometry);
+    const material = surfaceMaterials(prototype, materials);
+    used.push(...(Array.isArray(material) ? material : [material]));
+    const mesh = new InstancedMesh(geometry, material, instances.length);
+    mesh.name = name;
+    instances.forEach((instance, i) => mesh.setMatrixAt(i, new Matrix4().fromArray(instance.matrix)));
+    mesh.computeBoundingSphere();
+    objects.push(mesh);
+  }
+  if (prototype.edges.length > 0) {
+    const material = materials.edges(true);
+    used.push(material);
+    const geometry = instancedEdgeGeometry(prototype, instances);
+    owned.push(geometry);
+    const lines = new LineSegments(geometry, material);
+    lines.name = `${name} edges`;
+    // The geometry's bounds don't account for the instance transforms.
+    lines.frustumCulled = false;
+    objects.push(lines);
+  }
+  return objects;
 }
 
-function surfaceGeometry(prototype: PrototypeMesh): BufferGeometry {
+/**
+ * A prototype's opaque and translucent index ranges as separate geometries, since a batch draws
+ * each geometry with one material. Both share the prototype's vertex arrays; the batch copies them.
+ */
+function surfaceRanges(prototype: PrototypeMesh): { geometry: BufferGeometry; translucent: boolean }[] {
+  const { opaqueIndexCount, indices } = prototype;
+  const ranges = [
+    { indices: indices.subarray(0, opaqueIndexCount), translucent: false },
+    { indices: indices.subarray(opaqueIndexCount), translucent: true },
+  ];
+  return ranges
+    .filter((range) => range.indices.length > 0)
+    .map((range) => {
+      const geometry = vertexGeometry(prototype);
+      geometry.setIndex(new BufferAttribute(range.indices, 1));
+      return { geometry, translucent: range.translucent };
+    });
+}
+
+function vertexGeometry(prototype: PrototypeMesh): BufferGeometry {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(prototype.positions, 3));
   geometry.setAttribute('normal', new BufferAttribute(prototype.normals, 3));
-  geometry.setIndex(new BufferAttribute(prototype.indices, 1));
   if (prototype.colors) {
     geometry.setAttribute('color', new BufferAttribute(toUnorm8(prototype.colors), 4, true));
   }
+  return geometry;
+}
+
+function surfaceGeometry(prototype: PrototypeMesh): BufferGeometry {
+  const geometry = vertexGeometry(prototype);
+  geometry.setIndex(new BufferAttribute(prototype.indices, 1));
   const { opaqueIndexCount } = prototype;
   const total = prototype.indices.length;
   if (opaqueIndexCount > 0 && opaqueIndexCount < total) {
@@ -133,7 +210,7 @@ function surfaceGeometry(prototype: PrototypeMesh): BufferGeometry {
 
 /** One material, or [opaque, translucent] for the geometry's two groups. */
 function surfaceMaterials(prototype: PrototypeMesh, materials: MaterialCache): Material | Material[] {
-  const colour = prototype.colors ? null : prototype.uniformColor;
+  const colour: LinearRgba | null = prototype.colors ? null : prototype.uniformColor;
   const { opaqueIndexCount } = prototype;
   const total = prototype.indices.length;
   if (opaqueIndexCount === total) {
@@ -143,6 +220,24 @@ function surfaceMaterials(prototype: PrototypeMesh, materials: MaterialCache): M
     return materials.surface(colour, true);
   }
   return [materials.surface(colour, false), materials.surface(colour, true)];
+}
+
+/** Every placement's edge segments moved into model space, in one array. */
+function transformedEdges(placements: { edges: Float32Array; matrix: readonly number[] }[]): Float32Array {
+  const positions = new Float32Array(placements.reduce((sum, p) => sum + p.edges.length, 0));
+  const matrix = new Matrix4();
+  const point = new Vector3();
+  let offset = 0;
+  for (const { edges, matrix: elements } of placements) {
+    matrix.fromArray(elements);
+    for (let i = 0; i < edges.length; i += 3) {
+      point.set(edges[i]!, edges[i + 1]!, edges[i + 2]!).applyMatrix4(matrix);
+      positions[offset++] = point.x;
+      positions[offset++] = point.y;
+      positions[offset++] = point.z;
+    }
+  }
+  return positions;
 }
 
 /** Linear RGBA floats to normalised bytes: a quarter of the memory, and plenty for flat face colours. */

@@ -118,6 +118,17 @@ describe('STEP', () => {
     expect(core.opaqueIndexCount).toBe(core.indices.length);
   });
 
+  it('meshes the curved template part (fillets, a lofted boss, drilled holes)', async () => {
+    const scene = await load('curved-part.step', ImportFormat.Step);
+
+    expect(scene.nodes.map((node) => node.name)).toContain('Curved part');
+    const [part] = scene.prototypes as [PrototypeMesh];
+    expectWellFormed(part);
+    expect(triangleCount(part)).toBeGreaterThan(1000); // planar, the same block would be 12
+    const zs = part.positions.filter((_, i) => i % 3 === 2);
+    expect([Math.min(...zs), Math.max(...zs)]).toEqual([0, 34].map((z) => expect.closeTo(z, 3)));
+  });
+
   it('reports progress through every C++ phase', async () => {
     const phases = new Set<number>();
     using _ = await OcctModel.load(oc, fixture('assembly.step'), ImportFormat.Step, 'assembly.step', {

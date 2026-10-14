@@ -12,10 +12,12 @@ import init from '../dist/j3d_occt_single.js';
 import { ImportFormat, ImportPhase, ImportStatus, OcctImportError, OcctModel, type OcctModule } from './facade';
 
 const sizes = (process.env['J3D_LARGE_FIXTURES'] ?? '').split(',').filter(Boolean);
-const pathOf = (size: string) => new URL(`../../../tests/fixtures/large/large-${size}mb.step`, import.meta.url);
+/** `200` is large-200mb.step (block copies); `curved-100` is curved-100mb.step (see scripts/generate-large-step.mjs). */
+const fileOf = (name: string) => (name.startsWith('curved-') ? `${name}mb.step` : `large-${name}mb.step`);
+const pathOf = (name: string) => new URL(`../../../tests/fixtures/large/${fileOf(name)}`, import.meta.url);
 
 describe.runIf(sizes.length > 0)('large STEP (spike S2)', () => {
-  it.each(sizes)('large-%smb.step loads or fails with OutOfMemory', async (size) => {
+  it.each(sizes)('%s loads or fails with OutOfMemory', async (size) => {
     const path = pathOf(size);
     expect(existsSync(path), `run "npm run fixtures:large -- ${size}" first`).toBe(true);
 
@@ -25,7 +27,7 @@ describe.runIf(sizes.length > 0)('large STEP (spike S2)', () => {
     let lastPhase = -1;
     const start = performance.now();
     try {
-      using model = await OcctModel.load(oc, await openAsBlob(path), ImportFormat.Step, `large-${size}mb.step`, {
+      using model = await OcctModel.load(oc, await openAsBlob(path), ImportFormat.Step, fileOf(size), {
         onProgress: (phase) => {
           if (phase !== lastPhase) {
             const now = performance.now();
@@ -37,11 +39,11 @@ describe.runIf(sizes.length > 0)('large STEP (spike S2)', () => {
       phaseTimes.push(`${phaseName(lastPhase)} ${((performance.now() - phaseStart) / 1000).toFixed(1)} s`);
       const triangles = model.scene.prototypes.reduce((sum, p) => sum + p.indices.length / 3, 0);
       console.log(
-        `large-${size}mb.step: loaded ${model.scene.prototypes.length} parts, ${triangles} triangles; ` +
+        `${fileOf(size)}: loaded ${model.scene.prototypes.length} parts, ${triangles} triangles; ` +
           `peak WASM heap ${mb(model.memoryBytes)}; ${seconds(start)} (${phaseTimes.join(', ')})`,
       );
     } catch (error) {
-      console.log(`large-${size}mb.step: failed after ${seconds(start)}, heap ${mb(oc.wasmMemory.buffer.byteLength)}: ${String(error)}`);
+      console.log(`${fileOf(size)}: failed after ${seconds(start)}, heap ${mb(oc.wasmMemory.buffer.byteLength)}: ${String(error)}`);
       expect(error).toBeInstanceOf(OcctImportError);
       expect((error as OcctImportError).status).toBe(ImportStatus.OutOfMemory);
     }

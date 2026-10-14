@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged (M4 `feature/m4-blazor-ui`) · **Status:** M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline) and M3 (viewer) merged; M4 (Blazor UI) in progress; M5 planned · **Last updated:** 2026-10-14
+> **Branches:** one per milestone, squash-merged (M5 `feature/m5-hardening`) · **Status:** M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer) and M4 (Blazor UI) merged; M5 (hardening) in progress · **Last updated:** 2026-10-14
 
 ---
 
@@ -18,22 +18,24 @@ The theme is dark throughout. **CAD files never leave the user's machine**: all 
 
 ### Acceptance criteria
 
-- [ ] An **Import** button opens a multi-select file picker filtered to `.step .stp .iges .igs .brep .stl .obj .gltf .glb`. Dropping files onto the viewport does the same.
-- [ ] Each file becomes its own model in the **model list**, showing its name, format, status, progress, and a cancel button while importing.
-- [ ] BREP models render **shaded faces in the file's colours** (STEP/IGES via XCAF) with **true BREP edges** drawn over them.
-- [ ] Each BREP model shows its **assembly tree** (names, nesting). The tree is read-only.
-- [ ] glTF loads as GLB, embedded `.gltf`, multi-file `.gltf` (with its `.bin`/textures selected or dropped together), meshopt, Draco and KTX2. OBJ loads with its `.mtl` and textures when they're supplied alongside it.
-- [ ] Semi-transparent colours (STEP/IGES alpha, glTF/MTL opacity) render translucent.
-- [ ] **Delete** asks for confirmation ("Delete *name*?"), then removes the whole model from the scene and the list, and frees its memory (worker terminated, GPU buffers disposed).
-- [ ] Mouse: **left-drag pans, middle-drag pans, right-drag rotates, the wheel zooms** toward the view centre. The browser context menu is suppressed over the canvas.
-- [ ] Touch: one finger rotates, two fingers pinch to zoom and drag to pan.
-- [ ] Rotation is **turntable** (Z stays up, the view never rolls) about the scene centre.
-- [ ] The view **auto-fits when the scene goes from empty to its first model**. Later imports don't move the camera. **Fit all** is available as a button and the `F` key.
-- [ ] A clickable **view cube** (top-right) snaps to 26 standard views (6 faces, 12 edges, 8 corners) with an animated transition, keeping the current zoom. A **Home** button goes to isometric and fits all.
-- [ ] The view is **orthographic by default**, with a perspective/orthographic toggle that keeps the framing.
-- [ ] Imports scale up to what **wasm32 (4 GB per model worker)** allows. Exceeding it gives a clear "too large" error rather than a crash.
-- [ ] Works in the latest two versions of desktop **Chrome/Edge, Firefox and Safari**.
+- [x] An **Import** button opens a multi-select file picker filtered to `.step .stp .iges .igs .brep .stl .obj .gltf .glb`. Dropping files onto the viewport does the same.
+- [x] Each file becomes its own model in the **model list**, showing its name, format, status, progress, and a cancel button while importing.
+- [x] BREP models render **shaded faces in the file's colours** (STEP/IGES via XCAF) with **true BREP edges** drawn over them.
+- [x] Each BREP model shows its **assembly tree** (names, nesting). The tree is read-only.
+- [x] glTF loads as GLB, embedded `.gltf`, multi-file `.gltf` (with its `.bin`/textures selected or dropped together), meshopt, Draco and KTX2. OBJ loads with its `.mtl` and textures when they're supplied alongside it.
+- [x] Semi-transparent colours (STEP/IGES alpha, glTF/MTL opacity) render translucent.
+- [x] **Delete** asks for confirmation ("Delete *name*?"), then removes the whole model from the scene and the list, and frees its memory (worker terminated, GPU buffers disposed).
+- [x] Mouse: **left-drag pans, middle-drag pans, right-drag rotates, the wheel zooms** toward the view centre. The browser context menu is suppressed over the canvas.
+- [x] Touch: one finger rotates, two fingers pinch to zoom and drag to pan. Verified with synthetic touch pointer events, plus a real touch device when one is available (D64).
+- [x] Rotation is **turntable** (Z stays up, the view never rolls) about the scene centre.
+- [x] The view **auto-fits when the scene goes from empty to its first model**. Later imports don't move the camera. **Fit all** is available as a button and the `F` key.
+- [x] A clickable **view cube** (top-right) snaps to 26 standard views (6 faces, 12 edges, 8 corners) with an animated transition, keeping the current zoom. A **Home** button goes to isometric and fits all.
+- [x] The view is **orthographic by default**, with a perspective/orthographic toggle that keeps the framing.
+- [x] Imports scale up to what **wasm32 (4 GB per model worker)** allows. Exceeding it gives a clear "too large" error rather than a crash.
+- [ ] Works in current desktop **Chrome/Edge, Firefox and Safari**: verified by CI's Playwright Chromium, Firefox and WebKit, and by hand in Chrome and Edge on Windows. Real Safari and earlier browser versions are known gaps (D42, D64).
 - [ ] xUnit/bUnit, Vitest (including real OCCT under Node) and Playwright E2E (×3 browsers) all pass in GitHub Actions.
+
+Reviewed in M5 (D64). Each ticked criterion is covered by the E2E suite (in Chromium, Firefox and WebKit in CI, since M5 against the published app) and the manual checklists of M3–M5; touch only through synthetic pointer events, as no touch device was available. The two open ones wait for this milestone's CI and the owner's Chrome and Edge pass.
 
 ### Out of scope for iteration 1
 
@@ -43,7 +45,7 @@ Persistence (models are lost on refresh), users and auth, deployment, picking/se
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -107,6 +109,18 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D58 | M4 process | **As M3 (D50)**: work straight through, Claude runs the manual checklist in the built-in browser, then a draft PR; the owner checks by hand before saying merge | |
 | D59 | Test hook after M4 | **Kept alongside the UI** (Development only). The M2/M3 tests keep using it for what the UI doesn't show; M4's E2E tests drive the list, the dialog and the real Import input | |
 | D60 | Wide tree levels | **Paged**: each level shows 100 nodes, then a "Show 100 more (*n* left)" row that appends the next page | Found in M4: `MudTreeView` renders every node it's given, and opening a level of about 1,400 blocked the page for 0.6 s (a 10,000-part flat file would take several seconds). A page takes about 0.1 s. |
+| D61 | S4 method | **Node first, the browser only if threading wins**: both OCCT builds import the same fixtures under Node, 3 runs each, timed per phase. The threaded build is wired into the browser (nested pthread workers, probably a rebuild with a pool started ahead of time) only if it reaches the bar (D69) on the whole import | Found at the start of M5: the `multi` build had never been run, so S4 first proves it works. Amends S3 and D40 only if threading wins. |
+| D62 | S4 and tuning fixtures | **A meshing-heavy generator beside the block copies**: a generated, licence-free STEP of curved, filleted parts (cylinders, tori, B-spline faces) written by OCCT, never committed | The S2 files repeat a 12-triangle block, so they're heavy to parse and almost free to mesh. |
+| D63 | Large-model tuning | **Measure, then fix only what crosses a line**: `BatchedMesh` if orbiting the 200 MB file runs below 30 fps; uploads spread across frames if adding a model stalls the page for more than about 200 ms; CPU copies of GPU buffers dropped if memory is the limit; tessellation constants retuned for triangle count against looks. Anything that changes a decision is asked first | Estimated from the code before measuring: the 200 MB file's 10,437 parts are about 21k draw calls (a mesh and an edge line each), 4× the 5k line in §6.3. |
+| D64 | Criteria that can't be fully checked | **Amended to what can be verified**: browsers are ticked on CI's Playwright Chromium, Firefox and WebKit plus the owner's manual pass in current Chrome and Edge on Windows, with real Safari and previous browser versions recorded as known gaps (D42). Touch is ticked on the synthetic tests, plus a manual check if a touch device is available | §1 amended to match. |
+| D65 | Trimming (R5) | **E2E runs against the published, trimmed app in CI**, chosen by an environment variable and still in Development so the test hook works, and the **trim analyzer** fails the build on trim warnings. Locally, the in-process host stays the default | Found at the start of M5: E2E ran a build, and Blazor WebAssembly only trims at publish, so R5's mitigation never exercised trimmed code. |
+| D66 | About and notices | **An info button at the right end of the app bar** opens an About dialog: version, MIT licence, repo link, "CAD files never leave your machine", and each shipped component with its licence (OCCT/libcascade LGPL-2.1 with the exception, linking the build recipe in the repo). **`THIRD-PARTY-NOTICES.md` is hand-curated** with the full licence texts of what ships to the browser, including the runtime libraries linked into the WASM, and a test fails if a runtime dependency is missing from it | Generated notices would need dev-only packages filtered out and would miss what's linked inside the WASM. |
+| D67 | Docs | **A user-facing README** (what J3D is, a screenshot, formats, controls, limits, browser support and known gaps, privacy) **and `docs/development.md`** for building, testing, the OCCT rebuild, CI dispatches and fixtures | |
+| D68 | CI runner | **Pinned to `ubuntu-24.04`** in both workflows, first thing in M5 | `ubuntu-latest` moves to Ubuntu 26.04 from 2026-10-19. Headed Firefox under Xvfb (D47, D51) is known to work on 24.04; moving on is a later, deliberate change. |
+| D69 | S4 bar | **The 4-core CI runner decides** whether threading reaches ≥ 1.3× (D28); the 20-thread development machine's numbers are recorded beside it | Threading has to pay off on ordinary hardware, and its thread cost is paid per model (R3). |
+| D70 | If S4 loses | **The threaded build stays, unused**: both variants stay in the config and `dist/`, and the benchmark stays in the repo to re-run when OCCT or libcascade improve threading | It costs a second 6–7 min link and about 15 MB of LFS, only when the OCCT build changes. |
+| D71 | List and tree scale | **Virtualised only if measured**: the tree on the 10k-part file and a list of about 50 models are timed, and virtualised only past D63's ~200 ms line | Wide levels are already paged (D60). |
+| D72 | M5 process | **As M3/M4 (D50, D58)**: work straight through, Claude runs the manual checklist in the built-in browser, then a draft PR; the owner checks by hand, including the Chrome and Edge pass (D64), before saying merge | |
 
 ---
 
@@ -170,6 +184,8 @@ tests/
   J3D.E2E.Tests/               xUnit v3 + Playwright (.NET) + WebApplicationFactory.UseKestrel
   fixtures/                    CAD/mesh fixtures shared by Vitest and Playwright
 docs/plan.md                   this document
+docs/development.md            building, testing, the OCCT rebuild and CI in practice (M5)
+THIRD-PARTY-NOTICES.md         what ships to the browser, with licence texts (M5, D66)
 .github/workflows/ci.yml       build + unit + E2E (×3 browsers)
 .github/workflows/occt-wasm.yml  custom OCCT WASM build (M1)
 ```
@@ -188,7 +204,7 @@ Vitest specs sit next to the TypeScript sources (`src/J3D.Viewer/src/**/*.test.t
 | 3D | three + camera-controls | 0.186 / 3.1 |
 | Browser code | TypeScript + Vite + Vitest | 7.0 / 8.3 / 5.0 |
 | .NET tests | xUnit v3 (MTP v2), bUnit, Playwright for .NET | 4.0 / 2.11 / 1.63 |
-| CI | GitHub Actions (ubuntu-latest; Docker for WASM builds) | |
+| CI | GitHub Actions (`ubuntu-24.04`, pinned by D68; Docker for WASM builds) | |
 
 Node ≥ 22 is required (libcascade toolchain, Vite 8).
 
@@ -263,7 +279,7 @@ user picks/drops files (dropped folders expanded recursively, D43)
 - `J3DProgress::Show()` is throttled to about 10 Hz.
 - Single-threaded variant (the only one wired in, D40): `Show()` runs on the worker thread and calls `Module.j3dProgress` through `EM_ASM`, which `postMessage`s to the page. The page's event loop is free, so messages arrive while the worker is busy in WASM. **Verified in M2** in Chromium and WebKit: every phase arrives, in order.
 - `throttleProgress` (in the workers and again per model in the `ModelManager`) always passes a phase change and a phase's end, drops exact repeats, and otherwise limits updates to one per 100 ms, so .NET will see at most 10 Hz per model.
-- Threaded variant (M5, only if S4 wins): `Show()` may run on a pthread, so it would write phase and fraction into a static slot in **shared** WASM memory; the worker posts that `SharedArrayBuffer` and its offset to the page once, and the viewer polls it every animation frame.
+- Threaded variant (not built: S4 didn't reach the bar in M5, D69): `Show()` may run on a pthread, so it would write phase and fraction into a static slot in **shared** WASM memory; the worker posts that `SharedArrayBuffer` and its offset to the page once, and the viewer polls it every animation frame.
 
 **Cancellation and deletion:** `worker.terminate()` in both cases. It's instant and frees the entire WASM heap. A cancelled model's list entry is removed.
 
@@ -308,12 +324,12 @@ user picks/drops files (dropped folders expanded recursively, D43)
 | Lighting & materials | `RoomEnvironment` PMREM for image-based light (intensity 0.6), plus a directional "headlight" (2.5) that follows the camera from up and to the left of the viewer, under **Khronos PBR Neutral** tone mapping, which keeps base colours true and rolls off highlights. Tuned in M3 by sampling `box.brep`: the neutral grey reads as itself on faces turned to the viewer, and top faces aren't blown out. `MeshStandardMaterial` (metalness 0.05, roughness 0.55), double-sided, with `polygonOffset` so edges draw cleanly on top. Materials are cached and reference-counted per colour (`materials.ts`). Single-colour parts use material colour; multi-colour parts use `Uint8` normalised RGBA vertex colours. Mesh models: see §6.2 (D46). |
 | Transparency | Each prototype's translucent index range becomes a second mesh sharing the same vertex buffer, with `transparent: true`, `depthWrite: false` and per-colour `opacity` (RGBA vertex colours if a part mixes alphas). Three.js sorts translucent objects back-to-front each frame. Edges of translucent faces are still drawn. Intersecting translucent parts can show sorting artefacts (R10). |
 | Edges | `LineSegments` with a near-black `LineBasicMaterial` (1 px; WebGL ignores line width). Three has no instanced lines, so an instanced prototype's edges are one `LineSegments` over an `InstancedBufferGeometry` with an `instanceMatrix` attribute, and its material defines `USE_INSTANCING` (three's shader prefix declares `instanceMatrix` under that define). |
-| Instancing | Each prototype's `BufferGeometry` is shared by its instances, and prototypes with many instances (≥ 16) use `InstancedMesh`. If draw calls exceed about 5,000, M5 evaluates `BatchedMesh`. |
-| Render loop | On demand only: render when camera-controls reports an update or transition, when the scene changes, or on resize. Idle cost is zero. The loop runs only while camera-controls is moving the camera (`controlstart`, `control` and `transitionstart` start it; it stops when `update()` reports no change), timed with three's `Timer`, which is reset after idle so a transition doesn't jump. Spreading large geometry uploads across frames moves to M5's tuning. |
+| Instancing and batching | Prototypes with many instances (≥ 16) use `InstancedMesh`. **Since M5 (D63)** everything else is batched: one `BatchedMesh` per surface material, holding each prototype's index range once and an instance per placement (translucent batches sort their instances back to front), and one `LineSegments` of all those placements' edges, transformed into model space. The 200 MB S2 file went from 20,874 draw calls to 2 (§10 M5). Batches keep each placement as an instance, so later per-part visibility or highlighting can use `setVisibleAt`/`setColorAt`. |
+| Render loop | On demand only: render when camera-controls reports an update or transition, when the scene changes, or on resize. Idle cost is zero. The loop runs only while camera-controls is moving the camera (`controlstart`, `control` and `transitionstart` start it; it stops when `update()` reports no change), timed with three's `Timer`, which is reset after idle so a transition doesn't jump. Uploads aren't spread across frames: after batching, a model's first full frame took 33–71 ms on the large files (§10 M5). |
 | View cube (D31) | A labelled cube about 110 px across, top-right. It's drawn by the same renderer into a scissored viewport, with its own small orthographic camera that copies the main camera's rotation. Raycasting picks one of **26 regions** (6 faces, 12 edges, 8 corners), highlights it on hover, and on click calls `controls.rotateTo(azimuth, polar, true)`, which animates and keeps distance and zoom. Z-up names: **Top** looks down −Z (+Y up on screen), **Front** looks along +Y, **Right** looks along −X. A **Home** button next to it goes to isometric (front-right-top) and fits all. Top/Bottom use a polar angle of ε / π−ε, because turntable controls can't sit exactly on the pole. **As built (M3):** 26 boxes, one per region, with canvas-texture labels and no tone mapping (`view-cube.ts`); the region → (azimuth, polar) mapping is unit-tested (`view-regions.ts`). Transitions take the short way round. Bottom keeps azimuth 0, so −Y (Front) is up on screen. The host intercepts `pointerdown` on the cube in the capture phase, so a click doesn't also start a camera-controls drag. The Home button sits at the cube's top-left. |
 | Drag and drop | `dragenter/over/leave/drop` on the host toggles a `j3d-viewport--drop` overlay class and, from the `drop` handler, synchronously calls the viewer's `importDrop(dataTransfer)` (M2), which expands dropped folders (D43) and queues the batch. **Found in M3:** WebKit hands out file entries it then can't read (`NotFoundError` for files not on disk, such as a test's synthetic drop or a file dragged from another app), so a top-level file entry that fails falls back to the drop's own `File`. |
 | Disposal | Delete removes the Object3D, disposes geometries and releases material references, then re-renders. **The camera doesn't move on delete.** |
-| Test hook | `window.__j3dTest` is exposed only in Development (the host renders `<meta name="j3d-test-hook">`), for Playwright. Since M2 it drives imports (a hidden file input), records model events, lists models and live workers, and can hold OCCT imports so cancel is testable. Since M3 it also reports the camera (`camera()`: projection, position, target, angles, distance, zoom, visible height, near/far, moving), the frames drawn, where a world point (`project`) or a view cube region (`viewCubePoint`) is on screen, and the hovered region. For failed pixel checks it reports the scene's models, whether the context is lost, and what a fresh frame draws under given points, read from the canvas in the same task as the draw (`canvasPixels`). |
+| Test hook | `window.__j3dTest` is exposed only in Development (the host renders `<meta name="j3d-test-hook">`), for Playwright. Since M2 it drives imports (a hidden file input), records model events, lists models and live workers, and can hold OCCT imports so cancel is testable. Since M3 it also reports the camera (`camera()`: projection, position, target, angles, distance, zoom, visible height, near/far, moving), the frames drawn, where a world point (`project`) or a view cube region (`viewCubePoint`) is on screen, and the hovered region. For failed pixel checks it reports the scene's models, whether the context is lost, and what a fresh frame draws under given points, read from the canvas in the same task as the draw (`canvasPixels`). Since M5 it reports the last frame's draw calls, primitives, GPU objects and buffer bytes (`renderStats`), and can end a camera transition at once (`settleCamera`), for measuring in a page whose animation frames don't run. |
 
 ### 6.4 Blazor client (`src/J3D.Web.Client`)
 
@@ -326,13 +342,14 @@ user picks/drops files (dropped folders expanded recursively, D43)
 | `MainLayout` | `MudThemeProvider` (dark-only `J3DTheme`), app bar, persistent model drawer, main content |
 | `Toolbar` | **Import** (a `MudButton HtmlTag="label"` for a visually hidden `<input type=file multiple>`; a native label click needs no JS user-activation trickery), **Fit all** (tooltip "Fit all (F)"), **Projection** toggle (`MudToggleGroup`). In the app bar, right of the title. Disabled until the viewer is running with WebGL2. **Built in M3 (D48).** |
 | `ModelList` / `ModelListItem` | Name, format chip, kind (BREP/mesh), status, `MudProgressLinear` (determinate or indeterminate by phase), memory, lazy `MudTreeView` for the assembly. Actions: **Cancel** while importing (immediate), **Delete** when ready (confirmation via `IDialogService.ShowMessageBoxAsync`: "Delete *name*?", with a red Delete button and Cancel; D29), **Dismiss** when failed (immediate). **As built (M4):** the item is compact (D52): name (ellipsised, full name in its tooltip), a format chip, the kind unless the format already says it (a `.brep` file shows just "BREP"), and the action; while importing, "Meshing · 42%" or "Parsing…" over a bar for that phase (D55); once loaded, "64 MB · 1.2M triangles · 3 parts" and a warning icon whose tooltip lists load warnings; a failed item shows "Parse failed: *message*". The tree sits behind a collapsed "Assembly" (BREP) or "Hierarchy" (mesh) toggle (D53) and is display only: its node values are `int?`, since a node equal to the tree view's default selected value (0) is drawn selected. `MessageBoxOptions` can't colour buttons, so the confirmation is one inline `MudMessageBox` in the list whose `YesButton` slot is the red Delete. Removal goes through `ViewerSession.RemoveModelAsync`, and the item disappears when the viewer reports the model removed. |
+| `AboutDialog` | **Built in M5 (D66):** opened from the info button at the right of the app bar. J3D's licence, repo and build commit, the third-party components that ship (`ThirdParty.Components`, kept in step with `THIRD-PARTY-NOTICES.md` by a test), and the OCCT notice and build-recipe link. |
 | `Viewport` | Owns the viewer module's lifetime; receives callbacks through `DotNetObjectReference`. **As built (M4):** relays the model events into `SceneState`, shows an error snackbar for each failed import and a warning snackbar for each rejected file (D54; bottom right, clear of the view cube), and clears `SceneState` on dispose, since the models go with the viewer. |
 
 **Viewer session (M3, D48):** `ViewerSession` (scoped: per tab in WASM, per request while prerendering) holds the running `ViewerInterop`, its capabilities and the projection, and raises `Changed`. The `Viewport` attaches it once both the interop handle and `OnViewerReady` have arrived (in either order) and detaches it on dispose; the `Toolbar` reads it. `AddJ3DClient()` registers it with MudBlazor in both the client and the prerendering host.
 
 **State:** `SceneState` (scoped, D56: one per tab in WASM) holds the models in import order (D57) and raises `Changed`. Components subscribe in `OnInitialized` and unsubscribe in `Dispose`. All transitions (Queued → Importing(phase, fraction) → Ready | Failed → removed) are pure methods, unit-tested without a renderer. **As built (M4):** an `ImmutableList<ModelEntry>`; the transitions are methods on the `ModelEntry` record (`WithProgress`, `AsLoaded`, `AsFailed`), and a progress report after an outcome, or any report for a model no longer listed, changes nothing. Ids are a `ModelId` record struct that crosses interop as a string.
 
-**Large trees:** the tree arrives as a flat array of `{ name, parent, prototype }`, parents first, and `ModelTree` indexes each node's children once. `MudTreeView` loads a node's children when it's first expanded, so deep trees cost nothing until opened. **Wide levels are paged (D60):** `MudTreeView` renders every node it's given, and a level of about 1,400 nodes (the flat 25 MB STEP from S2) blocked the page for 0.6 s, so each level shows 100 nodes and then a "Show 100 more (1,258 left)" row; a page takes about 0.1 s.
+**Large trees:** the tree arrives flat, parents first, as one array per field (`TreeColumns`: names, parents, prototypes; since M5, D63, because .NET took 850 ms to read 10,437 `{ name, parent, prototype }` objects and takes about 140 ms for the columns), and `ModelTree` indexes each node's children once. `MudTreeView` loads a node's children when it's first expanded, so deep trees cost nothing until opened. **Wide levels are paged (D60):** `MudTreeView` renders every node it's given, and a level of about 1,400 nodes (the flat 25 MB STEP from S2) blocked the page for 0.6 s, so each level shows 100 nodes and then a "Show 100 more (1,258 left)" row; a page takes about 0.1 s.
 
 **Interop contract** (the only boundary between C# and TS; a typed `ViewerInterop : IAsyncDisposable` wraps the JS side):
 
@@ -345,7 +362,7 @@ user picks/drops files (dropped folders expanded recursively, D43)
 | JS → .NET | `OnViewerReady(ViewerCapabilities)` | `webGl2`, `crossOriginIsolated` |
 | JS → .NET | `OnModelQueued(ModelSummary)` | id, fileName, format, sizeBytes |
 | JS → .NET | `OnModelProgress(id, ImportPhase, fraction?)` | ≤ 10 Hz |
-| JS → .NET | `OnModelLoaded(id, ModelLoadedInfo)` | tree, stats (nodes, prototypes, instances, triangles, edges, textures), bounds, memoryBytes, warnings |
+| JS → .NET | `OnModelLoaded(id, ModelLoadedInfo)` | tree (as columns), stats (nodes, prototypes, instances, triangles, edges, textures), bounds, memoryBytes, warnings. Sent in a task of its own after the viewer has added the model, with later calls queued behind it (D63) |
 | JS → .NET | `OnModelFailed(id, ImportError)` / `OnModelRemoved(id)` / `OnImportRejected(fileName, reason)` | |
 
 **As built (M4):** `model-events.ts` subscribes to the `ModelManager` and makes these calls (a .NET failure is logged, not thrown); `index.ts` wires it next to the viewer and the test hook. `createViewer` also logs a console notice (not an error) when the page isn't cross-origin isolated.
@@ -377,7 +394,7 @@ user picks/drops files (dropped folders expanded recursively, D43)
 
 ## 7. Licensing
 
-OCCT and libcascade are **LGPL-2.1 with the Open CASCADE exception**. Three.js, camera-controls and MudBlazor are MIT, and the Draco decoder is Apache-2.0. The OCCT WASM ships as a separate, replaceable file loaded at runtime (dynamic-linking style), and its full build recipe (config, facade source, toolchain digest, provenance) is in this **public** repo (D35), which covers source availability. M5 adds `THIRD-PARTY-NOTICES.md` and an **About / licences** dialog. *This isn't legal advice. Get a review before any public deployment.*
+OCCT and libcascade are **LGPL-2.1 with the Open CASCADE exception**. Three.js, camera-controls and MudBlazor are MIT, and the Draco decoder is Apache-2.0. The OCCT WASM ships as a separate, replaceable file loaded at runtime (dynamic-linking style), and its full build recipe (config, facade source, toolchain digest, provenance) is in this **public** repo (D35), which covers source availability. **As built (M5, D66):** [`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) lists everything that ships to the browser, including the runtime libraries Emscripten links into the OCCT WebAssembly (musl, LLVM's libc++/libc++abi/libunwind/compiler-rt, mimalloc), with their licence texts copied from the pinned toolchain image, and says where the OCCT build recipe is. The **About** dialog (the info button at the right of the app bar) shows the same list with links, the build's commit, and the notice the Open CASCADE exception asks for. `ThirdParty.Components` is the dialog's list, and `ThirdPartyNoticesTests` fails if it, the notices table and the shipped dependency versions disagree. *This isn't legal advice. Get a review before any public deployment.*
 
 ---
 
@@ -389,19 +406,19 @@ OCCT and libcascade are **LGPL-2.1 with the Open CASCADE exception**. Three.js, 
 | OCCT integration | **Vitest** + the real `dist/` WASM under Node 22+ | Import each fixture → prototype, instance and triangle counts, names, colours, bounds, error codes, memory release. On demand: generated large STEP files (`J3D_LARGE_FIXTURES`, see below) |
 | C# unit / component | **xUnit v3 + bUnit 2** | `SceneState` transitions, `ModelFormat` behaviour, `ModelList` / `Toolbar` / `Viewport` rendering and interop calls (bUnit JS interop in strict mode) |
 | Host | **xUnit v3 + WebApplicationFactory** | COOP/COEP on pages and assets, the OCCT `.wasm` served as `application/wasm`, the test-hook `<meta>` only in Development |
-| E2E | **Playwright for .NET** + `WebApplicationFactory.UseKestrel()` (.NET 10), Chromium/Firefox/WebKit | **Since M2** (through the test hook): every fixture imports with the expected structure, counts and Z-up bounds; progress phases in order; `ParseFailed` through a C++ exception; multi-file glTF and OBJ+MTL batches, including `MissingFile` and a missing texture; unsupported files rejected; two imports at a time; cancelling a running import and deleting a loaded model terminate their workers; no console errors. **Since M3:** pixel sampling (D49) of a STEP part's file colours over the background, a translucent cover showing the core inside it, the canvas clearing on delete with the camera unmoved, and the view cube drawn and highlighted on hover; zero frames while idle; first-model auto-fit only (again after the scene empties); right-drag turntable rotation, left/middle-drag pan, wheel zoom (ortho) and dolly (perspective) about the view centre; the context menu suppressed; one-finger rotate and two-finger pinch (synthetic touch pointer events, since Playwright has no multi-touch); view cube face/edge/corner clicks keeping the zoom; Home; `F` and the Fit all button (and `F` ignored in an input); the projection toggle keeping the framing; the toolbar's Import; drag-and-drop overlay and drop. **Since M4** (`ModelListTests`, through the toolbar's real input, the list and the dialog; D59): models listed in import order with their format, kind and stats; cancelling a held import (its worker ends); delete asking first, with the dialog's Cancel keeping the model; a failed import reported in the item and a snackbar, then dismissed; a rejected file reported in a snackbar only; the assembly tree opening a level at a time. `crossOriginIsolated` has been checked by `ShellTests` since M0. Runs against the **Release** build to catch trimming issues in interop DTOs. |
+| E2E | **Playwright for .NET** + `WebApplicationFactory.UseKestrel()` (.NET 10), Chromium/Firefox/WebKit | **Since M2** (through the test hook): every fixture imports with the expected structure, counts and Z-up bounds; progress phases in order; `ParseFailed` through a C++ exception; multi-file glTF and OBJ+MTL batches, including `MissingFile` and a missing texture; unsupported files rejected; two imports at a time; cancelling a running import and deleting a loaded model terminate their workers; no console errors. **Since M3:** pixel sampling (D49) of a STEP part's file colours over the background, a translucent cover showing the core inside it, the canvas clearing on delete with the camera unmoved, and the view cube drawn and highlighted on hover; zero frames while idle; first-model auto-fit only (again after the scene empties); right-drag turntable rotation, left/middle-drag pan, wheel zoom (ortho) and dolly (perspective) about the view centre; the context menu suppressed; one-finger rotate and two-finger pinch (synthetic touch pointer events, since Playwright has no multi-touch); view cube face/edge/corner clicks keeping the zoom; Home; `F` and the Fit all button (and `F` ignored in an input); the projection toggle keeping the framing; the toolbar's Import; drag-and-drop overlay and drop. **Since M4** (`ModelListTests`, through the toolbar's real input, the list and the dialog; D59): models listed in import order with their format, kind and stats; cancelling a held import (its worker ends); delete asking first, with the dialog's Cancel keeping the model; a failed import reported in the item and a snackbar, then dismissed; a rejected file reported in a snackbar only; the assembly tree opening a level at a time. `crossOriginIsolated` has been checked by `ShellTests` since M0. In CI it runs against the **published, trimmed** app (since M5, D65): `J3D_E2E_APP` names the publish folder, and the fixture starts that app as its own process, in Development so the test hook is rendered. Locally it defaults to the in-process Release build, which isn't trimmed (Blazor trims only at publish). |
 
 Notes:
 
 - Playwright for .NET has no `toHaveScreenshot` (visual comparison is Node-only), so canvas checks use **pixel sampling** (`page.screenshot` + decode) instead of baseline images.
-- **Large-model tests** run on demand, never on every PR: `npm run fixtures:large -- 200 700` generates STEP files into the git-ignored `tests/fixtures/large/`, and setting `J3D_LARGE_FIXTURES=200,700` enables both the Node test (`src/J3D.Occt/src/large.test.ts`) and the E2E test (`LargeModelTests`). In CI, dispatch `ci.yml` with the `large_fixtures` input.
+- **Large-model tests** run on demand, never on every PR: `npm run fixtures:large -- 200 700 curved-100` generates STEP files into the git-ignored `tests/fixtures/large/` (`curved-<MB>` from the meshing-heavy template, D62), and setting `J3D_LARGE_FIXTURES=200,700,curved-100` enables both the Node test (`src/J3D.Occt/src/large.test.ts`) and the E2E test (`LargeModelTests`). In CI, dispatch `ci.yml` with the `large_fixtures` input. Since M5 the E2E test also reports, for each loaded model, the longest main-thread task while it's added (Chromium only), its draw calls and buffer bytes, a frame's cost, the frame rate while orbiting, and opening its tree. Headless browsers draw in software (SwiftShader), so those numbers mean something only relative to each other; the M5 figures come from the development machine's GPU in the built-in browser.
 - **Firefox locally:** Playwright's Firefox 155 build doesn't start on the development machine (Windows build 26300: "side-by-side configuration is incorrect", a missing `mozglue` assembly, even after a clean reinstall), so Firefox E2E runs only in CI (Linux). Chromium and WebKit run locally.
 
 ---
 
 ## 9. CI/CD
 
-- **`ci.yml`** (in M0): on PRs and pushes to `main`. Steps: `npm ci` → typecheck → Vitest → `dotnet build -c Release` → client and host tests. Then an E2E matrix `[chromium, firefox, webkit]` with `playwright.ps1 install --with-deps`; since M3, Firefox runs headed under `xvfb-run` so it has WebGL (D47), with its test classes one at a time (D51). Since M1 it also runs the OCCT staleness guard and the OCCT integration tests. Since M2, Git LFS objects are cached by content (`actions/cache` keyed on `git lfs ls-files`) instead of fetched on every checkout (R8), and a manual `workflow_dispatch` with `large_fixtures` (e.g. `200,700`) also generates and imports large STEP files in every job. A dispatch can also limit E2E to one `browser`, and dispatched runs don't cancel each other, so a flaky browser's job can be repeated side by side (`gh workflow run ci.yml --ref <branch> -f browser=firefox`, R14). If E2E fails, the screenshots the pixel checks sampled are uploaded as `e2e-screenshots-<browser>`.
+- **`ci.yml`** (in M0): on PRs and pushes to `main`. Steps: `npm ci` → typecheck → Vitest → `dotnet build -c Release` → client and host tests. Then an E2E matrix `[chromium, firefox, webkit]` with `playwright.ps1 install --with-deps`; since M3, Firefox runs headed under `xvfb-run` so it has WebGL (D47), with its test classes one at a time (D51). Since M1 it also runs the OCCT staleness guard and the OCCT integration tests. Since M2, Git LFS objects are cached by content (`actions/cache` keyed on `git lfs ls-files`) instead of fetched on every checkout (R8), and a manual `workflow_dispatch` with `large_fixtures` (e.g. `200,700`) also generates and imports large STEP files in every job. A dispatch can also limit E2E to one `browser`, and dispatched runs don't cancel each other, so a flaky browser's job can be repeated side by side (`gh workflow run ci.yml --ref <branch> -f browser=firefox`, R14). If E2E fails, the screenshots the pixel checks sampled are uploaded as `e2e-screenshots-<browser>`. Since M5, the runners are pinned to `ubuntu-24.04` (D68), each E2E job publishes the app and tests the trimmed output (D65), and a dispatch with `threads_benchmark` runs only spike S4's benchmark on the 4-core runner, with its tables in the job summary (D69).
 - **`occt-wasm.yml`** (M1): see §6.1.
 - No deployment pipeline (D25).
 
@@ -462,7 +479,7 @@ Scope as decided at the start of M3 (D46–D50):
 - **Tests:** 117 Vitest tests in the viewer (camera maths, the 26 view cube regions, the BREP builder, MTL normalisation, the drop fallback); 26 bUnit tests (`Toolbar`, `Viewport`, `ViewerSession`); E2E `RenderingTests`, `NavigationTests` and `ImportUiTests` (§8), passing locally in Chromium and WebKit.
 - **Manual checklist** (D50, in the built-in browser): import input (`accept`, `multiple`, label); drop overlay and a multi-file glTF drop; STEP colours with BREP edges; translucency (STEP, glTF and MTL); every mesh variant (STL, OBJ+MTL with texture, GLB, multi-file glTF, Draco, meshopt, KTX2) with no warnings; pan, zoom, view cube faces with hover highlight, Home, `F`, Fit all, the projection toggle keeping the visible height exactly; zero frames while idle. Touch was checked only with synthetic pointer events (no touch device).
 
-### M4 — Blazor UI (in progress, `feature/m4-blazor-ui`)
+### M4 — Blazor UI ✅ ([JRB-90/j3d#5](https://github.com/JRB-90/j3d/pull/5), squash-merged as `55092bb`)
 
 Scope as decided at the start of M4 (D52–D59): the model list as described in §6.4, with a compact item (D52), a collapsed tree on every model (D53), snackbars for failures and rejections (D54), progress per phase (D55), and models in import order (D57). M2/M3's E2E tests keep the test hook (D59).
 
@@ -477,12 +494,64 @@ Scope as decided at the start of M4 (D52–D59): the model list as described in 
 - **Tests:** 121 Vitest tests in the viewer; 94 client tests (`SceneState`, `ModelTree`, display formatting, the interop JSON, `ModelList`, `ModelListItem`, the `Viewport`'s callbacks); E2E `ModelListTests` (§8), with all 42 E2E tests passing locally in Chromium and WebKit.
 - **Manual checklist** (D58, in the built-in browser): a mixed batch listed in order; each phase of a 25 MB STEP's import (Reading, an indeterminate Parsing, then Transferring, Meshing and Extracting) ending at "191 MB · 16.3k triangles · 1.4k parts"; a long name ellipsised; load warnings in the tooltip; the failure and rejection snackbars; the delete dialog's Cancel and Delete (scene and worker cleared); cancelling a held import; the tree opening a level at a time, with paging on the 1,358-part model; the drawer scrolling a long list.
 
-### M5 — Hardening
+### M5 — Hardening (in progress, `feature/m5-hardening`)
 
-- Spike **S4** (threaded vs single benchmark): single-threaded stays the default unless multi shows ≥ 1.3× (D28).
-- Large-model runs and tuning (tessellation constants, chunked uploads, `BatchedMesh` if needed, dropping CPU copies of GPU-resident buffers if memory-bound).
-- Full Playwright suite ×3 browsers in CI, Safari-specific fixes, `THIRD-PARTY-NOTICES.md` and About dialog, README/dev docs.
-- **Exit:** every acceptance criterion in §1 is ticked.
+Scope as decided at the start of M5 (D61–D72):
+
+- **CI runner pinned** to `ubuntu-24.04` first (D68).
+- Spike **S4**: both OCCT builds under Node, on the S2 files and a new meshing-heavy generator (D62). Threading becomes the default, and is wired into the browser, only if it reaches ≥ 1.3× on the 4-core CI runner (D61, D69); otherwise it stays built but unused (D70).
+- **Large-model measurements**, then only the tuning they call for (D63): `BatchedMesh`, uploads spread across frames, dropping CPU copies of GPU buffers, tessellation constants. The model list and tree likewise (D71).
+- **Trimmed code tested**: E2E against the published app in CI, plus the trim analyzer (D65).
+- **About dialog and `THIRD-PARTY-NOTICES.md`** (D66), **README and `docs/development.md`** (D67), and Safari-specific fixes as WebKit finds them.
+- **Exit:** every acceptance criterion in §1 is ticked, as amended by D64.
+
+**As built**
+
+- **CI:** runners pinned to `ubuntu-24.04` (D68). Each E2E job publishes the app and tests it trimmed (`J3D_E2E_APP`, D65), and the client builds with the trim analyzer on. A dispatch with `threads_benchmark` runs only S4's benchmark (§9).
+- **OCCT tooling:** `curved-part.step` and `fixtures:large -- curved-<MB>` (D62); `benchmark:threads` (S4); the large-model tests take `curved-<MB>` names too.
+- **Viewer:** parts placed fewer than 16 times are batched, one `BatchedMesh` per surface material, with their edges merged (§6.3, D63). The test hook reports render stats and can settle the camera.
+- **Interop:** the tree crosses as columns, and `OnModelLoaded` runs in its own task (§6.4, D63).
+- **Blazor:** the About dialog, from an info button in the app bar, and `ThirdParty.Components` (D66).
+- **Docs:** `THIRD-PARTY-NOTICES.md` (§7), a user-facing README and `docs/development.md` (D67).
+- **Tests:** `LargeModelTests` measures each large model it loads (§8); `ThirdPartyNoticesTests` and `AboutDialogTests`; the batching, tree-column and event-order tests.
+
+**Spike outcomes**
+
+- **S4 (threading): single-threaded stays the default** (D69), and the threaded build stays built but unused (D70). `npm run benchmark:threads` (`src/J3D.Occt/scripts/benchmark-threads.mjs`) imports each file with both builds under Node, each import in a fresh process, and reports per-phase medians of 3 runs; CI runs it on dispatch (§9). On the 4-core runner (AMD EPYC 7763, run 38607009009):
+
+  | File | Parts | Triangles | Single | Multi | Whole import | Meshing |
+  |---|---|---|---|---|---|---|
+  | `large-25mb.step` (blocks) | 1,358 | 16k | 7.0 s | 7.7 s | 0.91× | 0.78× |
+  | `large-100mb.step` (blocks) | 5,282 | 63k | 24.9 s | 26.8 s | 0.93× | 0.84× |
+  | `curved-25mb.step` | 184 | 471k | 10.8 s | 9.1 s | 1.18× | 1.86× |
+  | `curved-50mb.step` | 366 | 921k | 20.3 s | 17.0 s | 1.20× | 1.85× |
+
+  - Both builds produce identical triangles, so the threaded build works (it had never been run before M5).
+  - Parsing and transferring are serial in OCCT and about 5 % slower in the threaded build; they're 60–85 % of an import. Meshing runs in parallel over each part's faces: nearly 2× on the curved part's 35 faces, a loss on the block's 6.
+  - Threads cost heap (R3): each pthread's 8 MB stack and allocator state live in the model's heap. That added 285 MB with 20 threads on the development machine, and nothing visible with CI's 4.
+  - Meshing every part in one parallel call might lift the meshing gain, but with parsing and transferring serial, even perfect meshing on 4 cores would leave the curved files at about 1.4× and the blocks at 1.1×, so it isn't worth the nested pthread workers the browser would need (D61).
+  - The development machine (i9-12900HK, 20 threads) was busy with another application during the run, so its times are slower than S2's; its ratios agree: 0.82× for `large-25mb.step`, 0.87× for `curved-25mb.step` (meshing 1.82×).
+
+**Large-model measurements and tuning (D63, D71)**
+
+Measured in the built-in browser (Chrome 152) on the development machine's integrated GPU (Intel Iris Xe, Direct3D 11, a 960 × 672 canvas), with another application loading the machine, so expect some noise. The pane was hidden, so animation frames didn't run: a frame's cost is a draw followed by a pixel read, which waits for the GPU (`canvasPixels`), and the first full frame comes from `settleCamera`. Long tasks are the main thread's tasks over 50 ms.
+
+| | Before | After |
+|---|---|---|
+| `large-200mb.step` (10,437 parts): draw calls | 20,874 | 2 |
+| a frame, draw and GPU sync (median) | 78.6 ms | 33 ms, of which 1.1 ms on the page's thread |
+| the first frame showing every part (uploads) | 5.7 s | 33 ms |
+| longest task while the model is added | 1,035 ms | 147 ms (then 106 ms) |
+| `curved-100mb.step` (718 parts, 1.77M triangles): a frame | 8.9 ms | 7.6 ms |
+| its first full frame | 404 ms | 71 ms (once 279 ms) |
+| opening the 10,437-node tree's first level | | 181 ms in short tasks (once a 431 ms task, on the first open right after loading) |
+| 50 models imported in one batch | | no task over 50 ms; removing one shows in 48 ms |
+
+- **`BatchedMesh` (orbiting was below 30 fps):** done, as described in §6.3. Each frame now spends 1 ms on the page's thread; the rest is ANGLE replaying the multi-draw on Direct3D 11.
+- **Stalls (over about 200 ms):** the 1,035 ms task was 110 ms of building objects and 850 ms of .NET deserialising the tree as one record per node. The tree now crosses as columns (about 140 ms), and `OnModelLoaded` runs in a task of its own (§6.4). Uploads didn't need spreading once parts were batched.
+- **CPU copies of GPU buffers:** kept. The large files' buffers are 11 and 66 MB, nowhere near a memory limit.
+- **Tessellation constants:** unchanged. Triangles are cheap after batching (1.77M draw in 7.6 ms), so coarser meshes would save nothing that matters, and at the defaults `curved-part.step` (3.7k triangles on its own) shows smooth fillets, boss and holes; it's the README's screenshot.
+- **List and tree (D71):** no virtualisation; neither crosses the line.
 
 ---
 
@@ -492,10 +561,10 @@ Scope as decided at the start of M4 (D52–D59): the model list as described in 
 |---|---|---|
 | R1 | The libcascade toolchain is young (v3.x) | Replicad depends on it too. Pin the image digest. Keep the facade small and toolchain-agnostic so a plain Emscripten OCCT build is a fallback. |
 | R2 | The 4 GB wasm32 ceiling. OCCT's STEP parse can peak at many times the file size. **Measured in S2:** about 7× for many small unique parts, so roughly 550–600 MB of STEP. | Stream input into WASM, free it before meshing, one heap per model, explicit `OutOfMemory` error, including when OCCT's reader hides an allocation failure (§10 M2). |
-| R3 | The **threaded build barely helps our workload**: libcascade reports 1.33× for STEP import + mesh and **1.06× for meshing alone**. Each worker's pthread pool also costs `PTHREAD_POOL_SIZE × 8 MB` of stack, multiplied by one worker per model. | **Decided (D28):** ship both variants, keep COOP/COEP, default to single-threaded unless S4 shows ≥ 1.3× on our fixtures. |
+| R3 | The **threaded build barely helps our workload**: libcascade reports 1.33× for STEP import + mesh and **1.06× for meshing alone**. Each worker's pthread pool also costs `PTHREAD_POOL_SIZE × 8 MB` of stack, multiplied by one worker per model. | **Decided (D28):** ship both variants, keep COOP/COEP, default to single-threaded unless S4 shows ≥ 1.3× on our fixtures. **Measured in S4 (M5):** at best 1.20× on the 4-core runner, so single-threaded stays (D69, D70). |
 | R4 | Safari quirks (WASM exception handling flavour, SAB, WebGL) | WebKit is in the E2E matrix from M0. Since M2, `exceptions: 'wasm'`, posting a compiled module to workers and every fixture are verified in Playwright WebKit. Real Safari is untested until there's a Mac (D42). |
-| R5 | Blazor WASM trimming breaks interop DTO deserialisation in Release | E2E runs Release. DTOs are simple records with string enums. |
-| R6 | Main-thread jank when uploading huge geometry | Spread uploads across frames, render on demand, instancing. |
+| R5 | Blazor WASM trimming breaks interop DTO deserialisation in Release | DTOs are simple records with string enums. **Gap found at the start of M5:** E2E ran a Release *build*, and Blazor WebAssembly only trims at publish, so trimmed code was never tested. **Closed in M5 (D65):** CI's E2E runs against the published app, and the trim analyzer fails the build on trim warnings. Its one finding, Razor setting `Router.NotFoundPage` through reflection (IL2111), is suppressed on `Routes`, since the page is in the client assembly, which `TrimMode=partial` doesn't trim. |
+| R6 | Main-thread jank when uploading huge geometry | Render on demand, instancing. **Measured in M5 (D63):** the stalls came from per-part objects and from .NET reading the tree, not from upload volume; batching and a columnar tree cut them to tasks of 150 ms or less on the large files (§10 M5). |
 | R7 | IGES has no stream reader, so it needs a MEMFS copy (2× input memory) | Acceptable, since IGES files are typically smaller. Documented. |
 | R8 | Git LFS quota and bandwidth | LFS objects are cached in CI since M2; WASM changes are infrequent. |
 | R9 | Changing the symbol set locally needs Docker | Docker Desktop (WSL2 backend) is installed for local builds (D38); CI still builds and commits `dist/`. |

@@ -15,6 +15,14 @@
         <MudText Typo="Typo.h6" Class="ml-2">J3D</MudText>
         <Toolbar />
         <MudSpacer />
+        <MudTooltip Text="About J3D">
+            <MudIconButton Icon="@Icons.Material.Outlined.Info"
+                           Color="Color.Inherit"
+                           Edge="Edge.End"
+                           aria-label="About J3D"
+                           OnClick="OpenAboutAsync"
+                           data-testid="about-button" />
+        </MudTooltip>
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen"
@@ -35,9 +43,3 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
-
-@code {
-    private bool _drawerOpen = true;
-
-    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
-}

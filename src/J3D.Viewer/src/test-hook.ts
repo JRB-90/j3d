@@ -5,7 +5,7 @@ import type { ModelEntry, ModelManager } from './import/model-manager';
 import { liveWorkers } from './import/runner';
 import type { Bounds, ImportError, ImportPhase, ModelStats, TreeNode } from './import/types';
 import { findRegion } from './view/view-regions';
-import type { CameraState, Viewer } from './view/viewer';
+import type { CameraState, RenderStats, Viewer } from './view/viewer';
 
 /** Present only when the host renders `<meta name="j3d-test-hook">` (the Development environment). */
 export function isTestHookEnabled(): boolean {
@@ -65,6 +65,10 @@ export interface TestHook {
   scene(): { id: string; name: string; objects: number; visible: boolean }[];
   /** Draws a frame and reads its RGBA under client points: what the canvas draws, whatever a screenshot shows. */
   canvasPixels(points: [number, number][]): (number[] | null)[];
+  /** The last frame's scene draw calls and primitives and the GPU objects held, or null without WebGL2. */
+  renderStats(): RenderStats | null;
+  /** Ends any camera transition at once and draws, where animation frames don't run (a hidden page). */
+  settleCamera(): void;
 }
 
 export interface TestHookControls {
@@ -132,6 +136,8 @@ export function installTestHook(
     contextLost: () => viewer?.renderer.getContext().isContextLost() ?? null,
     scene: () => viewer?.sceneSummary() ?? [],
     canvasPixels: (points) => viewer?.pixelsAt(points).map((pixel) => pixel ?? null) ?? points.map(() => null),
+    renderStats: () => viewer?.renderStats ?? null,
+    settleCamera: () => viewer?.settleCamera(),
   };
   controls.hook = hook;
   window.__j3dTest = hook;

@@ -24,18 +24,18 @@ public sealed class ModelTreeTests
     public void Treats_a_node_whose_parent_is_not_an_earlier_node_as_a_root()
     {
         // Parents always come first; anything else would make a cycle or point nowhere.
-        var tree = new ModelTree(
+        var tree = new ModelTree(TreeColumns.From(
         [
             new TreeNode("a", Parent: -1, Prototype: 0),
             new TreeNode("b", Parent: 2, Prototype: 0),
             new TreeNode("c", Parent: 1, Prototype: 0),
             new TreeNode("d", Parent: 99, Prototype: 0),
-        ]);
+        ]));
 
         Assert.Equal([0, 1, 3], tree.Roots);
         Assert.Equal([2], tree.ChildrenOf(1));
     }
 
     [Fact]
-    public void An_empty_tree_has_no_roots() => Assert.Empty(new ModelTree([]).Roots);
+    public void An_empty_tree_has_no_roots() => Assert.Empty(new ModelTree(TreeColumns.From([])).Roots);
 }

@@ -6,6 +6,7 @@ Shared by Vitest (OCCT and mesh tests under Node) and Playwright (browser E2E). 
 |---|---|---|
 | `box.brep` | BREP | Minimal OCCT round trip, single part, default colour |
 | `coloured-part.step` | STEP | Per-face and per-part colours (XCAF); also the template for the large STEP files |
+| `curved-part.step` | STEP | A filleted block with a lofted (B-spline) boss and six drilled holes, 35 faces; the template for the meshing-heavy large STEP files (D62) |
 | `assembly.step` | STEP | Nested assembly, names, repeated instances (prototype meshed once) |
 | `surfaces.iges` | IGES | IGES reader, colours via IGESCAFControl |
 | `invalid.step` | STEP | Corrupt file → `ParseFailed` through a C++ exception (checks WASM exception handling) |
@@ -39,8 +40,18 @@ node src/J3D.Viewer/scripts/generate-mesh-fixtures.mjs
 
 ## Large files (on demand, never committed)
 
-`npm run fixtures:large` writes STEP files of the given sizes in MB (default 200) into the git-ignored `large/` folder. Each repeats `coloured-part.step` as thousands of distinct parts: the worst case for memory. Set `J3D_LARGE_FIXTURES` to the same sizes to run the large-model tests (see docs/plan.md §8):
+`npm run fixtures:large` writes STEP files of the given sizes in MB (default 200) into the git-ignored `large/` folder. Each `large-<MB>mb.step` repeats `coloured-part.step` as thousands of distinct parts: the worst case for memory. Set `J3D_LARGE_FIXTURES` to the same sizes to run the large-model tests (see docs/plan.md §8):
 
 ```bash
 npm run fixtures:large -- 200 700
+```
+
+With `--curved`, it writes `curved-<MB>mb.step` from `curved-part.step` instead: fewer parts, but curved faces that cost far more to mesh (about 125 KB and 2,590 triangles a part). The threading benchmark (spike S4) uses both kinds:
+
+```bash
+npm run fixtures:large -- --curved 25 50
+```
+
+```bash
+npm run benchmark:threads --workspace @j3d/occt -- large/large-25mb.step large/curved-25mb.step
 ```

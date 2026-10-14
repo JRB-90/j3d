@@ -1,4 +1,9 @@
-﻿<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+﻿@using System.Diagnostics.CodeAnalysis
+@* Razor sets Router.NotFoundPage through reflection, which the trim analyzer flags (IL2111). The page
+   lives in this assembly, which publishing doesn't trim (TrimMode partial), so its members are kept. *@
+@attribute [UnconditionalSuppressMessage("Trimming", "IL2111", Justification = "NotFound is in this untrimmed assembly.")]
+
+<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
         <FocusOnNavigate RouteData="routeData" Selector="h1" />

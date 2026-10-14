@@ -18,6 +18,8 @@ import {
   Vector3,
   Vector4,
   WebGLRenderer,
+  type InstancedMesh,
+  type Mesh,
   type Texture,
 } from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -58,6 +60,17 @@ const HeadlightDirection = new Vector3(-0.35, 0.5, 1).normalize();
 
 /** Visible height and distance before the first model arrives. */
 const InitialVisibleHeight = 100;
+
+/** What the last frame drew of the scene (not the view cube), and what the renderer holds on the GPU. */
+export interface RenderStats {
+  drawCalls: number;
+  triangles: number;
+  lines: number;
+  geometries: number;
+  textures: number;
+  /** Bytes of the scene's vertex and index arrays, each shared geometry once: what the GPU holds and JS keeps a copy of. */
+  bufferBytes: number;
+}
 
 export interface CameraState {
   projection: Projection;
@@ -110,6 +123,7 @@ export class Viewer {
   private interacting = false;
   private needsRender = true;
   private frames = 0;
+  private lastFrame = { drawCalls: 0, triangles: 0, lines: 0 };
 
   constructor(private readonly host: HTMLElement) {
     // Z up (decision D18): set before any camera exists, and on each camera before camera-controls reads it.
@@ -182,6 +196,38 @@ export class Viewer {
   /** Frames drawn so far, for tests of on-demand rendering. */
   get frameCount(): number {
     return this.frames;
+  }
+
+  /**
+   * Finishes any camera transition at once and draws, for measurements in a page whose animation
+   * frames don't run (a hidden tab or pane). Steps of 10 s take camera-controls' smoothing to its end.
+   */
+  settleCamera(): void {
+    for (let step = 0; step < 100 && this.controls.update(10); step++) {
+      // converging
+    }
+    this.render();
+  }
+
+  /** The last frame's scene draw calls and primitives, and the GPU objects held (for large-model measurements). */
+  get renderStats(): RenderStats {
+    const { geometries, textures } = this.renderer.info.memory;
+    const arrays = new Set<ArrayBufferView>();
+    this.scene.traverse((object) => {
+      const geometry = (object as Partial<Mesh>).geometry;
+      if (geometry) {
+        Object.values(geometry.attributes).forEach((attribute) => arrays.add(attribute.array as ArrayBufferView));
+        if (geometry.index) {
+          arrays.add(geometry.index.array as ArrayBufferView);
+        }
+      }
+      const matrix = (object as Partial<InstancedMesh>).instanceMatrix;
+      if (matrix) {
+        arrays.add(matrix.array);
+      }
+    });
+    const bufferBytes = [...arrays].reduce((sum, array) => sum + array.byteLength, 0);
+    return { ...this.lastFrame, geometries, textures, bufferBytes };
   }
 
   /** Adds a loaded model. The view fits only when it is the first model in an empty scene (D30). */
@@ -461,6 +507,9 @@ export class Viewer {
     this.renderer.setViewport(0, 0, this.width, this.height);
     this.renderer.clear();
     this.renderer.render(this.scene, camera);
+    // Read before the view cube draws: the renderer's counts reset on every render call.
+    const { calls, triangles, lines } = this.renderer.info.render;
+    this.lastFrame = { drawCalls: calls, triangles, lines };
     this.viewCube.render(this.renderer, camera, this.width, this.height);
     this.needsRender = false;
     this.frames++;
