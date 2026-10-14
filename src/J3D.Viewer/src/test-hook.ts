@@ -63,6 +63,10 @@ export interface TestHook {
   contextLost(): boolean | null;
   /** The models the viewer has in its scene, with their object counts. */
   scene(): { id: string; name: string; objects: number; visible: boolean }[];
+  /** The drawing buffer's RGBA under a client point: the last frame drawn, whatever the page shows. */
+  canvasPixel(x: number, y: number): number[] | null;
+  /** Asks the viewer for a new frame. */
+  redraw(): void;
 }
 
 export interface TestHookControls {
@@ -129,6 +133,8 @@ export function installTestHook(
     project: (point) => viewer?.projectToClient(point) ?? null,
     contextLost: () => viewer?.renderer.getContext().isContextLost() ?? null,
     scene: () => viewer?.sceneSummary() ?? [],
+    canvasPixel: (x, y) => viewer?.pixelAt(x, y) ?? null,
+    redraw: () => viewer?.requestRender(),
   };
   controls.hook = hook;
   window.__j3dTest = hook;

@@ -5,19 +5,26 @@ on:
     branches: [main]
   pull_request:
   # Dispatched by occt-wasm.yml after it commits a new build (GITHUB_TOKEN pushes don't trigger CI).
-  # Run by hand with large_fixtures (e.g. "200") to add the on-demand large-model tests (spike S2).
+  # Run by hand with large_fixtures (e.g. "200") to add the on-demand large-model tests (spike S2),
+  # or with one browser to repeat its E2E job cheaply when checking a flaky test (R14).
   workflow_dispatch:
     inputs:
       large_fixtures:
         description: Large STEP sizes in MB to generate and import, comma-separated (empty to skip)
         required: false
         default: ''
+      browser:
+        description: Browser to run E2E in
+        type: choice
+        default: all
+        options: [all, chromium, firefox, webkit]
 
 permissions:
   contents: read
 
+# Dispatched runs never cancel each other, so several can run at once on one branch.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 env:
@@ -86,7 +93,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, firefox, webkit]
+        browser: ${{ fromJSON((inputs.browser == '' || inputs.browser == 'all') && '["chromium","firefox","webkit"]' || format('["{0}"]', inputs.browser)) }}
     steps:
       - uses: actions/checkout@v7
 
