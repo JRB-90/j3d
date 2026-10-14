@@ -89,8 +89,8 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     protected async Task<string> RenderingDiagnosticsAsync()
     {
         var state = await Page.EvaluateAsync<string>(
-            "() => JSON.stringify({ frames: window.__j3dTest.frames(), contextLost: window.__j3dTest.contextLost(), camera: window.__j3dTest.camera(), size: [innerWidth, innerHeight, devicePixelRatio] })");
-        return $"{state}; console warnings: [{string.Join(" | ", _consoleWarnings.TakeLast(5))}]";
+            "() => JSON.stringify({ frames: window.__j3dTest.frames(), contextLost: window.__j3dTest.contextLost(), scene: window.__j3dTest.scene(), camera: window.__j3dTest.camera(), size: [innerWidth, innerHeight, devicePixelRatio] })");
+        return $"{state}; console errors: [{string.Join(" | ", _consoleErrors)}]; console warnings: [{string.Join(" | ", _consoleWarnings.TakeLast(5))}]";
     }
 
     /// <summary>The viewer's camera (src/J3D.Viewer/src/view/viewer.ts, CameraState).</summary>

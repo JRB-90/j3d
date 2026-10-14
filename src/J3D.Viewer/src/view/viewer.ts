@@ -297,6 +297,15 @@ export class Viewer {
     return this.viewCube.hoveredRegion;
   }
 
+  /** The models in the scene and how many objects each has, for test diagnostics. */
+  sceneSummary(): { id: ModelId; name: string; objects: number; visible: boolean }[] {
+    return [...this.models].map(([id, { object }]) => {
+      let objects = 0;
+      object.traverse(() => objects++);
+      return { id, name: object.name, objects, visible: object.visible && object.parent === this.scene };
+    });
+  }
+
   /** Where a world point appears on screen, in client coordinates (for tests). */
   projectToClient(point: Vector3Tuple): { x: number; y: number } {
     const camera = this.camera;
