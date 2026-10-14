@@ -125,7 +125,8 @@ jobs:
       - name: Install Playwright browser
         run: pwsh tests/J3D.E2E.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps ${{ matrix.browser }}
 
+      # Detailed output includes passing tests' messages, e.g. the large-model timings and heap sizes.
       - name: Run E2E tests
-        run: dotnet test --project tests/J3D.E2E.Tests -c Release --no-build
+        run: dotnet test --project tests/J3D.E2E.Tests -c Release --no-build --output Detailed
         env:
           BROWSER: ${{ matrix.browser }}
