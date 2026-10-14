@@ -153,6 +153,9 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
 
     protected Task<int> FramesAsync() => Page.EvaluateAsync<int>("() => window.__j3dTest.frames()");
 
+    /// <summary>The last frame's scene draw calls and primitives, and what the renderer holds (viewer.ts, RenderStats).</summary>
+    protected async Task<RenderStats> RenderStatsAsync() => await EvaluateAsync<RenderStats>("() => window.__j3dTest.renderStats()");
+
     /// <summary>Where a world point is on screen, in CSS pixels.</summary>
     protected async Task<ScreenPoint> ProjectAsync(double x, double y, double z) =>
         await EvaluateAsync<ScreenPoint>($"() => window.__j3dTest.project([{x}, {y}, {z}])");
@@ -257,6 +260,8 @@ public sealed record CameraState(
     bool Moving);
 
 public sealed record ScreenPoint(double X, double Y);
+
+public sealed record RenderStats(int DrawCalls, int Triangles, int Lines, int Geometries, int Textures, long BufferBytes);
 
 public readonly record struct Rgb(int R, int G, int B)
 {
