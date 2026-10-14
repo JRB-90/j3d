@@ -135,10 +135,12 @@ jobs:
       # Detailed output includes passing tests' messages, e.g. the large-model timings and heap sizes.
       # Headless Firefox has no WebGL on the runner even with webgl.force-enabled (risk R13), so it
       # runs headed on a virtual display, where Mesa's software renderer provides it (decision D47).
+      # Its test classes run one at a time (D51): with no window manager, parallel tests' windows
+      # stack up, and Firefox doesn't paint an obscured window, so screenshots go stale (R14).
       - name: Run E2E tests
         run: |
           if [ "$BROWSER" = firefox ]; then
-            HEADED=1 xvfb-run --auto-servernum dotnet test --project tests/J3D.E2E.Tests -c Release --no-build --output Detailed
+            HEADED=1 xvfb-run --auto-servernum dotnet test --project tests/J3D.E2E.Tests -c Release --no-build --output Detailed --parallel none
           else
             dotnet test --project tests/J3D.E2E.Tests -c Release --no-build --output Detailed
           fi

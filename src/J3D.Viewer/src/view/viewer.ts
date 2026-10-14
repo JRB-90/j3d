@@ -115,9 +115,7 @@ export class Viewer {
     // Z up (decision D18): set before any camera exists, and on each camera before camera-controls reads it.
     Object3D.DEFAULT_UP.copy(Up);
 
-    // The drawing buffer is kept between frames (D51). Each frame clears and redraws it anyway, and
-    // without it Firefox sometimes snapshots a cleared or stale canvas (risk R14).
-    const renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    const renderer = new WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0); // transparent over the viewport's CSS gradient
     renderer.autoClear = false; // the view cube is drawn over the scene in the same frame
@@ -318,22 +316,26 @@ export class Viewer {
   }
 
   /**
-   * The drawing buffer's premultiplied RGBA under a client point, or undefined outside the canvas
-   * (for test diagnostics: the buffer is preserved between frames, so this is the last frame drawn).
+   * Draws a frame and returns its premultiplied RGBA under each client point, or undefined outside
+   * the canvas (for test diagnostics). The pixels are read in the same task as the draw, since the
+   * drawing buffer isn't kept once the frame has been composited.
    */
-  pixelAt(clientX: number, clientY: number): number[] | undefined {
+  pixelsAt(points: readonly (readonly [number, number])[]): (number[] | undefined)[] {
+    this.render();
+    this.renderer.setRenderTarget(null);
     const canvas = this.renderer.domElement;
     const rect = canvas.getBoundingClientRect();
-    const x = Math.floor(((clientX - rect.left) / rect.width) * canvas.width);
-    const y = canvas.height - 1 - Math.floor(((clientY - rect.top) / rect.height) * canvas.height);
-    if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
-      return undefined;
-    }
-    this.renderer.setRenderTarget(null);
     const gl = this.renderer.getContext();
-    const pixel = new Uint8Array(4);
-    gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-    return [...pixel];
+    return points.map(([clientX, clientY]) => {
+      const x = Math.floor(((clientX - rect.left) / rect.width) * canvas.width);
+      const y = canvas.height - 1 - Math.floor(((clientY - rect.top) / rect.height) * canvas.height);
+      if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
+        return undefined;
+      }
+      const pixel = new Uint8Array(4);
+      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      return [...pixel];
+    });
   }
 
   /** Schedules a redraw (scene changes, resize, hover). Idle cost is zero: nothing runs between requests. */

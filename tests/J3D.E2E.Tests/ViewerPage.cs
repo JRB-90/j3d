@@ -99,23 +99,20 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     }
 
     /// <summary>
-    /// What a failed pixel check should report: whether the canvas was drawing at all, what its drawing
-    /// buffer holds at the sampled points (the buffer is preserved, D51, so this is the frame the
-    /// screenshot should have shown), and the same points after a fresh frame. A buffer showing the
-    /// model where the screenshot didn't means the browser's snapshot missed a drawn frame (R14).
-    /// Reading the buffer stalls the GPU, so only failures do it.
+    /// What a failed pixel check should report: whether the canvas was drawing at all, what a fresh
+    /// frame draws at the sampled points (read from the canvas itself), and a screenshot of that frame.
+    /// A frame showing the model where the screenshots didn't means the browser didn't paint what was
+    /// drawn (R14). Reading the canvas stalls the GPU, so only failures do it.
     /// </summary>
     private async Task<string> RenderingDiagnosticsAsync()
     {
         var state = await Page.EvaluateAsync<string>(
             "() => JSON.stringify({ frames: window.__j3dTest.frames(), contextLost: window.__j3dTest.contextLost(), scene: window.__j3dTest.scene(), camera: window.__j3dTest.camera(), size: [innerWidth, innerHeight, devicePixelRatio] })");
         var buffer = await Page.EvaluateAsync<string>(
-            "points => JSON.stringify(points.map(([x, y]) => window.__j3dTest.canvasPixel(x, y)))",
+            "points => JSON.stringify(window.__j3dTest.canvasPixels(points))",
             _sampledPoints.Select(p => new[] { p.X, p.Y }).ToArray());
-        await Page.EvaluateAsync("() => window.__j3dTest.redraw()");
-        await WaitForCameraRestAsync();
         var redrawn = await SamplePixelsAsync(_sampledPoints);
-        return $"{state}; drawing buffer (RGBA) at the samples: {buffer}; after a redraw: [{string.Join(", ", redrawn)}]; " +
+        return $"{state}; a fresh frame (RGBA) at the samples: {buffer}; its screenshot: [{string.Join(", ", redrawn)}]; " +
             $"console errors: [{string.Join(" | ", _consoleErrors)}]; console warnings: [{string.Join(" | ", _consoleWarnings.TakeLast(5))}]";
     }
 
