@@ -15,6 +15,7 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
 
     private readonly List<string> _consoleErrors = [];
     private readonly List<string> _consoleWarnings = [];
+    private int _screenshots;
 
     public override async ValueTask InitializeAsync()
     {
@@ -68,6 +69,22 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
 
     protected void AssertNoConsoleErrors() => Assert.Empty(_consoleErrors);
 
+    /// <summary>
+    /// Keeps each sampled screenshot in <c>screenshots/</c> next to the test binaries, named after the
+    /// browser and test, with the sampled points in a text file beside it. CI uploads the folder when
+    /// E2E fails.
+    /// </summary>
+    private async Task SaveScreenshotAsync(byte[] png, ScreenPoint[] points)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "screenshots")).FullName;
+        var test = TestContext.Current.Test?.TestDisplayName ?? "test";
+        var name = string.Concat($"{Environment.GetEnvironmentVariable("BROWSER") ?? "chromium"}-{test}-{++_screenshots}"
+            .Select(static c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '_'));
+        var cancellation = TestContext.Current.CancellationToken;
+        await File.WriteAllBytesAsync(Path.Combine(folder, name + ".png"), png, cancellation);
+        await File.WriteAllLinesAsync(Path.Combine(folder, name + ".txt"), points.Select(static p => $"{p.X:F1}, {p.Y:F1}"), cancellation);
+    }
+
     /// <summary>What a failed pixel check should report: whether the canvas was drawing at all.</summary>
     protected async Task<string> RenderingDiagnosticsAsync()
     {
@@ -116,6 +133,7 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
         // Two frames, so the compositor has presented the canvas's last drawing.
         await Page.EvaluateAsync("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
         var png = await Page.ScreenshotAsync(new PageScreenshotOptions { Scale = ScreenshotScale.Css, Type = ScreenshotType.Png });
+        await SaveScreenshotAsync(png, points);
         var samples = await Page.EvaluateAsync<int[][]>(
             """
             async ([png, points]) => {
