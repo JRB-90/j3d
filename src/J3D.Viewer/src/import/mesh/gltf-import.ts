@@ -1,4 +1,4 @@
-import { Group, LoadingManager, WebGLRenderer, type Object3D } from 'three';
+import { Group, LoadingManager, type Object3D, type WebGLRenderer } from 'three';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -13,7 +13,7 @@ import { SidecarUrls } from './sidecar-urls';
  * same origin, as COEP requires (no CDN).
  */
 export interface GltfImportOptions {
-  /** The renderer KTX2 textures are transcoded for. Without one, a throwaway renderer probes the GPU. */
+  /** The renderer KTX2 textures are transcoded for. Without one, {@link probeTextureSupport} asks the GPU directly. */
   getRenderer?: () => WebGLRenderer;
 }
 
@@ -144,15 +144,30 @@ function readJson(data: ArrayBuffer): GltfJson {
 }
 
 function detectKtx2Support(loader: KTX2Loader, options: GltfImportOptions): void {
-  if (options.getRenderer) {
-    loader.detectSupport(options.getRenderer());
-    return;
+  loader.detectSupport(options.getRenderer?.() ?? (probeTextureSupport() as WebGLRenderer));
+}
+
+/**
+ * The part of a WebGL renderer that `KTX2Loader.detectSupport` reads (its extensions), taken from a
+ * throwaway WebGL2 context. Without WebGL at all (headless Firefox in CI, for one), no compressed
+ * format is supported and the transcoder falls back to uncompressed RGBA rather than failing.
+ */
+export function probeTextureSupport(): Pick<WebGLRenderer, 'extensions'> {
+  const supported = new Map<string, unknown>();
+  const gl = document.createElement('canvas').getContext('webgl2');
+  if (gl) {
+    for (const name of gl.getSupportedExtensions() ?? []) {
+      supported.set(name, undefined);
+    }
+    // detectSupport asks the ASTC extension for its profiles; answer from a snapshot, since the
+    // context is lost below.
+    const astc = gl.getExtension('WEBGL_compressed_texture_astc');
+    if (astc) {
+      const profiles = astc.getSupportedProfiles();
+      supported.set('WEBGL_compressed_texture_astc', { getSupportedProfiles: () => profiles });
+    }
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
-  const renderer = new WebGLRenderer();
-  try {
-    loader.detectSupport(renderer);
-  } finally {
-    renderer.dispose();
-    renderer.forceContextLoss();
-  }
+  const extensions = { has: (name: string) => supported.has(name), get: (name: string) => supported.get(name) };
+  return { extensions } as unknown as Pick<WebGLRenderer, 'extensions'>;
 }
