@@ -63,6 +63,8 @@ export interface TestHook {
   contextLost(): boolean | null;
   /** The models the viewer has in its scene, with their object counts. */
   scene(): { id: string; name: string; objects: number; visible: boolean }[];
+  /** Draws a frame and reads its RGBA under client points: what the canvas draws, whatever a screenshot shows. */
+  canvasPixels(points: [number, number][]): (number[] | null)[];
 }
 
 export interface TestHookControls {
@@ -129,6 +131,7 @@ export function installTestHook(
     project: (point) => viewer?.projectToClient(point) ?? null,
     contextLost: () => viewer?.renderer.getContext().isContextLost() ?? null,
     scene: () => viewer?.sceneSummary() ?? [],
+    canvasPixels: (points) => viewer?.pixelsAt(points).map((pixel) => pixel ?? null) ?? points.map(() => null),
   };
   controls.hook = hook;
   window.__j3dTest = hook;

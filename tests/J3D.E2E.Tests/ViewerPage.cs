@@ -16,6 +16,7 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     private readonly List<string> _consoleErrors = [];
     private readonly List<string> _consoleWarnings = [];
     private int _screenshots;
+    private ScreenPoint[] _sampledPoints = [];
 
     public override async ValueTask InitializeAsync()
     {
@@ -42,6 +43,20 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
 
     protected Task ImportAsync(params FilePayload[] files) =>
         Page.SetInputFilesAsync("[data-testid=j3d-test-input]", files);
+
+    /// <summary>Imports through the toolbar's own Import input, once the viewer has enabled it.</summary>
+    protected async Task ImportWithToolbarAsync(params string[] fixtures) =>
+        await (await ToolbarInputAsync()).SetInputFilesAsync(fixtures.Select(Fixtures.PathOf));
+
+    protected async Task ImportWithToolbarAsync(params FilePayload[] files) =>
+        await (await ToolbarInputAsync()).SetInputFilesAsync(files);
+
+    private async Task<ILocator> ToolbarInputAsync()
+    {
+        var input = Page.GetByTestId("import-input");
+        await Expect(input).ToBeEnabledAsync(new LocatorAssertionsToBeEnabledOptions { Timeout = 30_000 });
+        return input;
+    }
 
     /// <summary>Waits until <paramref name="count"/> models exist and none is queued or importing.</summary>
     protected async Task<IReadOnlyList<TestModel>> WaitForImportsAsync(int count)
@@ -85,12 +100,34 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
         await File.WriteAllLinesAsync(Path.Combine(folder, name + ".txt"), points.Select(static p => $"{p.X:F1}, {p.Y:F1}"), cancellation);
     }
 
-    /// <summary>What a failed pixel check should report: whether the canvas was drawing at all.</summary>
-    protected async Task<string> RenderingDiagnosticsAsync()
+    /// <summary>
+    /// A pixel check on the last <see cref="SamplePixelsAsync"/>. Only a failing check gathers the
+    /// rendering diagnostics, since they draw a frame and take another screenshot.
+    /// </summary>
+    protected async Task AssertRenderedAsync(bool condition, string message)
+    {
+        if (!condition)
+        {
+            Assert.Fail($"{message}; {await RenderingDiagnosticsAsync()}");
+        }
+    }
+
+    /// <summary>
+    /// What a failed pixel check should report: whether the canvas was drawing at all, what a fresh
+    /// frame draws at the sampled points (read from the canvas itself), and a screenshot of that frame.
+    /// A frame showing the model where the screenshots didn't means the browser didn't paint what was
+    /// drawn (R14). Reading the canvas stalls the GPU, so only failures do it.
+    /// </summary>
+    private async Task<string> RenderingDiagnosticsAsync()
     {
         var state = await Page.EvaluateAsync<string>(
             "() => JSON.stringify({ frames: window.__j3dTest.frames(), contextLost: window.__j3dTest.contextLost(), scene: window.__j3dTest.scene(), camera: window.__j3dTest.camera(), size: [innerWidth, innerHeight, devicePixelRatio] })");
-        return $"{state}; console errors: [{string.Join(" | ", _consoleErrors)}]; console warnings: [{string.Join(" | ", _consoleWarnings.TakeLast(5))}]";
+        var buffer = await Page.EvaluateAsync<string>(
+            "points => JSON.stringify(window.__j3dTest.canvasPixels(points))",
+            _sampledPoints.Select(p => new[] { p.X, p.Y }).ToArray());
+        var redrawn = await SamplePixelsAsync(_sampledPoints);
+        return $"{state}; a fresh frame (RGBA) at the samples: {buffer}; its screenshot: [{string.Join(", ", redrawn)}]; " +
+            $"console errors: [{string.Join(" | ", _consoleErrors)}]; console warnings: [{string.Join(" | ", _consoleWarnings.TakeLast(5))}]";
     }
 
     /// <summary>The viewer's camera (src/J3D.Viewer/src/view/viewer.ts, CameraState).</summary>
@@ -148,6 +185,7 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
             }
             """,
             new object[] { Convert.ToBase64String(png), points.Select(p => new[] { p.X, p.Y }).ToArray() });
+        _sampledPoints = points;
         return [.. samples.Select(rgba => new Rgb(rgba[0], rgba[1], rgba[2]))];
     }
 

@@ -1,3 +1,4 @@
+using J3D.Web.Client.Models;
 using Microsoft.AspNetCore.Components;
 
 namespace J3D.Web.Client.Interop;
@@ -26,6 +27,18 @@ public sealed class ViewerSession
         if (_viewer is not null)
         {
             await _viewer.AttachFileInputAsync(input);
+        }
+    }
+
+    /// <summary>
+    /// Removes a model whatever its state. Works without WebGL2 too, since imports still run; the
+    /// list updates when the viewer reports the model removed.
+    /// </summary>
+    public async Task RemoveModelAsync(ModelId id)
+    {
+        if (_viewer is not null)
+        {
+            await _viewer.RemoveModelAsync(id);
         }
     }
 

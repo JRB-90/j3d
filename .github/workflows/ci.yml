@@ -5,19 +5,26 @@ on:
     branches: [main]
   pull_request:
   # Dispatched by occt-wasm.yml after it commits a new build (GITHUB_TOKEN pushes don't trigger CI).
-  # Run by hand with large_fixtures (e.g. "200") to add the on-demand large-model tests (spike S2).
+  # Run by hand with large_fixtures (e.g. "200") to add the on-demand large-model tests (spike S2),
+  # or with one browser to repeat its E2E job cheaply when checking a flaky test (R14).
   workflow_dispatch:
     inputs:
       large_fixtures:
         description: Large STEP sizes in MB to generate and import, comma-separated (empty to skip)
         required: false
         default: ''
+      browser:
+        description: Browser to run E2E in
+        type: choice
+        default: all
+        options: [all, chromium, firefox, webkit]
 
 permissions:
   contents: read
 
+# Dispatched runs never cancel each other, so several can run at once on one branch.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 env:
@@ -86,7 +93,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, firefox, webkit]
+        browser: ${{ fromJSON((inputs.browser == '' || inputs.browser == 'all') && '["chromium","firefox","webkit"]' || format('["{0}"]', inputs.browser)) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -128,10 +135,12 @@ jobs:
       # Detailed output includes passing tests' messages, e.g. the large-model timings and heap sizes.
       # Headless Firefox has no WebGL on the runner even with webgl.force-enabled (risk R13), so it
       # runs headed on a virtual display, where Mesa's software renderer provides it (decision D47).
+      # Its test classes run one at a time (D51): with no window manager, parallel tests' windows
+      # stack up, and Firefox doesn't paint an obscured window, so screenshots go stale (R14).
       - name: Run E2E tests
         run: |
           if [ "$BROWSER" = firefox ]; then
-            HEADED=1 xvfb-run --auto-servernum dotnet test --project tests/J3D.E2E.Tests -c Release --no-build --output Detailed
+            HEADED=1 xvfb-run --auto-servernum dotnet test --project tests/J3D.E2E.Tests -c Release --no-build --output Detailed --parallel none
           else
             dotnet test --project tests/J3D.E2E.Tests -c Release --no-build --output Detailed
           fi

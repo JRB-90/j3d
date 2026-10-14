@@ -315,6 +315,29 @@ export class Viewer {
     return { x: rect.left + ((ndc.x + 1) / 2) * rect.width, y: rect.top + ((1 - ndc.y) / 2) * rect.height };
   }
 
+  /**
+   * Draws a frame and returns its premultiplied RGBA under each client point, or undefined outside
+   * the canvas (for test diagnostics). The pixels are read in the same task as the draw, since the
+   * drawing buffer isn't kept once the frame has been composited.
+   */
+  pixelsAt(points: readonly (readonly [number, number])[]): (number[] | undefined)[] {
+    this.render();
+    this.renderer.setRenderTarget(null);
+    const canvas = this.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    const gl = this.renderer.getContext();
+    return points.map(([clientX, clientY]) => {
+      const x = Math.floor(((clientX - rect.left) / rect.width) * canvas.width);
+      const y = canvas.height - 1 - Math.floor(((clientY - rect.top) / rect.height) * canvas.height);
+      if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
+        return undefined;
+      }
+      const pixel = new Uint8Array(4);
+      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      return [...pixel];
+    });
+  }
+
   /** Schedules a redraw (scene changes, resize, hover). Idle cost is zero: nothing runs between requests. */
   requestRender(): void {
     this.needsRender = true;
