@@ -29,7 +29,7 @@ public sealed class ModelEventJsonTests
     {
         const string json = """
             {
-              "tree": [ { "name": "Bracket", "parent": -1, "prototype": -1 }, { "name": "Pin", "parent": 0, "prototype": 0 } ],
+              "tree": { "names": [ "Bracket", "Pin" ], "parents": [ -1, 0 ], "prototypes": [ -1, 0 ] },
               "stats": { "nodes": 2, "prototypes": 1, "instances": 1, "triangles": 3000000000, "edges": 12, "textures": 0 },
               "bounds": { "min": [0, -1.5, 0], "max": [40, 30, 20] },
               "memoryBytes": 5000000000,
@@ -39,7 +39,8 @@ public sealed class ModelEventJsonTests
 
         var info = JsonSerializer.Deserialize<ModelLoadedInfo>(json, Web)!;
 
-        Assert.Equal([new TreeNode("Bracket", -1, -1), new TreeNode("Pin", 0, 0)], info.Tree);
+        Assert.Equal(2, info.Tree.Count);
+        Assert.Equal([new TreeNode("Bracket", -1, -1), new TreeNode("Pin", 0, 0)], [info.Tree[0], info.Tree[1]]);
         Assert.Equal(new ModelStats(2, 1, 1, 3_000_000_000, 12, 0), info.Stats);
         Assert.Equal([0, -1.5, 0], info.Bounds.Min);
         Assert.Equal([40, 30, 20], info.Bounds.Max);

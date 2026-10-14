@@ -10,11 +10,29 @@ namespace J3D.Web.Client.Interop;
 /// <param name="MemoryBytes">The worker's WASM heap (BREP) or geometry and texture bytes (mesh).</param>
 /// <param name="Warnings">Non-fatal problems, such as textures that weren't supplied.</param>
 public sealed record ModelLoadedInfo(
-    IReadOnlyList<TreeNode> Tree,
+    TreeColumns Tree,
     ModelStats Stats,
     Bounds Bounds,
     long MemoryBytes,
     IReadOnlyList<string> Warnings);
+
+/// <summary>
+/// A model's tree as one list per field, node by node, parents before children. It crosses interop
+/// this way because .NET deserialises three arrays far faster than a record per node: a 10,437-node
+/// tree took 850 ms as records (decision D63).
+/// </summary>
+/// <param name="Names">Each node's name in the file; may be empty.</param>
+/// <param name="Parents">Each node's parent index, or -1 for a root.</param>
+/// <param name="Prototypes">The prototype each part node draws, or -1 for a group or assembly.</param>
+public sealed record TreeColumns(IReadOnlyList<string> Names, IReadOnlyList<int> Parents, IReadOnlyList<int> Prototypes)
+{
+    public int Count => Names.Count;
+
+    public TreeNode this[int index] => new(Names[index], Parents[index], Prototypes[index]);
+
+    public static TreeColumns From(IReadOnlyList<TreeNode> nodes) =>
+        new([.. nodes.Select(static n => n.Name)], [.. nodes.Select(static n => n.Parent)], [.. nodes.Select(static n => n.Prototype)]);
+}
 
 /// <summary>One node of a model's tree.</summary>
 /// <param name="Name">The node's name in the file; may be empty.</param>

@@ -8,17 +8,17 @@ namespace J3D.Web.Client.State;
 /// </summary>
 public sealed class ModelTree
 {
-    private readonly IReadOnlyList<TreeNode> _nodes;
+    private readonly TreeColumns _nodes;
     private readonly List<int>?[] _children;
     private readonly List<int> _roots = [];
 
-    public ModelTree(IReadOnlyList<TreeNode> nodes)
+    public ModelTree(TreeColumns nodes)
     {
         _nodes = nodes;
         _children = new List<int>?[nodes.Count];
         for (var index = 0; index < nodes.Count; index++)
         {
-            var parent = nodes[index].Parent;
+            var parent = nodes.Parents[index];
             if (parent >= 0 && parent < index)
             {
                 (_children[parent] ??= []).Add(index);

@@ -12,14 +12,14 @@ internal static class TestModels
 
     /// <summary>A bracket: an assembly of two plates and a pin, the second plate a sub-assembly.</summary>
     public static ModelLoadedInfo Info(params string[] warnings) => new(
-        Tree:
+        Tree: TreeColumns.From(
         [
             new TreeNode("Bracket", Parent: -1, Prototype: -1),
             new TreeNode("Plate (bottom)", Parent: 0, Prototype: 0),
             new TreeNode("Top", Parent: 0, Prototype: -1),
             new TreeNode("Plate (top)", Parent: 2, Prototype: 0),
             new TreeNode("", Parent: 2, Prototype: 1),
-        ],
+        ]),
         Stats: new ModelStats(Nodes: 5, Prototypes: 2, Instances: 3, Triangles: 1_234_567, Edges: 300, Textures: 0),
         Bounds: new Bounds([0, 0, 0], [40, 30, 20]),
         MemoryBytes: 64L * 1024 * 1024,
