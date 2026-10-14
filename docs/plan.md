@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged (M4 `feature/m4-blazor-ui`) · **Status:** M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline) and M3 (viewer) merged; M4 (Blazor UI) next; M5 planned · **Last updated:** 2026-10-14
+> **Branches:** one per milestone, squash-merged (M4 `feature/m4-blazor-ui`) · **Status:** M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline) and M3 (viewer) merged; M4 (Blazor UI) in progress; M5 planned · **Last updated:** 2026-10-14
 
 ---
 
@@ -43,7 +43,7 @@ Persistence (models are lost on refresh), users and auth, deployment, picking/se
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -98,6 +98,14 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D49 | Pixel sampling in E2E | **Focused**: the model draws non-background pixels, the STEP fixture's face colour appears, a translucent part blends with what's behind it, and the view cube is drawn and highlights on hover | Navigation (pan, rotate, zoom, view cube, fit) is asserted through camera state from the test hook, not pixels. |
 | D50 | M3 process | **Work straight through** (as D41). Claude runs the manual checklist in the built-in browser with screenshots, then opens a draft PR; the owner checks by hand before saying merge | |
 | D51 | Firefox E2E flake (R14) | **Firefox's E2E test classes run one at a time** (`--parallel none`); Chromium and WebKit stay parallel. Landed at the start of the M4 branch, which `main`'s red Firefox run waits for | Measured over 10 dispatched Firefox runs each: 3/10 passed in parallel, 10/10 serially, and the job takes about as long (3–4 min, since software rendering is CPU-bound anyway). **Tried first and dropped:** `preserveDrawingBuffer: true` on the renderer, on the theory that Firefox snapshotted a discarded buffer. The new diagnostics showed the frames were drawn correctly while the screenshots stayed stale, so the renderer keeps three's default. |
+| D52 | Model list item | **Compact**: name, format chip and kind, the item's action button, and once loaded one line of memory · triangles · parts, with a warning icon whose tooltip lists any load warnings | "Parts" counts placed instances. A failed item shows its error code and message. |
+| D53 | Model tree | **A collapsed expander on every model**, BREP and mesh. Opening it shows the roots; deeper levels load as they're expanded (lazy `MudTreeView`) | Mesh models show the file's object hierarchy (e.g. a glTF's nodes). |
+| D54 | Snackbars | **An error snackbar for each failed import and a warning snackbar for each rejected file**; load warnings stay in the item | A failed item stays in the list until dismissed. Rejected files get no item, so the snackbar is their only report. |
+| D55 | Import progress | **Phase label plus a bar per phase**: determinate when the phase reports a fraction, indeterminate when it can't (OCCT's Parsing) | No guessed weights across phases. |
+| D56 | `SceneState` lifetime | **Scoped**, not a singleton (amends §6.4) | Under WebAssembly that's one per tab, as a singleton would be, and the host's prerender never shares it between requests. Same reasoning as `ViewerSession`. |
+| D57 | List order | **Import order**: new models go at the bottom, in the order they were picked or dropped | |
+| D58 | M4 process | **As M3 (D50)**: work straight through, Claude runs the manual checklist in the built-in browser, then a draft PR; the owner checks by hand before saying merge | |
+| D59 | Test hook after M4 | **Kept alongside the UI** (Development only). The M2/M3 tests keep using it for what the UI doesn't show; M4's E2E tests drive the list, the dialog and the real Import input | |
 
 ---
 
@@ -321,7 +329,7 @@ user picks/drops files (dropped folders expanded recursively, D43)
 
 **Viewer session (M3, D48):** `ViewerSession` (scoped: per tab in WASM, per request while prerendering) holds the running `ViewerInterop`, its capabilities and the projection, and raises `Changed`. The `Viewport` attaches it once both the interop handle and `OnViewerReady` have arrived (in either order) and detaches it on dispose; the `Toolbar` reads it. `AddJ3DClient()` registers it with MudBlazor in both the client and the prerendering host.
 
-**State:** `SceneState` (singleton; per-tab in WASM) holds `ImmutableDictionary<ModelId, ModelEntry>` and raises `Changed`. Components subscribe in `OnInitialized` and unsubscribe in `Dispose`. All transitions (Queued → Importing(phase, fraction) → Ready | Failed → removed) are pure methods, unit-tested without a renderer.
+**State:** `SceneState` (scoped, D56: one per tab in WASM) holds the models in import order (D57) and raises `Changed`. Components subscribe in `OnInitialized` and unsubscribe in `Dispose`. All transitions (Queued → Importing(phase, fraction) → Ready | Failed → removed) are pure methods, unit-tested without a renderer.
 
 **Large trees:** the assembly arrives as a flat array (`index, parent, name, childCount, prototype`). `MudTreeView` loads children on expand, so even 50k-node assemblies render instantly.
 
@@ -451,7 +459,9 @@ Scope as decided at the start of M3 (D46–D50):
 - **Tests:** 117 Vitest tests in the viewer (camera maths, the 26 view cube regions, the BREP builder, MTL normalisation, the drop fallback); 26 bUnit tests (`Toolbar`, `Viewport`, `ViewerSession`); E2E `RenderingTests`, `NavigationTests` and `ImportUiTests` (§8), passing locally in Chromium and WebKit.
 - **Manual checklist** (D50, in the built-in browser): import input (`accept`, `multiple`, label); drop overlay and a multi-file glTF drop; STEP colours with BREP edges; translucency (STEP, glTF and MTL); every mesh variant (STL, OBJ+MTL with texture, GLB, multi-file glTF, Draco, meshopt, KTX2) with no warnings; pan, zoom, view cube faces with hover highlight, Home, `F`, Fit all, the projection toggle keeping the visible height exactly; zero frames while idle. Touch was checked only with synthetic pointer events (no touch device).
 
-### M4 — Blazor UI (next, `feature/m4-blazor-ui`)
+### M4 — Blazor UI (in progress, `feature/m4-blazor-ui`)
+
+Scope as decided at the start of M4 (D52–D59): the model list as described in §6.4, with a compact item (D52), a collapsed tree on every model (D53), snackbars for failures and rejections (D54), progress per phase (D55), and models in import order (D57). M2/M3's E2E tests keep the test hook (D59).
 
 - `SceneState`, `ModelList`/`ModelListItem` with lazy tree, delete confirmation dialog, snackbar errors, unsupported-browser notices (no WebGL2; not cross-origin isolated → single-threaded notice in the console only). The `Toolbar` and `ViewerInterop` arrive in M3 (D48); M4 extends the interop with the model callbacks.
 - **Exit:** bUnit coverage of all components and state transitions. The full user flow works by hand.
