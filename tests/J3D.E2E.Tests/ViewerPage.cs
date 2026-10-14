@@ -44,6 +44,20 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     protected Task ImportAsync(params FilePayload[] files) =>
         Page.SetInputFilesAsync("[data-testid=j3d-test-input]", files);
 
+    /// <summary>Imports through the toolbar's own Import input, once the viewer has enabled it.</summary>
+    protected async Task ImportWithToolbarAsync(params string[] fixtures) =>
+        await (await ToolbarInputAsync()).SetInputFilesAsync(fixtures.Select(Fixtures.PathOf));
+
+    protected async Task ImportWithToolbarAsync(params FilePayload[] files) =>
+        await (await ToolbarInputAsync()).SetInputFilesAsync(files);
+
+    private async Task<ILocator> ToolbarInputAsync()
+    {
+        var input = Page.GetByTestId("import-input");
+        await Expect(input).ToBeEnabledAsync(new LocatorAssertionsToBeEnabledOptions { Timeout = 30_000 });
+        return input;
+    }
+
     /// <summary>Waits until <paramref name="count"/> models exist and none is queued or importing.</summary>
     protected async Task<IReadOnlyList<TestModel>> WaitForImportsAsync(int count)
     {
