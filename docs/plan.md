@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged (M3 `feature/m3-viewer`) · **Status:** M0 (scaffold), M1 (OCCT WASM build) and M2 (import pipeline) merged; M3 (viewer) in progress; M4–M5 planned · **Last updated:** 2026-10-14
+> **Branches:** one per milestone, squash-merged (M4 `feature/m4-blazor-ui`) · **Status:** M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline) and M3 (viewer) merged; M4 (Blazor UI) next; M5 planned · **Last updated:** 2026-10-14
 
 ---
 
@@ -434,7 +434,7 @@ Scope as decided at the start of M2: a **headless** pipeline driven by a Develop
 
 **Exit met:** every fixture imports in all three browsers (CI) with progress and a working cancel, and a generated 200 MB STEP loads in all three (a 700 MB one fails cleanly with `OutOfMemory`).
 
-### M3 — Viewer (in progress, `feature/m3-viewer`)
+### M3 — Viewer ✅ ([JRB-90/j3d#4](https://github.com/JRB-90/j3d/pull/4), squash-merged as `08a7bcd`)
 
 Scope as decided at the start of M3 (D46–D50):
 
@@ -450,7 +450,7 @@ Scope as decided at the start of M3 (D46–D50):
 - **Tests:** 117 Vitest tests in the viewer (camera maths, the 26 view cube regions, the BREP builder, MTL normalisation, the drop fallback); 26 bUnit tests (`Toolbar`, `Viewport`, `ViewerSession`); E2E `RenderingTests`, `NavigationTests` and `ImportUiTests` (§8), passing locally in Chromium and WebKit.
 - **Manual checklist** (D50, in the built-in browser): import input (`accept`, `multiple`, label); drop overlay and a multi-file glTF drop; STEP colours with BREP edges; translucency (STEP, glTF and MTL); every mesh variant (STL, OBJ+MTL with texture, GLB, multi-file glTF, Draco, meshopt, KTX2) with no warnings; pan, zoom, view cube faces with hover highlight, Home, `F`, Fit all, the projection toggle keeping the visible height exactly; zero frames while idle. Touch was checked only with synthetic pointer events (no touch device).
 
-### M4 — Blazor UI
+### M4 — Blazor UI (next, `feature/m4-blazor-ui`)
 
 - `SceneState`, `ModelList`/`ModelListItem` with lazy tree, delete confirmation dialog, snackbar errors, unsupported-browser notices (no WebGL2; not cross-origin isolated → single-threaded notice in the console only). The `Toolbar` and `ViewerInterop` arrive in M3 (D48); M4 extends the interop with the model callbacks.
 - **Exit:** bUnit coverage of all components and state transitions. The full user flow works by hand.
