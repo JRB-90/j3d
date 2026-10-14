@@ -275,7 +275,7 @@ user picks/drops files (dropped folders expanded recursively, D43)
 - `J3DProgress::Show()` is throttled to about 10 Hz.
 - Single-threaded variant (the only one wired in, D40): `Show()` runs on the worker thread and calls `Module.j3dProgress` through `EM_ASM`, which `postMessage`s to the page. The page's event loop is free, so messages arrive while the worker is busy in WASM. **Verified in M2** in Chromium and WebKit: every phase arrives, in order.
 - `throttleProgress` (in the workers and again per model in the `ModelManager`) always passes a phase change and a phase's end, drops exact repeats, and otherwise limits updates to one per 100 ms, so .NET will see at most 10 Hz per model.
-- Threaded variant (M5, only if S4 wins): `Show()` may run on a pthread, so it would write phase and fraction into a static slot in **shared** WASM memory; the worker posts that `SharedArrayBuffer` and its offset to the page once, and the viewer polls it every animation frame.
+- Threaded variant (not built: S4 didn't reach the bar in M5, D69): `Show()` may run on a pthread, so it would write phase and fraction into a static slot in **shared** WASM memory; the worker posts that `SharedArrayBuffer` and its offset to the page once, and the viewer polls it every animation frame.
 
 **Cancellation and deletion:** `worker.terminate()` in both cases. It's instant and frees the entire WASM heap. A cancelled model's list entry is removed.
 
@@ -500,6 +500,23 @@ Scope as decided at the start of M5 (D61–D72):
 - **About dialog and `THIRD-PARTY-NOTICES.md`** (D66), **README and `docs/development.md`** (D67), and Safari-specific fixes as WebKit finds them.
 - **Exit:** every acceptance criterion in §1 is ticked, as amended by D64.
 
+**Spike outcomes**
+
+- **S4 (threading): single-threaded stays the default** (D69), and the threaded build stays built but unused (D70). `npm run benchmark:threads` (`src/J3D.Occt/scripts/benchmark-threads.mjs`) imports each file with both builds under Node, each import in a fresh process, and reports per-phase medians of 3 runs; CI runs it on dispatch (§9). On the 4-core runner (AMD EPYC 7763, run 38607009009):
+
+  | File | Parts | Triangles | Single | Multi | Whole import | Meshing |
+  |---|---|---|---|---|---|---|
+  | `large-25mb.step` (blocks) | 1,358 | 16k | 7.0 s | 7.7 s | 0.91× | 0.78× |
+  | `large-100mb.step` (blocks) | 5,282 | 63k | 24.9 s | 26.8 s | 0.93× | 0.84× |
+  | `curved-25mb.step` | 184 | 471k | 10.8 s | 9.1 s | 1.18× | 1.86× |
+  | `curved-50mb.step` | 366 | 921k | 20.3 s | 17.0 s | 1.20× | 1.85× |
+
+  - Both builds produce identical triangles, so the threaded build works (it had never been run before M5).
+  - Parsing and transferring are serial in OCCT and about 5 % slower in the threaded build; they're 60–85 % of an import. Meshing runs in parallel over each part's faces: nearly 2× on the curved part's 35 faces, a loss on the block's 6.
+  - Threads cost heap (R3): each pthread's 8 MB stack and allocator state live in the model's heap. That added 285 MB with 20 threads on the development machine, and nothing visible with CI's 4.
+  - Meshing every part in one parallel call might lift the meshing gain, but with parsing and transferring serial, even perfect meshing on 4 cores would leave the curved files at about 1.4× and the blocks at 1.1×, so it isn't worth the nested pthread workers the browser would need (D61).
+  - The development machine (i9-12900HK, 20 threads) was busy with another application during the run, so its times are slower than S2's; its ratios agree: 0.82× for `large-25mb.step`, 0.87× for `curved-25mb.step` (meshing 1.82×).
+
 ---
 
 ## 11. Risks and spikes
@@ -508,7 +525,7 @@ Scope as decided at the start of M5 (D61–D72):
 |---|---|---|
 | R1 | The libcascade toolchain is young (v3.x) | Replicad depends on it too. Pin the image digest. Keep the facade small and toolchain-agnostic so a plain Emscripten OCCT build is a fallback. |
 | R2 | The 4 GB wasm32 ceiling. OCCT's STEP parse can peak at many times the file size. **Measured in S2:** about 7× for many small unique parts, so roughly 550–600 MB of STEP. | Stream input into WASM, free it before meshing, one heap per model, explicit `OutOfMemory` error, including when OCCT's reader hides an allocation failure (§10 M2). |
-| R3 | The **threaded build barely helps our workload**: libcascade reports 1.33× for STEP import + mesh and **1.06× for meshing alone**. Each worker's pthread pool also costs `PTHREAD_POOL_SIZE × 8 MB` of stack, multiplied by one worker per model. | **Decided (D28):** ship both variants, keep COOP/COEP, default to single-threaded unless S4 shows ≥ 1.3× on our fixtures. |
+| R3 | The **threaded build barely helps our workload**: libcascade reports 1.33× for STEP import + mesh and **1.06× for meshing alone**. Each worker's pthread pool also costs `PTHREAD_POOL_SIZE × 8 MB` of stack, multiplied by one worker per model. | **Decided (D28):** ship both variants, keep COOP/COEP, default to single-threaded unless S4 shows ≥ 1.3× on our fixtures. **Measured in S4 (M5):** at best 1.20× on the 4-core runner, so single-threaded stays (D69, D70). |
 | R4 | Safari quirks (WASM exception handling flavour, SAB, WebGL) | WebKit is in the E2E matrix from M0. Since M2, `exceptions: 'wasm'`, posting a compiled module to workers and every fixture are verified in Playwright WebKit. Real Safari is untested until there's a Mac (D42). |
 | R5 | Blazor WASM trimming breaks interop DTO deserialisation in Release | DTOs are simple records with string enums. **Gap found at the start of M5:** E2E ran a Release *build*, and Blazor WebAssembly only trims at publish, so trimmed code was never tested. **Closed in M5 (D65):** CI's E2E runs against the published app, and the trim analyzer fails the build on trim warnings. Its one finding, Razor setting `Router.NotFoundPage` through reflection (IL2111), is suppressed on `Routes`, since the page is in the client assembly, which `TrimMode=partial` doesn't trim. |
 | R6 | Main-thread jank when uploading huge geometry | Spread uploads across frames, render on demand, instancing. |
