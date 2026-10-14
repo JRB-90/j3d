@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged (M5 `feature/m5-hardening`) · **Status:** M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer) and M4 (Blazor UI) merged; M5 (hardening) in progress · **Last updated:** 2026-10-14
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged · **Last updated:** 2026-10-14
 
 ---
 
@@ -32,10 +32,10 @@ The theme is dark throughout. **CAD files never leave the user's machine**: all 
 - [x] A clickable **view cube** (top-right) snaps to 26 standard views (6 faces, 12 edges, 8 corners) with an animated transition, keeping the current zoom. A **Home** button goes to isometric and fits all.
 - [x] The view is **orthographic by default**, with a perspective/orthographic toggle that keeps the framing.
 - [x] Imports scale up to what **wasm32 (4 GB per model worker)** allows. Exceeding it gives a clear "too large" error rather than a crash.
-- [ ] Works in current desktop **Chrome/Edge, Firefox and Safari**: verified by CI's Playwright Chromium, Firefox and WebKit, and by hand in Chrome and Edge on Windows. Real Safari and earlier browser versions are known gaps (D42, D64).
-- [ ] xUnit/bUnit, Vitest (including real OCCT under Node) and Playwright E2E (×3 browsers) all pass in GitHub Actions.
+- [x] Works in current desktop **Chrome/Edge, Firefox and Safari**: verified by CI's Playwright Chromium, Firefox and WebKit, and by hand in Chrome and Edge on Windows. Real Safari and earlier browser versions are known gaps (D42, D64).
+- [x] xUnit/bUnit, Vitest (including real OCCT under Node) and Playwright E2E (×3 browsers) all pass in GitHub Actions.
 
-Reviewed in M5 (D64). Each ticked criterion is covered by the E2E suite (in Chromium, Firefox and WebKit in CI, since M5 against the published app) and the manual checklists of M3–M5; touch only through synthetic pointer events, as no touch device was available. The two open ones wait for this milestone's CI and the owner's Chrome and Edge pass.
+Reviewed in M5 (D64). Each criterion is covered by the E2E suite (in Chromium, Firefox and WebKit in CI, since M5 against the published app), the manual checklists of M3 and M4, and the owner's own testing in Chrome and Edge before M5 merged; touch only through synthetic pointer events, as no touch device was available. The last two were ticked once [JRB-90/j3d#6](https://github.com/JRB-90/j3d/pull/6)'s CI had passed in all three browsers and the owner had tested by hand.
 
 ### Out of scope for iteration 1
 
@@ -494,7 +494,7 @@ Scope as decided at the start of M4 (D52–D59): the model list as described in 
 - **Tests:** 121 Vitest tests in the viewer; 94 client tests (`SceneState`, `ModelTree`, display formatting, the interop JSON, `ModelList`, `ModelListItem`, the `Viewport`'s callbacks); E2E `ModelListTests` (§8), with all 42 E2E tests passing locally in Chromium and WebKit.
 - **Manual checklist** (D58, in the built-in browser): a mixed batch listed in order; each phase of a 25 MB STEP's import (Reading, an indeterminate Parsing, then Transferring, Meshing and Extracting) ending at "191 MB · 16.3k triangles · 1.4k parts"; a long name ellipsised; load warnings in the tooltip; the failure and rejection snackbars; the delete dialog's Cancel and Delete (scene and worker cleared); cancelling a held import; the tree opening a level at a time, with paging on the 1,358-part model; the drawer scrolling a long list.
 
-### M5 — Hardening (in progress, `feature/m5-hardening`)
+### M5 — Hardening ✅ ([JRB-90/j3d#6](https://github.com/JRB-90/j3d/pull/6), squash-merged as `a2602d9`)
 
 Scope as decided at the start of M5 (D61–D72):
 
@@ -552,6 +552,10 @@ Measured in the built-in browser (Chrome 152) on the development machine's integ
 - **CPU copies of GPU buffers:** kept. The large files' buffers are 11 and 66 MB, nowhere near a memory limit.
 - **Tessellation constants:** unchanged. Triangles are cheap after batching (1.77M draw in 7.6 ms), so coarser meshes would save nothing that matters, and at the defaults `curved-part.step` (3.7k triangles on its own) shows smooth fillets, boss and holes; it's the README's screenshot.
 - **List and tree (D71):** no virtualisation; neither crosses the line.
+
+**Not done:** the manual checklist in the built-in browser (D72). The pane was hidden for the whole session, so it couldn't draw or take screenshots; the owner tested by hand in Chrome and Edge instead. The orbit frame rate was never measured with real animation frames for the same reason: the figures above are a draw plus a GPU read-back.
+
+**Exit met:** every acceptance criterion in §1 is ticked, as amended by D64. Iteration 1 is complete.
 
 ---
 
