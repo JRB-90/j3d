@@ -200,7 +200,7 @@ Vitest specs sit next to the TypeScript sources (`src/J3D.Viewer/src/**/*.test.t
 | 3D | three + camera-controls | 0.186 / 3.1 |
 | Browser code | TypeScript + Vite + Vitest | 7.0 / 8.3 / 5.0 |
 | .NET tests | xUnit v3 (MTP v2), bUnit, Playwright for .NET | 4.0 / 2.11 / 1.63 |
-| CI | GitHub Actions (ubuntu-latest; Docker for WASM builds) | |
+| CI | GitHub Actions (`ubuntu-24.04`, pinned by D68; Docker for WASM builds) | |
 
 Node ≥ 22 is required (libcascade toolchain, Vite 8).
 

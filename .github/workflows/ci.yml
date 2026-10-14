@@ -36,7 +36,9 @@ env:
 jobs:
   build-test:
     name: Build & unit tests
-    runs-on: ubuntu-latest
+    # Pinned (D68): ubuntu-latest moves to 26.04 from 2026-10-19, and headed Firefox under Xvfb
+    # (D47, D51) is known to work on 24.04. Moving on is a deliberate change.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -89,7 +91,7 @@ jobs:
   e2e:
     name: E2E (${{ matrix.browser }})
     needs: build-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
