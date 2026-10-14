@@ -3,6 +3,7 @@ import { filesFromDataTransfer, filesFromInput } from './import/batch-files';
 import { ModelManager } from './import/model-manager';
 import { createRunners } from './import/runners';
 import type { DotNetObjectReference } from './interop';
+import { forwardModelEvents } from './model-events';
 import { createTestHookControls, installTestHook, isTestHookEnabled } from './test-hook';
 import type { Projection } from './view/camera-math';
 import { installDropTarget } from './view/drop-target';
@@ -34,12 +35,17 @@ export interface ViewerHandle {
 
 /**
  * Entry point called by the Blazor <c>Viewport</c> component: the Three.js view of every loaded
- * model (docs/plan.md §6.3) over the import pipeline (§6.2). Without WebGL2 the pipeline still runs
- * but nothing is drawn; the component tells the user. In the Development environment a test hook
- * (`window.__j3dTest`) drives and observes imports and the camera.
+ * model (docs/plan.md §6.3) over the import pipeline (§6.2), whose model events go to .NET
+ * (§6.4). Without WebGL2 the pipeline still runs but nothing is drawn; the component tells the
+ * user. In the Development environment a test hook (`window.__j3dTest`) drives and observes
+ * imports and the camera.
  */
 export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): ViewerHandle {
   const capabilities = detectCapabilities();
+  if (!capabilities.crossOriginIsolated) {
+    // Only the multi-threaded OCCT build (not yet wired in, D40) needs it; imports still work.
+    console.info("J3D: the page isn't cross-origin isolated, so OCCT can only run single-threaded.");
+  }
   const view = capabilities.webGl2 ? new Viewer(host) : undefined;
   const testControls = isTestHookEnabled() ? createTestHookControls() : undefined;
   const models = new ModelManager(
@@ -52,6 +58,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   const unsubscribeView = view
     ? models.subscribe({ loaded: (model) => view.add(model), removed: (id) => view.remove(id) })
     : undefined;
+  const unsubscribeDotnet = forwardModelEvents(models, dotnet);
 
   const inputs = new Map<HTMLInputElement, () => void>();
   const attachFileInput = (input: HTMLInputElement): (() => void) => {
@@ -102,6 +109,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
         detach();
       }
       unsubscribeView?.();
+      unsubscribeDotnet();
       models.dispose();
       view?.dispose();
       delete host.dataset['viewerReady'];
