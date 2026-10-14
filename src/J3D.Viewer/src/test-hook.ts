@@ -59,6 +59,8 @@ export interface TestHook {
   hoveredRegion(): string | null;
   /** Where a world point is on screen (client coordinates), or null without WebGL2. */
   project(point: [number, number, number]): { x: number; y: number } | null;
+  /** Whether the browser has taken the renderer's WebGL context away (null without WebGL2). */
+  contextLost(): boolean | null;
 }
 
 export interface TestHookControls {
@@ -123,6 +125,7 @@ export function installTestHook(
     },
     hoveredRegion: () => viewer?.hoveredRegion?.id ?? null,
     project: (point) => viewer?.projectToClient(point) ?? null,
+    contextLost: () => viewer?.renderer.getContext().isContextLost() ?? null,
   };
   controls.hook = hook;
   window.__j3dTest = hook;

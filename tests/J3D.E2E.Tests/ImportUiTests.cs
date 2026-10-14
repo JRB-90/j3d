@@ -20,7 +20,7 @@ public sealed class ImportUiTests(J3DAppFixture app) : ViewerPageTest(app)
         Assert.All(models, m => Assert.Equal("loaded", m.Status));
         await WaitForCameraRestAsync();
         var pixel = Assert.Single(await SamplePixelsAsync(await ProjectAsync(20, 15, 20)));
-        Assert.True(pixel.Brightness > 70, $"the model should be drawn: {pixel}");
+        Assert.True(pixel.Brightness > 70, $"the model should be drawn: {pixel}; {await RenderingDiagnosticsAsync()}");
         AssertNoConsoleErrors();
     }
 

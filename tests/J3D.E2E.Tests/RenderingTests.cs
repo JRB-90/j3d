@@ -18,9 +18,10 @@ public sealed class RenderingTests(J3DAppFixture app) : ViewerPageTest(app)
         var front = await ProjectAsync(20, 0, 10);
         var corner = await ViewportCornerAsync();
         var pixels = await SamplePixelsAsync(top, front, corner);
+        var diagnostics = await RenderingDiagnosticsAsync();
 
-        Assert.True(pixels[0].R > pixels[0].G + 80 && pixels[0].R > pixels[0].B + 80, $"top face should be red: {pixels[0]}");
-        Assert.True(pixels[1].B > pixels[1].R + 80 && pixels[1].B > pixels[1].G + 40, $"front face should be blue: {pixels[1]}");
+        Assert.True(pixels[0].R > pixels[0].G + 80 && pixels[0].R > pixels[0].B + 80, $"top face should be red: {pixels[0]}; {diagnostics}");
+        Assert.True(pixels[1].B > pixels[1].R + 80 && pixels[1].B > pixels[1].G + 40, $"front face should be blue: {pixels[1]}; {diagnostics}");
         Assert.True(pixels[2].Brightness < 70, $"the background should show at the corner: {pixels[2]}");
         AssertNoConsoleErrors();
     }
@@ -38,8 +39,9 @@ public sealed class RenderingTests(J3DAppFixture app) : ViewerPageTest(app)
         var coverOnly = await ProjectAsync(3, 0, 3);
         var background = await ViewportCornerAsync();
         var pixels = await SamplePixelsAsync(throughCover, coverOnly, background);
+        var diagnostics = await RenderingDiagnosticsAsync();
 
-        Assert.True(pixels[0].G > pixels[0].R + 25 && pixels[0].G > pixels[0].B + 15, $"the green core should show through: {pixels[0]}");
+        Assert.True(pixels[0].G > pixels[0].R + 25 && pixels[0].G > pixels[0].B + 15, $"the green core should show through: {pixels[0]}; {diagnostics}");
         Assert.True(pixels[1].Brightness > pixels[2].Brightness + 20, $"the cover should lighten the background: {pixels[1]} vs {pixels[2]}");
         Assert.True(pixels[1].Brightness < 200, $"the cover should not be opaque: {pixels[1]}");
     }

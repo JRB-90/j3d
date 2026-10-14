@@ -14,6 +14,7 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     protected static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly List<string> _consoleErrors = [];
+    private readonly List<string> _consoleWarnings = [];
 
     public override async ValueTask InitializeAsync()
     {
@@ -23,6 +24,10 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
             if (message.Type == "error")
             {
                 _consoleErrors.Add(message.Text);
+            }
+            else if (message.Type == "warning")
+            {
+                _consoleWarnings.Add(message.Text);
             }
         };
         Page.PageError += (_, error) => _consoleErrors.Add(error);
@@ -63,6 +68,14 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
 
     protected void AssertNoConsoleErrors() => Assert.Empty(_consoleErrors);
 
+    /// <summary>What a failed pixel check should report: whether the canvas was drawing at all.</summary>
+    protected async Task<string> RenderingDiagnosticsAsync()
+    {
+        var state = await Page.EvaluateAsync<string>(
+            "() => JSON.stringify({ frames: window.__j3dTest.frames(), contextLost: window.__j3dTest.contextLost(), camera: window.__j3dTest.camera(), size: [innerWidth, innerHeight, devicePixelRatio] })");
+        return $"{state}; console warnings: [{string.Join(" | ", _consoleWarnings.TakeLast(5))}]";
+    }
+
     /// <summary>The viewer's camera (src/J3D.Viewer/src/view/viewer.ts, CameraState).</summary>
     protected async Task<CameraState> CameraAsync() => await EvaluateAsync<CameraState>("() => window.__j3dTest.camera()");
 
@@ -100,6 +113,8 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     /// </summary>
     protected async Task<IReadOnlyList<Rgb>> SamplePixelsAsync(params ScreenPoint[] points)
     {
+        // Two frames, so the compositor has presented the canvas's last drawing.
+        await Page.EvaluateAsync("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
         var png = await Page.ScreenshotAsync(new PageScreenshotOptions { Scale = ScreenshotScale.Css, Type = ScreenshotType.Png });
         var samples = await Page.EvaluateAsync<int[][]>(
             """
