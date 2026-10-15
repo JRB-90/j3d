@@ -66,7 +66,7 @@ Also: zoom toward the cursor (D74). Deployment stays local-only (D75). **CAD fil
 - [ ] A floating panel at the viewport's bottom-left shows the selected part's name and path, and is hidden when nothing is selected (D87).
 - [ ] The wheel and pinch zoom toward the pointer, in both projections (D74, amends D19).
 - [ ] Ctrl+Z and Ctrl+Y, and Undo and Redo buttons, undo and redo visibility changes (D84; measurements join in M7, delete in M8).
-- [ ] Iteration 1's leftovers are done: M5's manual checklist in the built-in browser with screenshots, the orbit frame rate with real animation frames, and a CI dispatch with `large_fixtures=200,curved-100` (D88).
+- [x] Iteration 1's leftovers are done: M5's manual checklist in the built-in browser with screenshots, the orbit frame rate with real animation frames, and a CI dispatch with `large_fixtures=200,curved-100` (D88).
 
 **M7: measurement**
 
@@ -636,7 +636,7 @@ Measured in the built-in browser (Chrome 152) on the development machine's integ
 - **Tessellation constants:** unchanged. Triangles are cheap after batching (1.77M draw in 7.6 ms), so coarser meshes would save nothing that matters, and at the defaults `curved-part.step` (3.7k triangles on its own) shows smooth fillets, boss and holes; it's the README's screenshot.
 - **List and tree (D71):** no virtualisation; neither crosses the line.
 
-**Not done:** the manual checklist in the built-in browser (D72). The pane was hidden for the whole session, so it couldn't draw or take screenshots; the owner tested by hand in Chrome and Edge instead. The orbit frame rate was never measured with real animation frames for the same reason: the figures above are a draw plus a GPU read-back.
+**Not done:** the manual checklist in the built-in browser (D72). The pane was hidden for the whole session, so it couldn't draw or take screenshots; the owner tested by hand in Chrome and Edge instead. The orbit frame rate was never measured with real animation frames for the same reason: the figures above are a draw plus a GPU read-back. **All three were done at the start of M6 (D100);** see M6's leftovers below.
 
 **Exit met:** every iteration 1 acceptance criterion in §1 is ticked, as amended by D64. Iteration 1 is complete.
 
@@ -648,7 +648,10 @@ Planned on 2026-10-15 (D73–D92, five milestones by D85). Each starts with its 
 
 Branch `feature/m6-selection-visibility`, from `main` after [JRB-90/j3d#7](https://github.com/JRB-90/j3d/pull/7) merged as `cc1ceba` (D91).
 
-- **First, iteration 1's leftovers (D88):** M5's manual checklist in the built-in browser with screenshots (the Claude window has to be in front, or animation frames don't run), the orbit frame rate with real animation frames, and a CI dispatch with `large_fixtures=200,curved-100`.
+- **First, iteration 1's leftovers (D88):** M5's manual checklist in the built-in browser with screenshots (the Claude window has to be in front, or animation frames don't run), the orbit frame rate with real animation frames, and a CI dispatch with `large_fixtures=200,curved-100`. **Done on 2026-10-15**, before any M6 code, on `main` as merged (`cc1ceba`):
+  - **Checklist** (built-in browser, Chrome 152, pane visible, 62 animation frames a second): a 16-file batch through the real Import input (every OCCT fixture, STL, Draco/KTX2/meshopt GLB, OBJ+MTL with texture, multi-file glTF) loaded with no warnings; colours, translucency, textures and BREP edges drawn; the first model framed only; Fit all, the view cube's Top with an animated transition, Home, the perspective toggle, a right-drag turntable orbit (azimuth changed, polar unchanged) and wheel dolly; the About dialog (components, licences, build commit); the delete dialog, after which the model's worker had ended; the assembly tree's first level. No server errors and no console errors. The one snackbar was expected: two different `checker.png` files in one selection, and picked files carry no folder, so the second was reported unused.
+  - **Orbit with real animation frames** (right-drag, one step per frame, 3 runs of 3 s each, Intel Iris Xe): `large-200mb.step` (10,437 parts, loaded in 28.9 s, 2 draw calls) and `curved-100mb.step` (1.77M triangles, loaded in 24.1 s, 2 draw calls) both held **60 fps**, every frame drawn, median frame 16.7 ms and worst 17.2 ms. So M5's 33 ms (a draw plus a GPU read-back with the pane hidden) overstated the real cost: orbiting is vsync-bound on this GPU.
+  - **CI** with `large_fixtures=200,curved-100` (run 38711687468): build, unit and E2E in Chromium, Firefox and WebKit all passed.
 - **Viewer:** picking a part (raycast → model and instance → tree node, skipping hidden instances; a click that drags doesn't select), hover pre-highlight at one raycast per animation frame at most (D89), the selection highlight (accent tint and edges) per instance in `BatchedMesh` and `InstancedMesh` and on mesh models' nodes (D81), visibility per instance (`setVisibleAt` and the instanced path's equivalent), Fit all over visible parts (D78), and zoom-to-cursor (D74). Highlighting is an overlay layer (D93), and hidden parts' edges drop out of the merged `LineSegments` through a per-vertex visibility attribute (D94).
 - **Interop:** selection and visibility in both directions, by model id and tree node.
 - **Blazor:** `SceneState` gains selection and visibility; eye toggles on list items and tree nodes; the tree follows a selection made in 3D through its lazy levels and pages (D60); Hide, Isolate, Show all, Undo and Redo in the toolbar, with their keys; the floating panel (D87) with the selected part's name and path; the undo history, whose first commands are visibility changes (D84).
