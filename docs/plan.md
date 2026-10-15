@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): M6 (selection and visibility), M7 (measurement), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-15
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) in progress** (D93–D100), M7 (measurement), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-15
 
 ---
 
@@ -100,7 +100,7 @@ Users and auth, deployment (D75), sectioning, exploded views, mobile/tablet layo
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -196,6 +196,14 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D90 | Order-independent transparency | **In M10**: weighted blended OIT (two render targets and a composite pass), checked against the nested-translucency fixture | Materials will have settled by then (selection tint, measurement overlays). Resolves R10's accepted artefacts. |
 | D91 | Starting M6 | **#7 merged first** ([JRB-90/j3d#7](https://github.com/JRB-90/j3d/pull/7), the iteration 1 close-out); M6 then branches from `main` as `feature/m6-selection-visibility`, with this plan as its first commit | |
 | D92 | Iteration 2 process | **As M3–M5**: each milestone starts with its own short question round, then Claude works straight through, stopping only for contradictions; the manual checklist in the built-in browser with screenshots; a draft PR; the owner tests by hand and says merge | |
+| D93 | Highlight (M6) | **An overlay layer**: selected and hovered placements are drawn again on top with an accent material and accent edges, batched, so a large selection is still a few draw calls | Works the same for batched, instanced and mesh models, and leaves the cached materials (§6.3) and the batching alone. Per-instance colour (`setColorAt`) multiplies the cached part colour, and an outline pass costs full-screen passes every frame. |
+| D94 | Hiding merged edges (M6) | **A per-vertex visibility attribute** on each model's merged `LineSegments`, with a small shader patch that drops hidden segments; each placement's segment range is remembered, so hiding updates only its range | Keeps D63's draw-call win. Rebuilding the index on every change, or going back to edges per part, weren't chosen. |
+| D95 | Where state lives (M6) | **.NET owns it, the viewer applies it**: `SceneState` holds each model's selected and hidden tree nodes and the undo history; commands go to the viewer through `ViewerInterop`, and picks come back as (model id, node). Hover stays in the viewer | Matches §3's split: Blazor owns app state, TypeScript owns everything 3D. |
+| D96 | Tree (M6) | **Tri-state eyes and auto-reveal**: an eye is open, closed or half (some descendants hidden); hidden nodes are dimmed and selected ones highlighted; Ctrl+click multi-selects in the tree too. A part picked in 3D opens its model's tree, expands its ancestors, loads pages (D60) up to it and scrolls it into view | |
+| D97 | Toolbar (M6) | **Grouped icon buttons** after Import, Fit all and Projection: Hide, Isolate and Show all (disabled when they'd do nothing), then Undo and Redo, each tooltip naming its key | |
+| D98 | Hidden and selected (M6) | **Hidden parts leave the selection**, however they were hidden, so the selection is always what's visible; undoing the hide doesn't select them again | |
+| D99 | Keys (M6) | **As `F`**: H, I, Shift+H, Esc, Ctrl+Z and Ctrl+Y work anywhere on the page except while focus is in a text input, where Ctrl+Z and Ctrl+Y stay the input's own | |
+| D100 | M5 leftovers (M6) | **First, before any M6 code** (D88): the built-in browser checklist and the orbit frame rate with real animation frames while the owner brings the Claude window forward, and a CI dispatch with `large_fixtures=200,curved-100` | |
 
 ---
 
@@ -636,12 +644,12 @@ Measured in the built-in browser (Chrome 152) on the development machine's integ
 
 Planned on 2026-10-15 (D73–D92, five milestones by D85). Each starts with its own short question round (D92), so a scope below can still change; what's decided then is recorded in §2 and here.
 
-### M6 — Selection and visibility (planned)
+### M6 — Selection and visibility (in progress)
 
 Branch `feature/m6-selection-visibility`, from `main` after [JRB-90/j3d#7](https://github.com/JRB-90/j3d/pull/7) merged as `cc1ceba` (D91).
 
 - **First, iteration 1's leftovers (D88):** M5's manual checklist in the built-in browser with screenshots (the Claude window has to be in front, or animation frames don't run), the orbit frame rate with real animation frames, and a CI dispatch with `large_fixtures=200,curved-100`.
-- **Viewer:** picking a part (raycast → model and instance → tree node, skipping hidden instances; a click that drags doesn't select), hover pre-highlight at one raycast per animation frame at most (D89), the selection highlight (accent tint and edges) per instance in `BatchedMesh` and `InstancedMesh` and on mesh models' nodes (D81), visibility per instance (`setVisibleAt` and the instanced path's equivalent), Fit all over visible parts (D78), and zoom-to-cursor (D74). Batched parts' edges are merged into one `LineSegments` per model (§6.3), so hiding or highlighting one part's edges needs a design of its own, settled at M6's start.
+- **Viewer:** picking a part (raycast → model and instance → tree node, skipping hidden instances; a click that drags doesn't select), hover pre-highlight at one raycast per animation frame at most (D89), the selection highlight (accent tint and edges) per instance in `BatchedMesh` and `InstancedMesh` and on mesh models' nodes (D81), visibility per instance (`setVisibleAt` and the instanced path's equivalent), Fit all over visible parts (D78), and zoom-to-cursor (D74). Highlighting is an overlay layer (D93), and hidden parts' edges drop out of the merged `LineSegments` through a per-vertex visibility attribute (D94).
 - **Interop:** selection and visibility in both directions, by model id and tree node.
 - **Blazor:** `SceneState` gains selection and visibility; eye toggles on list items and tree nodes; the tree follows a selection made in 3D through its lazy levels and pages (D60); Hide, Isolate, Show all, Undo and Redo in the toolbar, with their keys; the floating panel (D87) with the selected part's name and path; the undo history, whose first commands are visibility changes (D84).
 - **Measured:** hover and click picking on the 10,437-part file; three-mesh-bvh only past ~200 ms (D89).
