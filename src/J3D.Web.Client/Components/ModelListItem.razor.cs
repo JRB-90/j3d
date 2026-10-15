@@ -3,6 +3,7 @@ using J3D.Web.Client.Interop;
 using J3D.Web.Client.Models;
 using J3D.Web.Client.State;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 
 namespace J3D.Web.Client.Components;
@@ -11,8 +12,11 @@ namespace J3D.Web.Client.Components;
 /// One model in the list (decision D52): its name, format and kind, and its action; while importing,
 /// the phase and a bar for it (D55); once loaded, memory, triangles and parts, any load warnings,
 /// and its tree, collapsed until asked for and loaded a level at a time (D53); if it failed, why.
+/// Since M6 the model and each tree node have an eye (open, closed or half, D96), clicking a node
+/// selects its parts (Ctrl+click adds or removes, D77), and a part picked in 3D opens the tree down to
+/// it and scrolls it into view.
 /// </summary>
-public sealed partial class ModelListItem
+public sealed partial class ModelListItem(SceneState scene, ViewerSession session) : IDisposable
 {
     /// <summary>
     /// Nodes shown per level before a "Show more" row. MudTreeView renders every node it's given:
@@ -38,12 +42,20 @@ public sealed partial class ModelListItem
     private readonly Dictionary<int, List<TreeItemData<int?>>> _levels = [];
     private bool _treeOpen;
 
+    /// <summary>The tree items made so far, by node, so a reveal can expand them.</summary>
+    private readonly Dictionary<int, TreeItemData<int?>> _items = [];
+
+    /// <summary>A node to scroll into view once the tree has rendered it.</summary>
+    private int? _pendingScroll;
+
     [Parameter, EditorRequired]
     public required ModelEntry Model { get; set; }
 
     /// <summary>Cancel, delete or dismiss: the list decides whether to confirm first.</summary>
     [Parameter]
     public EventCallback<ModelEntry> OnRemove { get; set; }
+
+    private SceneState Scene => scene;
 
     private string StatusName => Model.Status.ToString().ToLowerInvariant();
 
@@ -67,18 +79,104 @@ public sealed partial class ModelListItem
         DisplayFormat.Counted(info.Stats.Triangles, "triangle"),
         DisplayFormat.Counted(info.Stats.Instances, "part"));
 
+    protected override void OnInitialized() => scene.RevealRequested += OnRevealRequested;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendingScroll is { } node)
+        {
+            _pendingScroll = null;
+            await session.ScrollIntoViewAsync($"[data-tree-node=\"{NodeKey(node)}\"]");
+        }
+    }
+
+    public void Dispose() => scene.RevealRequested -= OnRevealRequested;
+
     private Task RemoveAsync() => OnRemove.InvokeAsync(Model);
+
+    private void ToggleModelVisibility() => scene.ToggleModelVisibility(Model.Id);
+
+    private void SelectNode(int node, MouseEventArgs args) => scene.SelectNode(Model.Id, node, args.CtrlKey || args.MetaKey);
+
+    private string NodeKey(int node) => $"{Model.Id.Value}:{node.ToString(CultureInfo.InvariantCulture)}";
+
+    private string NodeClass(int node, PartVisibility visibility) => string.Join(
+        ' ',
+        "j3d-tree-node",
+        Model.IsSelected(node) ? "j3d-tree-node--selected" : "",
+        visibility == PartVisibility.Hidden ? "j3d-tree-node--hidden" : "").TrimEnd();
+
+    private static string EyeIcon(PartVisibility visibility) =>
+        visibility == PartVisibility.Hidden ? Icons.Material.Outlined.VisibilityOff : Icons.Material.Outlined.Visibility;
+
+    /// <summary>The half eye: an open eye, dimmed, when only some parts are hidden.</summary>
+    private static string EyeClass(PartVisibility visibility) =>
+        visibility == PartVisibility.Mixed ? "j3d-eye j3d-eye--mixed" : "j3d-eye";
+
+    private static string EyeTitle(PartVisibility visibility) => visibility switch
+    {
+        PartVisibility.Hidden => "Show",
+        PartVisibility.Mixed => "Partly hidden: hide all",
+        _ => "Hide",
+    };
 
     /// <summary>Opening the tree starts it collapsed again: the tree view is new each time.</summary>
     private void ToggleTree()
     {
         _treeOpen = !_treeOpen;
         _levels.Clear();
+        _items.Clear();
         _roots = null;
-        if (_treeOpen && Model.Info is { } info)
+        if (_treeOpen && Model.Tree is { } tree)
         {
-            _tree ??= new ModelTree(info.Tree);
+            _tree = tree;
             _roots = Level(RootLevel);
+        }
+    }
+
+    /// <summary>A part picked in 3D (D96): open the tree, expand its ancestors, page to it, then scroll to it.</summary>
+    private void OnRevealRequested(ModelId id, int node)
+    {
+        if (id != Model.Id || Model.Tree is not { } tree || !tree.Contains(node))
+        {
+            return;
+        }
+
+        if (!_treeOpen)
+        {
+            ToggleTree();
+        }
+
+        var parent = RootLevel;
+        foreach (var ancestor in tree.AncestorsOf(node))
+        {
+            EnsureShown(parent, ancestor);
+            var item = _items[ancestor];
+            item.Children = Level(ancestor);
+            item.Expanded = true;
+            parent = ancestor;
+        }
+
+        EnsureShown(parent, node);
+        _pendingScroll = node;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Appends pages to a level until it shows <paramref name="node"/>.</summary>
+    private void EnsureShown(int parent, int node)
+    {
+        var siblings = parent == RootLevel ? _tree!.Roots : _tree!.ChildrenOf(parent);
+        var position = 0;
+        while (position < siblings.Count && siblings[position] != node)
+        {
+            position++;
+        }
+
+        var level = Level(parent);
+        while (level.Count(static item => item.Value >= 0) <= position && level.Count > 0 && IsShowMore(level[^1]))
+        {
+            level.RemoveAt(level.Count - 1);
+            AppendPage(parent, level);
         }
     }
 
@@ -135,12 +233,14 @@ public sealed partial class ModelListItem
     private TreeItemData<int?> ToItem(int index)
     {
         var node = _tree![index];
-        return new TreeItemData<int?>
+        var item = new TreeItemData<int?>
         {
             Value = index,
             Text = string.IsNullOrWhiteSpace(node.Name) ? "(unnamed)" : node.Name,
             Icon = node.IsPart ? Icons.Material.Outlined.Category : Icons.Material.Outlined.AccountTree,
             Expandable = _tree.HasChildren(index),
         };
+        _items[index] = item;
+        return item;
     }
 }

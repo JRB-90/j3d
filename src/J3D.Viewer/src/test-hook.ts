@@ -5,7 +5,7 @@ import type { ModelEntry, ModelManager } from './import/model-manager';
 import { liveWorkers } from './import/runner';
 import type { Bounds, ImportError, ImportPhase, ModelStats, TreeNode } from './import/types';
 import { findRegion } from './view/view-regions';
-import type { CameraState, RenderStats, Viewer } from './view/viewer';
+import type { CameraState, PartRef, RenderStats, Viewer } from './view/viewer';
 
 /** Present only when the host renders `<meta name="j3d-test-hook">` (the Development environment). */
 export function isTestHookEnabled(): boolean {
@@ -69,6 +69,21 @@ export interface TestHook {
   renderStats(): RenderStats | null;
   /** Ends any camera transition at once and draws, where animation frames don't run (a hidden page). */
   settleCamera(): void;
+  /** The visible part under a client point, or null (M6). */
+  partAt(x: number, y: number): PartRef | null;
+  /** A client point where a part can be clicked, or null when it's hidden or covered (M6). */
+  partPoint(id: string, node: number): { x: number; y: number } | null;
+  /** The hovered part, or null. */
+  hoveredPart(): PartRef | null;
+  /** What the viewer has applied to a model: its parts, hidden parts and highlighted selection. */
+  partState(id: string): { parts: number[]; hidden: number[]; selected: number[] } | null;
+  /** Pick timings since the last call (D89): the last pick, how many, and the longest. */
+  pickTimes(): { milliseconds: number; count: number; longest: number } | null;
+  /**
+   * Applies hidden and selected parts straight to the viewer and returns how long that took in ms,
+   * for measuring large selections (D89). .NET doesn't hear of it, so restore the state after.
+   */
+  timePartState(id: string, hidden: number[], selected: number[]): number | null;
 }
 
 export interface TestHookControls {
@@ -138,6 +153,17 @@ export function installTestHook(
     canvasPixels: (points) => viewer?.pixelsAt(points).map((pixel) => pixel ?? null) ?? points.map(() => null),
     renderStats: () => viewer?.renderStats ?? null,
     settleCamera: () => viewer?.settleCamera(),
+    partAt: (x, y) => viewer?.pickPart(x, y) ?? null,
+    partPoint: (id, node) => viewer?.partPoint(id, node) ?? null,
+    hoveredPart: () => viewer?.hoveredPart ?? null,
+    partState: (id) => viewer?.partState(id) ?? null,
+    pickTimes: () => viewer?.takePickTimes() ?? null,
+    timePartState: (id, hidden, selected) => {
+      if (!viewer) return null;
+      const start = performance.now();
+      viewer.setPartState(id, hidden, selected);
+      return performance.now() - start;
+    },
   };
   controls.hook = hook;
   window.__j3dTest = hook;

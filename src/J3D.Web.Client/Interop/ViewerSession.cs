@@ -60,6 +60,15 @@ public sealed class ViewerSession
         }
     }
 
+    /// <summary>Scrolls an element into view, e.g. a tree node a 3D pick revealed (D96).</summary>
+    public async Task ScrollIntoViewAsync(string selector)
+    {
+        if (_viewer is not null)
+        {
+            await _viewer.ScrollIntoViewAsync(selector);
+        }
+    }
+
     internal void Attach(ViewerInterop viewer, ViewerCapabilities capabilities)
     {
         _viewer = viewer;

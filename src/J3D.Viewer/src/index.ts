@@ -30,6 +30,8 @@ export interface ViewerHandle {
   fitAll(): void;
   /** Switches the camera, keeping the framing. */
   setProjection(projection: Projection): void;
+  /** Applies a model's hidden and selected part nodes, which .NET owns (D95). */
+  setPartState(id: string, hidden: number[], selected: number[]): void;
   dispose(): void;
 }
 
@@ -46,7 +48,13 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     // Only the multi-threaded OCCT build (not yet wired in, D40) needs it; imports still work.
     console.info("J3D: the page isn't cross-origin isolated, so OCCT can only run single-threaded.");
   }
-  const view = capabilities.webGl2 ? new Viewer(host) : undefined;
+  const view = capabilities.webGl2
+    ? new Viewer(host, {
+        // Picks and key commands go to .NET, which owns selection, visibility and undo (D95).
+        onPick: (part, additive) => call(dotnet, 'OnPartPicked', part?.id ?? null, part?.node ?? -1, additive),
+        onCommand: (command) => call(dotnet, 'OnViewerCommand', command),
+      })
+    : undefined;
   const testControls = isTestHookEnabled() ? createTestHookControls() : undefined;
   const models = new ModelManager(
     createRunners({
@@ -102,6 +110,9 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     setProjection(projection) {
       view?.setProjection(projection);
     },
+    setPartState(id, hidden, selected) {
+      view?.setPartState(id, hidden, selected);
+    },
     dispose() {
       removeTestHook?.();
       removeDropTarget();
@@ -115,6 +126,15 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       delete host.dataset['viewerReady'];
     },
   };
+}
+
+/** Scrolls an element into view if it isn't, e.g. a tree node a 3D pick revealed (D96). */
+export function scrollIntoView(selector: string): void {
+  document.querySelector(selector)?.scrollIntoView({ block: 'nearest' });
+}
+
+function call(dotnet: DotNetObjectReference, method: string, ...args: unknown[]): void {
+  dotnet.invokeMethodAsync(method, ...args).catch((error: unknown) => console.error(`J3D: .NET's ${method} failed.`, error));
 }
 
 export function detectCapabilities(): ViewerCapabilities {

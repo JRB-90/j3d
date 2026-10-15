@@ -34,6 +34,14 @@ body {
         margin-left: 12px;
     }
 
+    .j3d-appbar .j3d-toolbar .j3d-toolbar-group {
+        display: flex;
+        align-items: center;
+        margin-left: 12px;
+        padding-left: 8px;
+        border-left: 1px solid var(--mud-palette-divider);
+    }
+
 /* Hidden but still focusable and clickable through its label (unlike display: none in some browsers). */
 .j3d-visually-hidden {
     position: absolute;

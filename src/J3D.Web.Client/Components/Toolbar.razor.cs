@@ -1,13 +1,15 @@
 using J3D.Web.Client.Interop;
+using J3D.Web.Client.State;
 using Microsoft.AspNetCore.Components;
 
 namespace J3D.Web.Client.Components;
 
 /// <summary>
-/// Import, Fit all and the projection toggle, in the app bar (decision D48). Enabled once the
-/// viewer is running with WebGL2.
+/// Import, Fit all and the projection toggle, in the app bar (decision D48), then Hide, Isolate,
+/// Show all, Undo and Redo (D97), each enabled when it would do something. Enabled once the viewer
+/// is running with WebGL2.
 /// </summary>
-public sealed partial class Toolbar(ViewerSession session) : IDisposable
+public sealed partial class Toolbar(ViewerSession session, SceneState scene) : IDisposable
 {
     internal const string InputId = "j3d-import-input";
 
@@ -16,7 +18,13 @@ public sealed partial class Toolbar(ViewerSession session) : IDisposable
 
     private ViewerSession Session => session;
 
-    protected override void OnInitialized() => session.Changed += OnSessionChanged;
+    private SceneState Scene => scene;
+
+    protected override void OnInitialized()
+    {
+        session.Changed += OnSessionChanged;
+        scene.Changed += OnSceneChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -27,7 +35,13 @@ public sealed partial class Toolbar(ViewerSession session) : IDisposable
         }
     }
 
-    public void Dispose() => session.Changed -= OnSessionChanged;
+    public void Dispose()
+    {
+        session.Changed -= OnSessionChanged;
+        scene.Changed -= OnSceneChanged;
+    }
+
+    private void OnSceneChanged() => _ = InvokeAsync(StateHasChanged);
 
     private void OnSessionChanged()
     {

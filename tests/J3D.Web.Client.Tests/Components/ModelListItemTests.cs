@@ -109,10 +109,10 @@ public sealed class ModelListItemTests : BunitTestBase
         cut.Find("[data-testid=model-tree-toggle]").Click();
         Assert.Equal(["Bracket"], NodeTexts(cut));
 
-        ClickNode(cut, "Bracket");
+        ExpandNode(cut, "Bracket");
         cut.WaitForAssertion(() => Assert.Equal(["Bracket", "Plate (bottom)", "Top"], NodeTexts(cut)));
 
-        ClickNode(cut, "Top");
+        ExpandNode(cut, "Top");
         cut.WaitForAssertion(() => Assert.Equal(["Bracket", "Plate (bottom)", "Top", "Plate (top)", "(unnamed)"], NodeTexts(cut)));
         Assert.Empty(cut.FindAll(".mud-treeview-item-selected"));
 
@@ -144,7 +144,7 @@ public sealed class ModelListItemTests : BunitTestBase
         Assert.Equal("Loose 249", NodeTexts(cut)[^1]);
 
         // A lazily loaded level pages the same way.
-        ClickNode(cut, "Group");
+        ExpandNode(cut, "Group");
         cut.WaitForAssertion(() => Assert.Equal(350, NodeCount(cut)));
         Assert.Equal("Show 50 more", MoreText(cut));
         ClickMore(cut);
@@ -176,6 +176,10 @@ public sealed class ModelListItemTests : BunitTestBase
     private static void ClickMore(IRenderedComponent<ModelListItem> cut) =>
         cut.Find("[data-testid=model-tree-more] .mud-treeview-item-content").Click();
 
-    private static void ClickNode(IRenderedComponent<ModelListItem> cut, string text) =>
-        cut.FindAll("[data-testid=model-tree] .mud-treeview-item-content").Single(node => node.TextContent.Trim() == text).Click();
+    /// <summary>Clicking a node's text selects it (M6), so expanding takes its arrow.</summary>
+    private static void ExpandNode(IRenderedComponent<ModelListItem> cut, string text) =>
+        cut.FindAll("[data-testid=model-tree] .mud-treeview-item-content")
+            .Single(node => node.TextContent.Trim() == text)
+            .QuerySelector(".mud-treeview-item-arrow button")!
+            .Click();
 }

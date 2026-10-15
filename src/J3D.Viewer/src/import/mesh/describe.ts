@@ -11,6 +11,7 @@ export function describeMeshModel(root: Object3D, treeRoot: Object3D, rootName: 
   const geometries = new Map<BufferGeometry, number>();
   const textures = new Set<Texture>();
   const tree: TreeNode[] = [];
+  const nodes: Object3D[] = [];
   let instances = 0;
   let triangles = 0;
 
@@ -30,6 +31,7 @@ export function describeMeshModel(root: Object3D, treeRoot: Object3D, rootName: 
       }
     }
     tree.push({ name: object.name || (parent < 0 ? rootName : object.type), parent, prototype });
+    nodes.push(object);
     for (const child of object.children) {
       visit(child, index);
     }
@@ -38,7 +40,7 @@ export function describeMeshModel(root: Object3D, treeRoot: Object3D, rootName: 
 
   const box = new Box3().setFromObject(root);
   return {
-    content: { kind: 'mesh', root },
+    content: { kind: 'mesh', root, nodes },
     tree,
     bounds: box.isEmpty() ? { min: [0, 0, 0], max: [0, 0, 0] } : { min: box.min.toArray(), max: box.max.toArray() },
     stats: {

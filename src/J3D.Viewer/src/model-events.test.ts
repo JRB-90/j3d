@@ -58,7 +58,7 @@ describe('forwardModelEvents', () => {
     const { calls, emit } = setup();
     const model: LoadedModel = {
       summary,
-      content: { kind: 'mesh', root: new Object3D() },
+      content: { kind: 'mesh', root: new Object3D(), nodes: [] },
       tree: [
         { name: 'assembly', parent: -1, prototype: -1 },
         { name: 'part', parent: 0, prototype: 0 },
@@ -139,7 +139,7 @@ describe('forwardModelEvents', () => {
 function loaded(id: string): LoadedModel {
   return {
     summary: { ...summary, id },
-    content: { kind: 'mesh', root: new Object3D() },
+    content: { kind: 'mesh', root: new Object3D(), nodes: [] },
     tree: [],
     bounds: { min: [0, 0, 0], max: [1, 1, 1] },
     stats: { nodes: 0, prototypes: 0, instances: 0, triangles: 0, edges: 0, textures: 0 },

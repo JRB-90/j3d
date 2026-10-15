@@ -38,4 +38,48 @@
         <MudToggleItem Value="Projection.Orthographic" Text="Orthographic" />
         <MudToggleItem Value="Projection.Perspective" Text="Perspective" />
     </MudToggleGroup>
+
+    @* Visibility of the selection, then the undo history (decision D97). *@
+    <div class="j3d-toolbar-group" role="group" aria-label="Visibility and history" data-testid="visibility-tools">
+        <MudTooltip Text="Hide selection (H)">
+            <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff"
+                           Color="Color.Inherit"
+                           Disabled="@(!Session.IsReady || !Scene.HasSelection)"
+                           OnClick="Scene.HideSelection"
+                           aria-label="Hide selection"
+                           data-testid="hide-button" />
+        </MudTooltip>
+        <MudTooltip Text="Isolate selection (I)">
+            <MudIconButton Icon="@Icons.Material.Filled.FilterCenterFocus"
+                           Color="Color.Inherit"
+                           Disabled="@(!Session.IsReady || !Scene.CanIsolate)"
+                           OnClick="Scene.IsolateSelection"
+                           aria-label="Isolate selection"
+                           data-testid="isolate-button" />
+        </MudTooltip>
+        <MudTooltip Text="Show all (Shift+H)">
+            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                           Color="Color.Inherit"
+                           Disabled="@(!Session.IsReady || !Scene.HasHidden)"
+                           OnClick="Scene.ShowAll"
+                           aria-label="Show all"
+                           data-testid="show-all-button" />
+        </MudTooltip>
+        <MudTooltip Text="Undo (Ctrl+Z)">
+            <MudIconButton Icon="@Icons.Material.Filled.Undo"
+                           Color="Color.Inherit"
+                           Disabled="@(!Session.IsReady || !Scene.CanUndo)"
+                           OnClick="Scene.Undo"
+                           aria-label="Undo"
+                           data-testid="undo-button" />
+        </MudTooltip>
+        <MudTooltip Text="Redo (Ctrl+Y)">
+            <MudIconButton Icon="@Icons.Material.Filled.Redo"
+                           Color="Color.Inherit"
+                           Disabled="@(!Session.IsReady || !Scene.CanRedo)"
+                           OnClick="Scene.Redo"
+                           aria-label="Redo"
+                           data-testid="redo-button" />
+        </MudTooltip>
+    </div>
 </div>

@@ -97,6 +97,26 @@ public sealed class NavigationTests(J3DAppFixture app) : ViewerPageTest(app)
     }
 
     [Fact]
+    public async Task The_wheel_zooms_toward_the_pointer()
+    {
+        var before = await ImportAndRestAsync();
+        var h = before.VisibleHeight;
+        double[] world = [before.Target[0] + h * 0.25, before.Target[1], before.Target[2] - h * 0.15];
+        var under = await ProjectAsync(world[0], world[1], world[2]);
+
+        await Page.Mouse.MoveAsync((float)under.X, (float)under.Y);
+        await Page.Mouse.WheelAsync(0, -300);
+        await WaitForCameraRestAsync();
+
+        // Orthographic zoom to the cursor keeps what's under the pointer where it was (D74).
+        var zoomed = await CameraAsync();
+        Assert.True(zoomed.VisibleHeight < h * 0.9, "the wheel zooms in");
+        var after = await ProjectAsync(world[0], world[1], world[2]);
+        Assert.InRange(after.X - under.X, -2, 2);
+        Assert.InRange(after.Y - under.Y, -2, 2);
+    }
+
+    [Fact]
     public async Task The_browser_context_menu_is_suppressed_over_the_canvas()
     {
         await ImportAndRestAsync();
