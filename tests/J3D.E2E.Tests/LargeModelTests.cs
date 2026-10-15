@@ -9,7 +9,7 @@ namespace J3D.E2E.Tests;
 /// OutOfMemory, in each browser. Since M5 a loaded model is also measured for the tuning decisions
 /// (D63, D71): the longest main-thread task while it's added and fitted, its draw calls and buffer
 /// bytes, what one frame costs, the frame rate while orbiting, and opening its tree's first level.
-/// Long tasks are only reported by Chromium. On demand only:
+/// Since M6 (D89) also how long a pick takes, and selecting, hiding and showing every part. Long tasks are only reported by Chromium. On demand only:
 /// <c>npm run fixtures:large -- 200 curved-100</c>, then run with
 /// <c>J3D_LARGE_FIXTURES=200,curved-100</c>; add <c>HEADED=1</c> to measure on the real GPU.
 /// </summary>
@@ -43,7 +43,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
             TestContext.Current.TestOutputHelper?.WriteLine(
                 $"{BrowserName} {fixture}: {model.Status} in {elapsed.TotalSeconds:F1} s, " +
                 (model.Status == "loaded"
-                    ? $"{model.Stats!.Prototypes} parts, {model.Stats.Triangles} triangles, WASM heap {model.MemoryBytes / (1 << 20)} MB; {await MeasureAsync()}"
+                    ? $"{model.Stats!.Prototypes} parts, {model.Stats.Triangles} triangles, WASM heap {model.MemoryBytes / (1 << 20)} MB; {await MeasureAsync(model.Id)}"
                     : $"{model.Error}"));
 
             if (model.Status == "failed")
@@ -59,7 +59,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
     }
 
     /// <summary>Measures the loaded model in the scene, as a line for the test output.</summary>
-    private async Task<string> MeasureAsync()
+    private async Task<string> MeasureAsync(string id)
     {
         await WaitForCameraRestAsync(); // the first model's fit (D30) draws it for the first time
         var adding = await TakeLongTasksAsync();
@@ -97,11 +97,57 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.GetByTestId("model-tree-node").First.WaitForAsync(new LocatorWaitForOptions { Timeout = 60_000 });
         var treeMs = tree.Elapsed.TotalMilliseconds;
         var opening = await TakeLongTasksAsync();
+        var parts = await MeasurePartsAsync(id);
 
-        return $"adding: longest task {Longest(adding)}; {stats.DrawCalls} draw calls, {stats.Triangles} triangles, " +
+        return $"{parts}; adding: longest task {Longest(adding)}; {stats.DrawCalls} draw calls, {stats.Triangles} triangles, " +
             $"{stats.Lines} lines, {stats.Geometries} geometries, buffers {stats.BufferBytes / (1 << 20)} MB; " +
             $"a frame {frame:F1} ms; orbiting {fps:F0} fps (longest task {Longest(orbiting)}); " +
             $"tree's first level {treeMs:F0} ms (longest task {Longest(opening)}); GPU {gpu}";
+    }
+
+    /// <summary>
+    /// Picks over a 5 × 5 grid of the viewport, then selecting every part from the tree's root, hiding
+    /// them all (H) and showing them again (Shift+H), each timed until the viewer has applied it (D89).
+    /// </summary>
+    private async Task<string> MeasurePartsAsync(string id)
+    {
+        var picks = await Page.EvaluateAsync<double[]>(
+            """
+            () => {
+                const box = document.querySelector('[data-testid=viewport] canvas').getBoundingClientRect();
+                const times = [];
+                for (let i = 1; i <= 5; i++) {
+                    for (let j = 1; j <= 5; j++) {
+                        const start = performance.now();
+                        window.__j3dTest.partAt(box.left + box.width * i / 6, box.top + box.height * j / 6);
+                        times.push(performance.now() - start);
+                    }
+                }
+                return times.sort((a, b) => a - b);
+            }
+            """);
+
+        async Task<double> TimeAsync(Func<Task> act, string done)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            await act();
+            await Page.WaitForFunctionAsync(done, id, new PageWaitForFunctionOptions { Timeout = 120_000, PollingInterval = 20 });
+            return stopwatch.Elapsed.TotalMilliseconds;
+        }
+
+        // The first tree node: the root assembly, or in a flat file one part.
+        const string selected = "id => window.__j3dTest.partState(id).selected.length > 0";
+        const string hidden = "id => { const s = window.__j3dTest.partState(id); return s.hidden.length === s.parts.length && s.selected.length === 0; }";
+        const string shown = "id => window.__j3dTest.partState(id).hidden.length === 0";
+        var select = await TimeAsync(() => Page.Locator("[data-testid=model-tree-node] .j3d-tree-node-name").First.ClickAsync(), selected);
+        var count = await Page.EvaluateAsync<int>("id => window.__j3dTest.partState(id).selected.length", id);
+        var selecting = await TakeLongTasksAsync();
+        var hide = await TimeAsync(() => Page.GetByTestId("model-eye").ClickAsync(), hidden);
+        var show = await TimeAsync(() => Page.GetByTestId("model-eye").ClickAsync(), shown);
+        var hiding = await TakeLongTasksAsync();
+
+        return $"a pick {picks[picks.Length / 2]:F1} ms (longest {picks[^1]:F1}); selecting the first tree node's {count} parts {select:F0} ms " +
+            $"(longest task {Longest(selecting)}); hiding every part {hide:F0} ms, showing them {show:F0} ms (longest task {Longest(hiding)})";
     }
 
     /// <summary>Right-drags the camera round, a move per frame, and returns the frames drawn per second.</summary>

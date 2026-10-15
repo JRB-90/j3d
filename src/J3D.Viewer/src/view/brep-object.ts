@@ -1,6 +1,7 @@
 import type { ImportedScene, PrototypeMesh, SceneInstance } from '@j3d/occt/facade';
 import {
   BatchedMesh,
+  Box3,
   BufferAttribute,
   BufferGeometry,
   Group,
@@ -10,16 +11,21 @@ import {
   LineSegments,
   Matrix4,
   Vector3,
+  type Intersection,
   type Material,
   type MeshStandardMaterial,
+  type Object3D,
 } from 'three';
-import type { LinearRgba, MaterialCache } from './materials';
+import { EdgeVisibilityAttribute, type LinearRgba, type MaterialCache } from './materials';
+import type { Highlight, HighlightKind, HighlightMaterials, ModelParts } from './parts';
 
 /** Prototypes placed at least this many times are drawn with one instanced draw call (docs/plan.md §6.3). */
 export const InstancingThreshold = 16;
 
 export interface BrepObject {
   object: Group;
+  /** Picking, visibility and highlighting by tree node (D93–D95). */
+  parts: ModelParts;
   /** Frees the geometry and releases the materials. The object is left empty. */
   dispose(): void;
 }
@@ -27,7 +33,13 @@ export interface BrepObject {
 /** The surfaces drawn with one material: each prototype range once, and an instance per placement. */
 interface Batch {
   geometries: BufferGeometry[];
-  placements: { geometry: number; matrix: readonly number[] }[];
+  placements: { geometry: number; instance: number }[];
+}
+
+/** Where one placement (scene instance) is drawn, so it can be hidden on its own. */
+interface PlacementSlots {
+  surfaces: ({ batch: BatchedMesh; id: number } | { mesh: InstancedMesh; index: number })[];
+  edges?: { visibility: BufferAttribute; start: number; count: number } | { matrices: InstancedBufferAttribute; index: number };
 }
 
 /**
@@ -37,25 +49,31 @@ interface Batch {
  * (decision D63): one BatchedMesh per surface material, holding each prototype's index range once and
  * an instance per placement, and one LineSegments of all their edges, already transformed. A
  * prototype's translucent index range is drawn with its own, transparent material (D34).
+ *
+ * Every placement remembers where it's drawn, so it can be hidden by itself: a batch instance is
+ * switched off, an instanced copy gets a zero matrix, and its merged edges are dropped through a
+ * per-vertex visibility attribute (D94).
  */
 export function buildBrepObject(name: string, scene: ImportedScene, materials: MaterialCache): BrepObject {
   const root = new Group();
   root.name = name;
   const owned: { dispose(): void }[] = [];
   const used: Material[] = [];
+  const slots: PlacementSlots[] = scene.instances.map(() => ({ surfaces: [] }));
+  const pickedPlacement = new Map<Object3D, Int32Array>();
 
-  const instancesOf = new Map<number, SceneInstance[]>();
-  for (const instance of scene.instances) {
+  const instancesOf = new Map<number, number[]>();
+  scene.instances.forEach((instance, index) => {
     const list = instancesOf.get(instance.prototype);
     if (list) {
-      list.push(instance);
+      list.push(index);
     } else {
-      instancesOf.set(instance.prototype, [instance]);
+      instancesOf.set(instance.prototype, [index]);
     }
-  }
+  });
 
   const batches = new Map<MeshStandardMaterial, Batch>();
-  const looseEdges: { edges: Float32Array; matrix: readonly number[] }[] = [];
+  const looseEdges: { edges: Float32Array; matrix: readonly number[]; instance: number }[] = [];
 
   scene.prototypes.forEach((prototype, index) => {
     const instances = instancesOf.get(index);
@@ -63,8 +81,8 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
       return;
     }
     if (instances.length >= InstancingThreshold) {
-      const nameOf = (instance: SceneInstance) => scene.nodes[instance.node]?.name ?? '';
-      root.add(...instancedObjects(prototype, instances, nameOf(instances[0]!), materials, owned, used));
+      const nodeName = scene.nodes[scene.instances[instances[0]!]!.node]?.name ?? '';
+      root.add(...instancedObjects(prototype, instances, scene.instances, nodeName, materials, owned, used, slots, pickedPlacement));
       return;
     }
 
@@ -78,12 +96,12 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
       }
       const geometry = batch.geometries.push(range.geometry) - 1;
       for (const instance of instances) {
-        batch.placements.push({ geometry, matrix: instance.matrix });
+        batch.placements.push({ geometry, instance });
       }
     }
     if (prototype.edges.length > 0) {
       for (const instance of instances) {
-        looseEdges.push({ edges: prototype.edges, matrix: instance.matrix });
+        looseEdges.push({ edges: prototype.edges, matrix: scene.instances[instance]!.matrix, instance });
       }
     }
   });
@@ -97,27 +115,44 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
     // Back to front for translucent parts; opaque ones gain nothing from sorting.
     batch.sortObjects = material.transparent;
     const ids = geometries.map((geometry) => batch.addGeometry(geometry));
+    const placementOf = new Int32Array(placements.length);
     for (const placement of placements) {
-      batch.setMatrixAt(batch.addInstance(ids[placement.geometry]!), matrix.fromArray(placement.matrix));
+      const id = batch.addInstance(ids[placement.geometry]!);
+      batch.setMatrixAt(id, matrix.fromArray(scene.instances[placement.instance]!.matrix));
+      placementOf[id] = placement.instance;
+      slots[placement.instance]!.surfaces.push({ batch, id });
     }
     batch.computeBoundingSphere();
+    pickedPlacement.set(batch, placementOf);
     root.add(batch);
     owned.push(batch);
   }
 
   if (looseEdges.length > 0) {
     const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(transformedEdges(looseEdges), 3));
+    const positions = transformedEdges(looseEdges);
+    geometry.setAttribute('position', new BufferAttribute(positions, 3));
+    const visibility = new BufferAttribute(new Uint8Array(positions.length / 3).fill(1), 1);
+    geometry.setAttribute(EdgeVisibilityAttribute, visibility);
+    let start = 0;
+    for (const { edges, instance } of looseEdges) {
+      const count = edges.length / 3;
+      slots[instance]!.edges = { visibility, start, count };
+      start += count;
+    }
     owned.push(geometry);
     const material = materials.edges(false);
     used.push(material);
     const lines = new LineSegments(geometry, material);
     lines.name = `${name} edges`;
+    lines.raycast = noRaycast; // parts are picked by their faces; testing every edge segment would be slow
     root.add(lines);
   }
 
+  const parts = new BrepParts(scene, slots, pickedPlacement);
   return {
     object: root,
+    parts,
     dispose() {
       root.clear();
       for (const object of owned) {
@@ -128,18 +163,197 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
       }
       owned.length = 0;
       used.length = 0;
+      parts.dispose();
     },
   };
 }
 
+/**
+ * A BREP model's parts: each scene instance's tree node. Keeps the imported prototypes, which the
+ * highlight draws again (D93), and works out a placement's bounds from its prototype's.
+ */
+class BrepParts implements ModelParts {
+  readonly partNodes: readonly number[];
+  private readonly placementsOf = new Map<number, number[]>();
+  private readonly hiddenPlacements: Uint8Array;
+  private readonly zero = new Matrix4().makeScale(0, 0, 0);
+  private overlayGeometries = new Map<number, BufferGeometry>();
+  private placementBoxes: Float64Array | undefined;
+
+  constructor(
+    private readonly scene: ImportedScene,
+    private readonly slots: readonly PlacementSlots[],
+    private readonly pickedPlacement: ReadonlyMap<Object3D, Int32Array>,
+  ) {
+    scene.instances.forEach((instance, index) => {
+      const list = this.placementsOf.get(instance.node);
+      if (list) {
+        list.push(index);
+      } else {
+        this.placementsOf.set(instance.node, [index]);
+      }
+    });
+    this.partNodes = [...this.placementsOf.keys()].sort((a, b) => a - b);
+    this.hiddenPlacements = new Uint8Array(scene.instances.length);
+  }
+
+  nodeOf(hit: Intersection): number {
+    const placements = this.pickedPlacement.get(hit.object);
+    const id = (hit as Intersection & { batchId?: number }).batchId ?? hit.instanceId;
+    const placement = placements !== undefined && id !== undefined ? placements[id] : undefined;
+    return placement === undefined ? -1 : (this.scene.instances[placement]?.node ?? -1);
+  }
+
+  setHidden(hidden: ReadonlySet<number>): void {
+    const changed = new Set<BufferAttribute | InstancedBufferAttribute>();
+    const instanced = new Set<InstancedMesh>();
+    this.scene.instances.forEach((instance, placement) => {
+      const hide = hidden.has(instance.node) ? 1 : 0;
+      if (hide === this.hiddenPlacements[placement]) {
+        return;
+      }
+      this.hiddenPlacements[placement] = hide;
+      const matrix = hide ? this.zero : new Matrix4().fromArray(instance.matrix);
+      const slot = this.slots[placement]!;
+      for (const surface of slot.surfaces) {
+        if ('batch' in surface) {
+          surface.batch.setVisibleAt(surface.id, !hide);
+        } else {
+          surface.mesh.setMatrixAt(surface.index, matrix);
+          instanced.add(surface.mesh);
+        }
+      }
+      const edges = slot.edges;
+      if (edges && 'visibility' in edges) {
+        (edges.visibility.array as Uint8Array).fill(hide ? 0 : 1, edges.start, edges.start + edges.count);
+        changed.add(edges.visibility);
+      } else if (edges) {
+        matrix.toArray(edges.matrices.array, edges.index * 16);
+        changed.add(edges.matrices);
+      }
+    });
+    instanced.forEach((mesh) => (mesh.instanceMatrix.needsUpdate = true));
+    changed.forEach((attribute) => (attribute.needsUpdate = true));
+  }
+
+  addVisibleBounds(target: Box3): Box3 {
+    const boxes = (this.placementBoxes ??= this.computePlacementBoxes());
+    const box = new Box3();
+    for (let placement = 0; placement < this.hiddenPlacements.length; placement++) {
+      if (!this.hiddenPlacements[placement] && boxes[placement * 6]! <= boxes[placement * 6 + 3]!) {
+        box.min.fromArray(boxes, placement * 6);
+        box.max.fromArray(boxes, placement * 6 + 3);
+        target.union(box);
+      }
+    }
+    return target;
+  }
+
+  /**
+   * One BatchedMesh of the parts' surfaces in the overlay material, and one LineSegments of their
+   * edges, so even a selection of thousands of parts is two draw calls.
+   */
+  highlight(nodes: readonly number[], kind: HighlightKind, materials: HighlightMaterials): Highlight | undefined {
+    const placements = nodes.flatMap((node) => this.placementsOf.get(node) ?? []);
+    const surfaced = placements.filter((placement) => this.scene.prototypes[this.scene.instances[placement]!.prototype]!.indices.length > 0);
+    const group = new Group();
+    const disposables: { dispose(): void }[] = [];
+    const order = materials.renderOrder(kind);
+
+    if (surfaced.length > 0) {
+      const prototypes = [...new Set(surfaced.map((placement) => this.scene.instances[placement]!.prototype))];
+      const geometries = prototypes.map((prototype) => this.overlayGeometry(prototype));
+      const vertices = geometries.reduce((sum, g) => sum + g.getAttribute('position').count, 0);
+      const indices = geometries.reduce((sum, g) => sum + g.index!.count, 0);
+      const batch = new BatchedMesh(surfaced.length, vertices, indices, materials.surface(kind));
+      const ids = new Map(prototypes.map((prototype, i) => [prototype, batch.addGeometry(geometries[i]!)]));
+      const matrix = new Matrix4();
+      for (const placement of surfaced) {
+        const instance = this.scene.instances[placement]!;
+        batch.setMatrixAt(batch.addInstance(ids.get(instance.prototype)!), matrix.fromArray(instance.matrix));
+      }
+      batch.computeBoundingSphere();
+      batch.renderOrder = order.surface;
+      batch.raycast = noRaycast;
+      group.add(batch);
+      disposables.push(batch);
+    }
+
+    const edges = placements
+      .map((placement) => this.scene.instances[placement]!)
+      .filter((instance) => this.scene.prototypes[instance.prototype]!.edges.length > 0)
+      .map((instance) => ({ edges: this.scene.prototypes[instance.prototype]!.edges, matrix: instance.matrix }));
+    if (edges.length > 0) {
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(transformedEdges(edges), 3));
+      const lines = new LineSegments(geometry, materials.edges(kind));
+      lines.renderOrder = order.edges;
+      lines.raycast = noRaycast;
+      group.add(lines);
+      disposables.push(geometry);
+    }
+
+    if (group.children.length === 0) {
+      return undefined;
+    }
+    return {
+      object: group,
+      dispose() {
+        group.clear();
+        disposables.forEach((item) => item.dispose());
+      },
+    };
+  }
+
+  dispose(): void {
+    this.overlayGeometries.forEach((geometry) => geometry.dispose());
+    this.overlayGeometries = new Map();
+  }
+
+  /** A prototype's whole index range over its positions only: what the overlay material needs. */
+  private overlayGeometry(prototype: number): BufferGeometry {
+    let geometry = this.overlayGeometries.get(prototype);
+    if (!geometry) {
+      const mesh = this.scene.prototypes[prototype]!;
+      geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(mesh.positions, 3));
+      geometry.setIndex(new BufferAttribute(mesh.indices, 1));
+      this.overlayGeometries.set(prototype, geometry);
+    }
+    return geometry;
+  }
+
+  /** Each placement's world bounds as min xyz, max xyz (min > max when it has no vertices). */
+  private computePlacementBoxes(): Float64Array {
+    const prototypeBoxes = this.scene.prototypes.map((prototype) => new Box3().setFromArray(prototype.positions));
+    const boxes = new Float64Array(this.scene.instances.length * 6);
+    const box = new Box3();
+    const matrix = new Matrix4();
+    this.scene.instances.forEach((instance, placement) => {
+      box.copy(prototypeBoxes[instance.prototype]!);
+      if (!box.isEmpty()) {
+        box.applyMatrix4(matrix.fromArray(instance.matrix));
+      }
+      box.min.toArray(boxes, placement * 6);
+      box.max.toArray(boxes, placement * 6 + 3);
+    });
+    return boxes;
+  }
+}
+
+function noRaycast(): void {}
+
 /** An InstancedMesh of a much-placed prototype and one LineSegments of its instanced edges. */
 function instancedObjects(
   prototype: PrototypeMesh,
-  instances: SceneInstance[],
+  placements: number[],
+  instances: readonly SceneInstance[],
   name: string,
   materials: MaterialCache,
   owned: { dispose(): void }[],
   used: Material[],
+  slots: PlacementSlots[],
+  pickedPlacement: Map<Object3D, Int32Array>,
 ): (InstancedMesh | LineSegments)[] {
   const objects: (InstancedMesh | LineSegments)[] = [];
   if (prototype.indices.length > 0) {
@@ -147,21 +361,28 @@ function instancedObjects(
     owned.push(geometry);
     const material = surfaceMaterials(prototype, materials);
     used.push(...(Array.isArray(material) ? material : [material]));
-    const mesh = new InstancedMesh(geometry, material, instances.length);
+    const mesh = new InstancedMesh(geometry, material, placements.length);
     mesh.name = name;
-    instances.forEach((instance, i) => mesh.setMatrixAt(i, new Matrix4().fromArray(instance.matrix)));
+    placements.forEach((placement, i) => {
+      mesh.setMatrixAt(i, new Matrix4().fromArray(instances[placement]!.matrix));
+      slots[placement]!.surfaces.push({ mesh, index: i });
+    });
     mesh.computeBoundingSphere();
+    pickedPlacement.set(mesh, Int32Array.from(placements));
     objects.push(mesh);
   }
   if (prototype.edges.length > 0) {
     const material = materials.edges(true);
     used.push(material);
-    const geometry = instancedEdgeGeometry(prototype, instances);
+    const geometry = instancedEdgeGeometry(prototype, placements.map((placement) => instances[placement]!));
     owned.push(geometry);
+    const matrices = geometry.getAttribute('instanceMatrix') as InstancedBufferAttribute;
+    placements.forEach((placement, index) => (slots[placement]!.edges = { matrices, index }));
     const lines = new LineSegments(geometry, material);
     lines.name = `${name} edges`;
     // The geometry's bounds don't account for the instance transforms.
     lines.frustumCulled = false;
+    lines.raycast = noRaycast;
     objects.push(lines);
   }
   return objects;
@@ -223,7 +444,7 @@ function surfaceMaterials(prototype: PrototypeMesh, materials: MaterialCache): M
 }
 
 /** Every placement's edge segments moved into model space, in one array. */
-function transformedEdges(placements: { edges: Float32Array; matrix: readonly number[] }[]): Float32Array {
+function transformedEdges(placements: readonly { edges: Float32Array; matrix: readonly number[] }[]): Float32Array {
   const positions = new Float32Array(placements.reduce((sum, p) => sum + p.edges.length, 0));
   const matrix = new Matrix4();
   const point = new Vector3();
@@ -250,7 +471,7 @@ export function toUnorm8(colours: Float32Array): Uint8Array {
 }
 
 /** Three has no instanced lines, but any object can draw an InstancedBufferGeometry (see MaterialCache.edges). */
-function instancedEdgeGeometry(prototype: PrototypeMesh, instances: SceneInstance[]): InstancedBufferGeometry {
+function instancedEdgeGeometry(prototype: PrototypeMesh, instances: readonly SceneInstance[]): InstancedBufferGeometry {
   const geometry = new InstancedBufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(prototype.edges, 3));
   const matrices = new Float32Array(instances.length * 16);

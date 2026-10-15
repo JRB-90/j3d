@@ -8,13 +8,36 @@ namespace J3D.Web.Client.State;
 /// The models in the scene and how their imports are going, in import order (decision D57). The
 /// <c>Viewport</c> feeds it from the viewer's callbacks and the <c>ModelList</c> renders it. Scoped
 /// (D56): one per tab under WebAssembly, and never shared between the host's prerender requests.
+/// Since M6 it also owns each model's selected and hidden parts and the undo history (D95): the
+/// <c>Viewport</c> applies them to the viewer.
 /// </summary>
 public sealed class SceneState
 {
-    /// <summary>Raised after every change to <see cref="Models"/>.</summary>
+    private readonly UndoHistory _history = new();
+
+    /// <summary>Raised after every change to <see cref="Models"/> or the history.</summary>
     public event Action? Changed;
 
+    /// <summary>Raised when a part picked in 3D should be shown in its model's tree (D96).</summary>
+    public event Action<ModelId, int>? RevealRequested;
+
     public ImmutableList<ModelEntry> Models { get; private set; } = [];
+
+    public bool CanUndo => _history.CanUndo;
+
+    public bool CanRedo => _history.CanRedo;
+
+    /// <summary>Every selected part, in list order, then tree order.</summary>
+    public IReadOnlyList<(ModelEntry Model, int Node)> Selection =>
+        [.. Models.SelectMany(model => model.Selected.Order().Select(node => (model, node)))];
+
+    public bool HasSelection => Models.Any(model => !model.Selected.IsEmpty);
+
+    public bool HasHidden => Models.Any(model => !model.Hidden.IsEmpty);
+
+    /// <summary>Isolate would change something: there's a selection and a visible part outside it.</summary>
+    public bool CanIsolate => HasSelection && Models.Any(model =>
+        model.Tree is { } tree && tree.Parts.Any(part => !model.Hidden.Contains(part) && !model.Selected.Contains(part)));
 
     public ModelEntry? Find(ModelId id) => Models.Find(model => model.Id == id);
 
@@ -34,12 +57,13 @@ public sealed class SceneState
 
     public void MarkFailed(ModelId id, ImportError error) => Update(id, model => model.AsFailed(error));
 
-    /// <summary>The viewer cancelled, deleted or dismissed the model.</summary>
+    /// <summary>The viewer cancelled, deleted or dismissed the model. Its undo steps go with it (until M8, D84).</summary>
     public void Remove(ModelId id)
     {
         var index = Models.FindIndex(model => model.Id == id);
         if (index >= 0)
         {
+            _history.Forget(id);
             Set(Models.RemoveAt(index));
         }
     }
@@ -47,10 +71,155 @@ public sealed class SceneState
     /// <summary>Forgets every model, because the viewer that held them has gone.</summary>
     public void Clear()
     {
+        _history.Clear();
         if (!Models.IsEmpty)
         {
             Set([]);
         }
+    }
+
+    /// <summary>
+    /// A click in the viewport (D77): on a part, it becomes the selection, or with Ctrl it's added
+    /// or removed; on empty space (no model), the selection is cleared unless Ctrl was held. The
+    /// tree then reveals the part (D96).
+    /// </summary>
+    public void Pick(ModelId? id, int node, bool additive)
+    {
+        var target = id is { } modelId ? Find(modelId) : null;
+        if (target?.Tree is not { } tree || !tree.IsPart(node) || target.Hidden.Contains(node))
+        {
+            if (!additive)
+            {
+                ClearSelection();
+            }
+
+            return;
+        }
+
+        if (additive)
+        {
+            var removed = target.Selected.Remove(node);
+            var selected = removed.Count < target.Selected.Count ? removed : target.Selected.Add(node);
+            Update(target.Id, model => model.WithParts(model.Hidden, selected));
+        }
+        else
+        {
+            Set(Models.ConvertAll(model => model.WithParts(model.Hidden, model.Id == target.Id ? [node] : [])));
+        }
+
+        if (Find(target.Id)!.Selected.Contains(node))
+        {
+            RevealRequested?.Invoke(target.Id, node);
+        }
+    }
+
+    /// <summary>
+    /// A click on a tree node: the visible parts under it become the selection, or with Ctrl are
+    /// added, or removed when they're all selected already (D77, D96).
+    /// </summary>
+    public void SelectNode(ModelId id, int node, bool additive)
+    {
+        if (Find(id) is not { Tree: { } tree } target || !tree.Contains(node))
+        {
+            return;
+        }
+
+        var parts = tree.PartsUnder(node).Where(part => !target.Hidden.Contains(part)).ToList();
+        if (!additive)
+        {
+            Set(Models.ConvertAll(model => model.WithParts(model.Hidden, model.Id == id ? parts : [])));
+        }
+        else if (parts.Count > 0)
+        {
+            var selected = parts.All(target.Selected.Contains) ? target.Selected.Except(parts) : target.Selected.Union(parts);
+            Update(id, model => model.WithParts(model.Hidden, selected));
+        }
+    }
+
+    public void ClearSelection() => Set(Models.ConvertAll(model => model.WithParts(model.Hidden, [])));
+
+    /// <summary>Hides the selected parts, which leaves the selection empty (D78, D98).</summary>
+    public void HideSelection() => ChangeVisibility(model => model.Hidden.Union(model.Selected));
+
+    /// <summary>Hides every part outside the selection, in every model (assumption 9).</summary>
+    public void IsolateSelection()
+    {
+        if (CanIsolate)
+        {
+            ChangeVisibility(model => [.. model.Tree?.Parts.Where(part => !model.Selected.Contains(part)) ?? []]);
+        }
+    }
+
+    /// <summary>Shows every part of every model.</summary>
+    public void ShowAll() => ChangeVisibility(static _ => []);
+
+    /// <summary>A tree node's eye: shows its parts when they're all hidden, otherwise hides them all.</summary>
+    public void ToggleNodeVisibility(ModelId id, int node)
+    {
+        if (Find(id) is not { Tree: { } tree } target || !tree.Contains(node))
+        {
+            return;
+        }
+
+        var parts = tree.PartsUnder(node);
+        var hidden = target.VisibilityOf(node) == PartVisibility.Hidden ? target.Hidden.Except(parts) : target.Hidden.Union(parts);
+        ChangeVisibility(model => model.Id == id ? hidden : model.Hidden);
+    }
+
+    /// <summary>A list item's eye: the same for the whole model.</summary>
+    public void ToggleModelVisibility(ModelId id)
+    {
+        if (Find(id) is not { Tree: { } tree } target)
+        {
+            return;
+        }
+
+        var hidden = target.Visibility() == PartVisibility.Hidden ? [] : PartSet.From(tree.Parts);
+        ChangeVisibility(model => model.Id == id ? hidden : model.Hidden);
+    }
+
+    public void Undo()
+    {
+        if (_history.Undo() is { } step)
+        {
+            Set(step.Undo(Models), always: true);
+        }
+    }
+
+    public void Redo()
+    {
+        if (_history.Redo() is { } step)
+        {
+            Set(step.Redo(Models), always: true);
+        }
+    }
+
+    /// <summary>Applies new hidden parts to loaded models and records the change as one undoable step, if anything changed.</summary>
+    private void ChangeVisibility(Func<ModelEntry, PartSet> hidden)
+    {
+        var changes = ImmutableDictionary.CreateBuilder<ModelId, (PartSet Before, PartSet After)>();
+        var models = Models.ConvertAll(model =>
+        {
+            if (model.Tree is null)
+            {
+                return model;
+            }
+
+            var next = model.WithParts(hidden(model), model.Selected);
+            if (!next.Hidden.SetEquals(model.Hidden))
+            {
+                changes[model.Id] = (model.Hidden, next.Hidden);
+            }
+
+            return next;
+        });
+
+        if (changes.Count > 0)
+        {
+            _history.Push(new VisibilityStep(changes.ToImmutable()));
+        }
+
+        Set(models);
     }
 
     /// <summary>Applies a transition to a known model; an id the list no longer has is ignored.</summary>
@@ -70,8 +239,14 @@ public sealed class SceneState
         }
     }
 
-    private void Set(ImmutableList<ModelEntry> models)
+    /// <summary>Raises <see cref="Changed"/> only when an entry changed, unless the history did (<paramref name="always"/>).</summary>
+    private void Set(ImmutableList<ModelEntry> models, bool always = false)
     {
+        if (!always && (ReferenceEquals(models, Models) || models.SequenceEqual(Models, ReferenceEqualityComparer.Instance)))
+        {
+            return;
+        }
+
         Models = models;
         Changed?.Invoke();
     }

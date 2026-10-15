@@ -106,7 +106,8 @@ public sealed partial class ModelListTests(J3DAppFixture app) : ViewerPageTest(a
         await Items.GetByTestId("model-tree-toggle").ClickAsync();
         await Expect(nodes).ToHaveTextAsync(["Bracket assembly"]);
 
-        await nodes.First.ClickAsync();
+        // Clicking a node's name selects it (M6); its arrow expands it.
+        await nodes.First.Locator(".mud-treeview-item-arrow button").ClickAsync();
         await Expect(nodes).ToHaveTextAsync(["Bracket assembly", "Plate (bottom)", "Plate (top)", "Pin"]);
         AssertNoConsoleErrors();
     }

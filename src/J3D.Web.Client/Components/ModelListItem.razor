@@ -17,6 +17,14 @@
         }
         else if (Model.Status == ModelStatus.Loaded)
         {
+            <MudIconButton Icon="@EyeIcon(Model.Visibility())"
+                           Size="Size.Small"
+                           Class="@EyeClass(Model.Visibility())"
+                           title="@EyeTitle(Model.Visibility())"
+                           aria-label="@($"{EyeTitle(Model.Visibility())}: {Model.Summary.FileName}")"
+                           OnClick="ToggleModelVisibility"
+                           data-visibility="@Model.Visibility().ToString().ToLowerInvariant()"
+                           data-testid="model-eye" />
             <MudIconButton Icon="@Icons.Material.Outlined.Delete"
                            Size="Size.Small"
                            title="Delete"
@@ -88,7 +96,7 @@
                              ServerData="LoadChildrenAsync"
                              ReadOnly="true"
                              Dense="true"
-                             ExpandOnClick="true"
+                             ExpandOnClick="false"
                              Class="j3d-model-tree"
                              data-testid="model-tree">
                     <ItemTemplate>
@@ -105,6 +113,8 @@
                         }
                         else
                         {
+                            var node = context.Value!.Value;
+                            var visibility = Model.VisibilityOf(node);
                             <MudTreeViewItem Value="@context.Value"
                                              Text="@context.Text"
                                              Icon="@context.Icon"
@@ -112,7 +122,25 @@
                                              Items="@context.Children"
                                              @bind-Expanded="@context.Expanded"
                                              ReadOnly="true"
-                                             data-testid="model-tree-node" />
+                                             OnClick="@(args => SelectNode(node, args))"
+                                             Class="@NodeClass(node, visibility)"
+                                             data-tree-node="@NodeKey(node)"
+                                             data-selected="@(Model.IsSelected(node) ? "true" : "false")"
+                                             data-testid="model-tree-node">
+                                <BodyContent Context="item">
+                                    <span class="j3d-tree-node-name">@context.Text</span>
+                                    <span class="j3d-tree-node-eye" @onclick:stopPropagation="true">
+                                        <MudIconButton Icon="@EyeIcon(visibility)"
+                                                       Size="Size.Small"
+                                                       Class="@EyeClass(visibility)"
+                                                       title="@EyeTitle(visibility)"
+                                                       aria-label="@($"{EyeTitle(visibility)}: {context.Text}")"
+                                                       OnClick="@(() => Scene.ToggleNodeVisibility(Model.Id, node))"
+                                                       data-visibility="@visibility.ToString().ToLowerInvariant()"
+                                                       data-testid="tree-node-eye" />
+                                    </span>
+                                </BodyContent>
+                            </MudTreeViewItem>
                         }
                     </ItemTemplate>
                 </MudTreeView>

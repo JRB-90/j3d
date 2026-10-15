@@ -46,6 +46,13 @@ public sealed class ViewerInterop : IAsyncDisposable
     /// <summary>Switches the camera, keeping the framing.</summary>
     public ValueTask SetProjectionAsync(Projection projection) => _viewer.InvokeVoidAsync("setProjection", projection);
 
+    /// <summary>Applies a model's hidden and selected part nodes (decision D95).</summary>
+    public ValueTask SetPartStateAsync(ModelId id, IEnumerable<int> hidden, IEnumerable<int> selected) =>
+        _viewer.InvokeVoidAsync("setPartState", id.Value, hidden.Order().ToArray(), selected.Order().ToArray());
+
+    /// <summary>Scrolls the element a CSS selector finds into view, if it isn't already (D96).</summary>
+    public ValueTask ScrollIntoViewAsync(string selector) => _module.InvokeVoidAsync("scrollIntoView", selector);
+
     public async ValueTask DisposeAsync()
     {
         try

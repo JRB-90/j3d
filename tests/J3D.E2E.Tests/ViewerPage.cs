@@ -160,6 +160,37 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     protected async Task<ScreenPoint> ProjectAsync(double x, double y, double z) =>
         await EvaluateAsync<ScreenPoint>($"() => window.__j3dTest.project([{x}, {y}, {z}])");
 
+    /// <summary>A client point where a part can be clicked; null when it's hidden or covered everywhere (M6).</summary>
+    protected async Task<ScreenPoint?> PartPointAsync(string id, int node) =>
+        await EvaluateAsync<ScreenPoint?>($"() => window.__j3dTest.partPoint('{id}', {node})");
+
+    /// <summary>The visible part under a client point, or null.</summary>
+    protected async Task<PartRef?> PartAtAsync(ScreenPoint point) =>
+        await EvaluateAsync<PartRef?>($"() => window.__j3dTest.partAt({point.X}, {point.Y})");
+
+    protected async Task<PartRef?> HoveredPartAsync() => await EvaluateAsync<PartRef?>("() => window.__j3dTest.hoveredPart()");
+
+    /// <summary>What the viewer has applied to a model: its parts, hidden parts and highlighted selection.</summary>
+    protected async Task<PartState> PartStateAsync(string id) => await EvaluateAsync<PartState>($"() => window.__j3dTest.partState('{id}')");
+
+    /// <summary>Waits until the viewer has applied exactly these hidden and selected parts to a model.</summary>
+    protected async Task WaitForPartStateAsync(string id, int[] hidden, int[] selected)
+    {
+        try
+        {
+            await Page.WaitForFunctionAsync(
+                "([id, hidden, selected]) => { const s = window.__j3dTest.partState(id); const same = (a, b) => a.length === b.length && [...a].sort((x, y) => x - y).every((v, i) => v === b[i]); return s && same(s.hidden, hidden) && same(s.selected, selected); }",
+                new object[] { id, hidden, selected },
+                new PageWaitForFunctionOptions { Timeout = 10_000 });
+        }
+        catch (TimeoutException)
+        {
+            var state = await PartStateAsync(id);
+            throw new TimeoutException($"Expected hidden [{string.Join(',', hidden)}] and selected [{string.Join(',', selected)}], " +
+                $"but the viewer has hidden [{string.Join(',', state.Hidden)}] and selected [{string.Join(',', state.Selected)}].");
+        }
+    }
+
     /// <summary>Where a view cube region (e.g. <c>top-front-right</c>) is on screen; null when it faces away.</summary>
     protected async Task<ScreenPoint?> ViewCubePointAsync(string region) =>
         await EvaluateAsync<ScreenPoint?>($"() => window.__j3dTest.viewCubePoint('{region}')");
@@ -260,6 +291,10 @@ public sealed record CameraState(
     bool Moving);
 
 public sealed record ScreenPoint(double X, double Y);
+
+public sealed record PartRef(string Id, int Node);
+
+public sealed record PartState(int[] Parts, int[] Hidden, int[] Selected);
 
 public sealed record RenderStats(int DrawCalls, int Triangles, int Lines, int Geometries, int Textures, long BufferBytes);
 

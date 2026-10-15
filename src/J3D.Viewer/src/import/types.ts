@@ -63,9 +63,12 @@ export interface ModelStats {
  * The geometry of a loaded model, handed to the viewer.
  * - BREP models arrive as plain buffers: each prototype in its part's own coordinates, placed by
  *   world matrices (docs/plan.md §6.1). The viewer builds the Three.js objects.
- * - Mesh models arrive as a ready Three.js object, already rotated to Z-up.
+ * - Mesh models arrive as a ready Three.js object, already rotated to Z-up, with each tree node's object.
  */
-export type ModelContent = { kind: 'brep'; scene: ImportedScene } | { kind: 'mesh'; root: Object3D };
+export type ModelContent =
+  | { kind: 'brep'; scene: ImportedScene }
+  /** `nodes[i]` is the object of tree node i, for picking and hiding parts (D81). */
+  | { kind: 'mesh'; root: Object3D; nodes: Object3D[] };
 
 /** What an import produces, before the manager attaches the model's summary. */
 export interface ImportResult {

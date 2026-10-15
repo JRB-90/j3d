@@ -1,0 +1,29 @@
+/* Bottom-left of the viewport: the view cube is top-right and snackbars bottom-right (D87). */
+.j3d-selection-panel {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    max-width: min(420px, calc(100% - 24px));
+    padding: 8px 12px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 6px;
+    background: rgba(27, 30, 35, 0.92);
+    color: var(--mud-palette-text-primary);
+    pointer-events: none;
+}
+
+.j3d-selection-title,
+.j3d-selection-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.j3d-selection-title {
+    font-weight: 500;
+}
+
+.j3d-selection-detail {
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}

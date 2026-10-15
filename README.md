@@ -11,7 +11,12 @@ drawing all happen in the browser tab.
 
 - **Import** several files at once with the **Import** button, or drop files or whole folders onto the view.
 - Each file becomes a **model** in the list on the left, with its progress while importing (and a cancel button), then
-  its size, triangle and part counts, any warnings, and its **assembly tree** (read-only).
+  its size, triangle and part counts, any warnings, and its **assembly tree**.
+- **Select** parts by clicking them in the view or in the tree (Ctrl+click adds or removes); the selected part is
+  highlighted in blue, named in a panel at the bottom left, and shown in the tree. The part under the pointer is
+  highlighted faintly before you click.
+- **Hide, isolate and show** parts with the eye beside each model and tree node, or the toolbar buttons and keys
+  below. **Undo and redo** cover hiding and showing.
 - **Delete** a model from the list. J3D asks first, then frees all of its memory.
 - CAD models are drawn with **shaded faces in the file's colours** and the **true BREP edges** over them; translucent
   colours are drawn translucent.
@@ -37,9 +42,16 @@ to J3D's Z-up; STL and OBJ are assumed to be Z-up already, as CAD exports are.
 |---|---|---|---|
 | Rotate (turntable, Z stays up) | Right-drag | One finger | Click a face, edge or corner of the **view cube** (top right) for one of 26 standard views |
 | Pan | Left-drag or middle-drag | Two-finger drag | |
-| Zoom | Wheel (towards the view centre) | Pinch | |
-| Fit everything in view | | | **Fit all** in the toolbar, or `F` |
+| Zoom | Wheel (towards the pointer) | Pinch | |
+| Fit everything visible in view | | | **Fit all** in the toolbar, or `F` |
 | Isometric view of everything | | | **Home**, beside the view cube |
+| Select a part | Click it (a click that doesn't drag) | Tap it | Click a node in the tree selects every part under it |
+| Add or remove a part | Ctrl+click | | Ctrl+click in the tree |
+| Clear the selection | Click empty space | Tap empty space | `Esc` |
+| Hide the selection | | | **Hide** in the toolbar, or `H`; or a node's eye in the tree |
+| Show only the selection | | | **Isolate**, or `I` |
+| Show everything | | | **Show all**, or `Shift+H` |
+| Undo, redo (hiding and showing) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
 
 The view fits itself to the first model you import into an empty scene; later imports leave the camera where it is.
 
@@ -47,12 +59,12 @@ The view fits itself to the first model you import into an empty scene; later im
 
 - Each CAD model gets its **own WebAssembly heap of up to 4 GB**. Reading a STEP file can take about seven times the
   file's size, so the practical ceiling is roughly **550–600 MB of STEP**; a larger file fails with a clear "too large"
-  error rather than crashing. On a laptop, a 200 MB STEP of 10,000 parts loads in about 30 seconds and orbits at 30
-  frames a second or better on its integrated GPU.
+  error rather than crashing. On a laptop, a 200 MB STEP of 10,000 parts loads in about 30 seconds and orbits at 60
+  frames a second on its integrated GPU.
 - Overlapping translucent parts can be drawn in the wrong order from some angles.
 - Models live only as long as the tab: nothing is saved, so refreshing the page clears the scene.
-- Not in this version: selecting parts, highlighting from the tree, hiding parts, measuring, sections, exploded views,
-  export, and a phone or tablet layout.
+- Not in this version yet: measuring, export, and keeping models across a refresh (all planned for iteration 2);
+  sections, exploded views, and a phone or tablet layout.
 
 ## Browsers
 

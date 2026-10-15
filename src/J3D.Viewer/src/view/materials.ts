@@ -4,6 +4,9 @@ import { SurfaceMetalness, SurfaceRoughness } from './surface';
 /** Near-black BREP edges (docs/plan.md §6.6). */
 export const EdgeColour = 0x0c0d0f;
 
+/** Per-vertex 0/1 on a model's merged edges: 0 for the segments of hidden parts (D94). */
+export const EdgeVisibilityAttribute = 'edgeVisible';
+
 /** Linear RGBA, as the OCCT facade reports colours. */
 export type LinearRgba = readonly [number, number, number, number];
 
@@ -32,7 +35,11 @@ export class MaterialCache {
     return this.acquire(key, () => createSurfaceMaterial(colour, translucent)) as MeshStandardMaterial;
   }
 
-  /** The edge material; the instanced one reads each copy's transform from an `instanceMatrix` attribute. */
+  /**
+   * The edge material. The instanced one reads each copy's transform from an `instanceMatrix`
+   * attribute; the other draws a model's merged edges and drops the segments whose
+   * {@link EdgeVisibilityAttribute} is 0, so hidden parts' edges vanish without a rebuild (D94).
+   */
   edges(instanced: boolean): LineBasicMaterial {
     return this.acquire(`edges:${instanced}`, () => {
       const material = new LineBasicMaterial({ color: EdgeColour });
@@ -40,6 +47,17 @@ export class MaterialCache {
         // Three only defines USE_INSTANCING for InstancedMesh; lines get it from the material
         // (the shader prefix declares `instanceMatrix` under that define).
         material.defines = { USE_INSTANCING: '' };
+      } else {
+        material.onBeforeCompile = (shader) => {
+          shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', `#include <common>\nattribute float ${EdgeVisibilityAttribute};`)
+            .replace(
+              '#include <project_vertex>',
+              // Both ends of a hidden segment go outside the clip volume, so nothing of it is drawn.
+              `#include <project_vertex>\n\tif ( ${EdgeVisibilityAttribute} < 0.5 ) gl_Position = vec4( 2.0, 2.0, 2.0, 1.0 );`,
+            );
+        };
+        material.customProgramCacheKey = () => 'j3d-edge-visibility';
       }
       return material;
     }) as LineBasicMaterial;

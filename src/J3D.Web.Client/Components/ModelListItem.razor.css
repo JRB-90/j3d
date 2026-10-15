@@ -68,3 +68,35 @@
 .j3d-model ::deep .j3d-model-tree-more .mud-treeview-item-content {
     color: var(--mud-palette-primary);
 }
+
+/* Selection and visibility in the tree (decisions D96, D98). */
+.j3d-model ::deep .j3d-tree-node > .mud-treeview-item-content {
+    border-radius: 4px;
+}
+
+.j3d-model ::deep .j3d-tree-node--selected > .mud-treeview-item-content {
+    background: rgba(79, 157, 255, 0.16);
+    color: var(--mud-palette-primary);
+}
+
+.j3d-model ::deep .j3d-tree-node--hidden > .mud-treeview-item-content .j3d-tree-node-name {
+    opacity: 0.5;
+}
+
+.j3d-model ::deep .j3d-tree-node-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.j3d-model ::deep .j3d-tree-node-eye {
+    flex: none;
+    margin-left: 4px;
+}
+
+/* The half eye: some of the parts below are hidden. */
+.j3d-model ::deep .j3d-eye--mixed {
+    opacity: 0.5;
+}

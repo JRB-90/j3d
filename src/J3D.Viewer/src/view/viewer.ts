@@ -2,6 +2,7 @@ import CameraControls from 'camera-controls';
 import {
   Box3,
   DirectionalLight,
+  Group,
   Matrix4,
   NeutralToneMapping,
   Object3D,
@@ -19,6 +20,7 @@ import {
   Vector4,
   WebGLRenderer,
   type InstancedMesh,
+  type Intersection,
   type Mesh,
   type Texture,
 } from 'three';
@@ -42,6 +44,7 @@ import {
   type Projection,
 } from './camera-math';
 import { MaterialCache } from './materials';
+import { HighlightMaterials, MeshParts, type Highlight, type HighlightKind, type ModelParts } from './parts';
 import { ViewCube } from './view-cube';
 import { HomeRegion, regionView, type ViewRegion } from './view-regions';
 
@@ -88,9 +91,31 @@ export interface CameraState {
   moving: boolean;
 }
 
+/** A pointer moving less than this between press and release is a click, not a drag (pixels). */
+const ClickTolerance = 4;
+
+/** One part of one model: a tree node that draws something (D77). */
+export interface PartRef {
+  id: ModelId;
+  node: number;
+}
+
+/** What the keyboard asks of .NET, which owns selection, visibility and the undo history (D95, D99). */
+export type ViewerCommand = 'clearSelection' | 'hide' | 'isolate' | 'showAll' | 'undo' | 'redo';
+
+export interface ViewerOptions {
+  /** A click that didn't drag: the part under the pointer, or undefined on empty space. */
+  onPick?: (part: PartRef | undefined, additive: boolean) => void;
+  onCommand?: (command: ViewerCommand) => void;
+}
+
 interface SceneModel {
   object: Object3D;
   bounds: Box3;
+  parts: ModelParts;
+  hidden: Set<number>;
+  selected: number[];
+  selection?: Highlight | undefined;
   /** BREP models are built here and freed here; mesh models are freed by their import task. */
   dispose?: () => void;
 }
@@ -124,8 +149,19 @@ export class Viewer {
   private needsRender = true;
   private frames = 0;
   private lastFrame = { drawCalls: 0, triangles: 0, lines: 0 };
+  private readonly highlights = new HighlightMaterials();
+  /** Selection and hover overlays (D93), drawn after the models. */
+  private readonly overlays = new Group();
+  private readonly raycaster = new Raycaster();
+  private hovered: (PartRef & { highlight: Highlight | undefined }) | undefined;
+  private hoverPoint: { x: number; y: number } | undefined;
+  private hoverRequest = 0;
+  private lastPick = { milliseconds: 0, count: 0, longest: 0 };
 
-  constructor(private readonly host: HTMLElement) {
+  constructor(
+    private readonly host: HTMLElement,
+    private readonly options: ViewerOptions = {},
+  ) {
     // Z up (decision D18): set before any camera exists, and on each camera before camera-controls reads it.
     Object3D.DEFAULT_UP.copy(Up);
 
@@ -144,7 +180,7 @@ export class Viewer {
     pmrem.dispose();
     this.scene.environment = this.environment;
     this.scene.environmentIntensity = EnvironmentIntensity;
-    this.scene.add(this.headlight, this.headlight.target);
+    this.scene.add(this.headlight, this.headlight.target, this.overlays);
 
     this.orthographic = new OrthographicCamera();
     this.perspective = new PerspectiveCamera(PerspectiveFov);
@@ -152,7 +188,8 @@ export class Viewer {
     this.perspective.up.copy(Up);
 
     const controls = new CameraControls(this.orthographic, canvas);
-    controls.dollyToCursor = false;
+    // The wheel and pinch zoom toward the pointer (D74, amending D19).
+    controls.dollyToCursor = true;
     controls.minZoom = 1e-9;
     controls.maxZoom = Infinity;
     controls.minDistance = 1e-9;
@@ -185,6 +222,7 @@ export class Viewer {
     this.listen(canvas, 'contextmenu', (event) => event.preventDefault());
     this.listen(window, 'keydown', (event) => this.onKeyDown(event));
     this.installViewCubeInput(canvas);
+    this.installPartInput(canvas);
     this.installHomeButton();
     this.requestRender();
   }
@@ -240,9 +278,11 @@ export class Viewer {
     let entry: SceneModel;
     if (model.content.kind === 'brep') {
       const built = buildBrepObject(model.summary.fileName, model.content.scene, this.materials);
-      entry = { object: built.object, bounds, dispose: built.dispose };
+      entry = { object: built.object, bounds, parts: built.parts, hidden: new Set(), selected: [], dispose: built.dispose };
     } else {
-      entry = { object: model.content.root, bounds };
+      model.content.root.updateMatrixWorld(true);
+      const parts = new MeshParts(model.content.nodes, model.tree);
+      entry = { object: model.content.root, bounds, parts, hidden: new Set(), selected: [] };
     }
     this.models.set(model.summary.id, entry);
     this.scene.add(entry.object);
@@ -260,20 +300,136 @@ export class Viewer {
       return;
     }
     this.models.delete(id);
+    this.setSelectionHighlight(entry, undefined);
+    if (this.hovered?.id === id) {
+      this.setHovered(undefined);
+    }
     entry.object.removeFromParent();
     entry.dispose?.();
     this.updateSceneBounds();
     this.requestRender();
   }
 
-  /** Frames every model without changing the view direction (button and `F` key). */
+  /** Frames every visible part without changing the view direction (button and `F` key; D78). */
   fitAll(animate = true): void {
-    if (this.sceneBounds.isEmpty()) {
+    const bounds = new Box3();
+    for (const { parts } of this.models.values()) {
+      parts.addVisibleBounds(bounds);
+    }
+    if (bounds.isEmpty()) {
       return;
     }
     const position = this.controls.getPosition(new Vector3(), true);
     const target = this.controls.getTarget(new Vector3(), true);
-    this.applyFit(fitBox(this.sceneBounds, lookRotation(position, target), this.width / this.height), animate);
+    this.applyFit(fitBox(bounds, lookRotation(position, target), this.width / this.height), animate);
+  }
+
+  /**
+   * Applies a model's hidden and selected part nodes, as .NET holds them (D95). Hidden parts aren't
+   * drawn or picked; the selection is drawn as an overlay (D93) and never includes hidden parts (D98).
+   */
+  setPartState(id: ModelId, hidden: readonly number[], selected: readonly number[]): void {
+    const entry = this.models.get(id);
+    if (!entry) {
+      return;
+    }
+    const hiddenSet = new Set(hidden);
+    if (!sameSet(hiddenSet, entry.hidden)) {
+      entry.hidden = hiddenSet;
+      entry.parts.setHidden(hiddenSet);
+      if (this.hovered?.id === id && hiddenSet.has(this.hovered.node)) {
+        this.setHovered(undefined);
+      }
+    }
+    const shown = selected.filter((node) => !hiddenSet.has(node));
+    if (!sameSet(new Set(shown), new Set(entry.selected))) {
+      entry.selected = shown;
+      this.setSelectionHighlight(entry, shown.length > 0 ? entry.parts.highlight(shown, 'selected', this.highlights) : undefined);
+    }
+    this.requestRender();
+  }
+
+  /** The visible part under a client point, if any. */
+  pickPart(clientX: number, clientY: number): PartRef | undefined {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    const started = performance.now();
+    this.camera.updateMatrixWorld();
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const entries = [...this.models];
+    const hits = this.raycaster.intersectObjects(
+      entries.map(([, entry]) => entry.object),
+      true,
+    );
+    let part: PartRef | undefined;
+    for (const hit of hits) {
+      part = this.partOf(entries, hit);
+      if (part) {
+        break;
+      }
+    }
+    const milliseconds = performance.now() - started;
+    this.lastPick = { milliseconds, count: this.lastPick.count + 1, longest: Math.max(this.lastPick.longest, milliseconds) };
+    return part;
+  }
+
+  /** The part under the pointer, faintly highlighted (D89). */
+  get hoveredPart(): PartRef | undefined {
+    return this.hovered && { id: this.hovered.id, node: this.hovered.node };
+  }
+
+  /** How long picks take (for the large-model measurements, D89). Reading it resets the longest. */
+  takePickTimes(): { milliseconds: number; count: number; longest: number } {
+    const times = this.lastPick;
+    this.lastPick = { ...times, longest: 0 };
+    return times;
+  }
+
+  /** What the viewer has applied to a model: its hidden and highlighted parts (for tests). */
+  partState(id: ModelId): { parts: number[]; hidden: number[]; selected: number[] } | undefined {
+    const entry = this.models.get(id);
+    return entry && { parts: [...entry.parts.partNodes], hidden: [...entry.hidden], selected: [...entry.selected] };
+  }
+
+  /**
+   * A client point where a part can be clicked: the first of a grid over its on-screen bounds that
+   * picks it, or undefined when it's hidden or covered everywhere (for tests).
+   */
+  partPoint(id: ModelId, node: number): { x: number; y: number } | undefined {
+    const entry = this.models.get(id);
+    if (!entry || entry.hidden.has(node)) {
+      return undefined;
+    }
+    const others = new Set(entry.parts.partNodes);
+    others.delete(node);
+    entry.parts.setHidden(new Set([...others, ...entry.hidden]));
+    const bounds = entry.parts.addVisibleBounds(new Box3());
+    entry.parts.setHidden(entry.hidden);
+    if (bounds.isEmpty()) {
+      return undefined;
+    }
+    const corners = [0, 1, 2, 3, 4, 5, 6, 7].map((corner) =>
+      this.projectToClient([
+        corner & 1 ? bounds.max.x : bounds.min.x,
+        corner & 2 ? bounds.max.y : bounds.min.y,
+        corner & 4 ? bounds.max.z : bounds.min.z,
+      ]),
+    );
+    const left = Math.min(...corners.map((c) => c.x));
+    const right = Math.max(...corners.map((c) => c.x));
+    const top = Math.min(...corners.map((c) => c.y));
+    const bottom = Math.max(...corners.map((c) => c.y));
+    const steps = 9;
+    for (const fy of gridFractions(steps)) {
+      for (const fx of gridFractions(steps)) {
+        const point = { x: left + (right - left) * fx, y: top + (bottom - top) * fy };
+        const picked = this.pickPart(point.x, point.y);
+        if (picked?.id === id && picked.node === node && this.viewCubeRegionAt(point.x, point.y) === undefined) {
+          return point;
+        }
+      }
+    }
+    return undefined;
   }
 
   /** Turns to a view cube region's view, keeping the distance and zoom (D31). */
@@ -392,7 +548,9 @@ export class Viewer {
 
   dispose(): void {
     cancelAnimationFrame(this.frameRequest);
+    cancelAnimationFrame(this.hoverRequest);
     this.frameRequest = 0;
+    this.hoverRequest = 0;
     for (const dispose of this.cleanup.splice(0)) {
       dispose();
     }
@@ -401,6 +559,7 @@ export class Viewer {
       this.remove(id);
     }
     this.materials.dispose();
+    this.highlights.dispose();
     this.viewCube.dispose();
     this.environment.dispose();
     this.renderer.dispose();
@@ -515,10 +674,116 @@ export class Viewer {
     this.frames++;
   }
 
+  /**
+   * `F` fits; the rest are .NET's commands (D99). None applies while focus is in a text input, where
+   * Ctrl+Z and Ctrl+Y stay the input's own.
+   */
   private onKeyDown(event: KeyboardEvent): void {
-    if ((event.key === 'f' || event.key === 'F') && !event.ctrlKey && !event.metaKey && !event.altKey && !isEditable(event.target)) {
-      this.fitAll();
+    if (event.altKey || isEditable(event.target)) {
+      return;
     }
+    const key = event.key.toLowerCase();
+    const command = event.ctrlKey || event.metaKey ? keyCommand(key, event.shiftKey, true) : keyCommand(key, event.shiftKey, false);
+    if (command === 'fit') {
+      this.fitAll();
+    } else if (command) {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault(); // not the browser's own undo
+      }
+      this.options.onCommand?.(command);
+    }
+  }
+
+  /** The part an intersection hit, unless the model hides it. */
+  private partOf(entries: [ModelId, SceneModel][], hit: Intersection): PartRef | undefined {
+    for (const [id, entry] of entries) {
+      let object: Object3D | null = hit.object;
+      while (object && object !== entry.object) {
+        object = object.parent;
+      }
+      if (object) {
+        const node = entry.parts.nodeOf(hit);
+        return node >= 0 && !entry.hidden.has(node) ? { id, node } : undefined;
+      }
+    }
+    return undefined;
+  }
+
+  private setSelectionHighlight(entry: SceneModel, highlight: Highlight | undefined): void {
+    if (entry.selection) {
+      this.overlays.remove(entry.selection.object);
+      entry.selection.dispose();
+    }
+    entry.selection = highlight;
+    if (highlight) {
+      this.overlays.add(highlight.object);
+    }
+  }
+
+  private setHovered(part: PartRef | undefined): void {
+    if (part?.id === this.hovered?.id && part?.node === this.hovered?.node) {
+      return;
+    }
+    if (this.hovered?.highlight) {
+      this.overlays.remove(this.hovered.highlight.object);
+      this.hovered.highlight.dispose();
+    }
+    const entry = part && this.models.get(part.id);
+    const highlight = entry && part ? entry.parts.highlight([part.node], 'hovered' satisfies HighlightKind, this.highlights) : undefined;
+    if (highlight) {
+      this.overlays.add(highlight.object);
+    }
+    this.hovered = part && { ...part, highlight };
+    this.renderer.domElement.style.cursor = part ? 'pointer' : '';
+    this.requestRender();
+  }
+
+  /**
+   * Hover pre-highlights the part under the pointer, with at most one pick per animation frame
+   * (D89); a click that didn't drag picks a part, or empty space (D77). Pressing on the view cube
+   * never gets here (see {@link installViewCubeInput}).
+   */
+  private installPartInput(canvas: HTMLCanvasElement): void {
+    let press: { id: number; x: number; y: number } | undefined;
+    this.listen(canvas, 'pointerdown', (event) => {
+      press = event.button === 0 ? { id: event.pointerId, x: event.clientX, y: event.clientY } : undefined;
+      this.hoverPoint = undefined;
+      this.setHovered(undefined);
+    });
+    this.listen(canvas, 'pointerup', (event) => {
+      const start = press;
+      press = undefined;
+      if (
+        !start ||
+        start.id !== event.pointerId ||
+        Math.hypot(event.clientX - start.x, event.clientY - start.y) > ClickTolerance ||
+        this.viewCubeRegionAt(event.clientX, event.clientY) !== undefined
+      ) {
+        return;
+      }
+      this.options.onPick?.(this.pickPart(event.clientX, event.clientY), event.ctrlKey || event.metaKey);
+    });
+    this.listen(canvas, 'pointermove', (event) => {
+      if (event.pointerType !== 'mouse' || event.buttons !== 0 || this.interacting) {
+        return;
+      }
+      this.hoverPoint = { x: event.clientX, y: event.clientY };
+      if (this.hoverRequest === 0) {
+        this.hoverRequest = requestAnimationFrame(() => {
+          this.hoverRequest = 0;
+          const point = this.hoverPoint;
+          if (!point || this.viewCubeRegionAt(point.x, point.y) !== undefined) {
+            this.setHovered(undefined);
+            return;
+          }
+          this.setHovered(this.pickPart(point.x, point.y));
+        });
+      }
+    });
+    this.listen(canvas, 'pointerleave', () => {
+      this.hoverPoint = undefined;
+      this.setHovered(undefined);
+    });
   }
 
   /**
@@ -592,6 +857,45 @@ export class Viewer {
       this.cleanup.push(() => target.removeEventListener(type, handler, options));
     }
   }
+}
+
+/** D99's keys: `F` fits; Esc, H, I, Shift+H, Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z) go to .NET. */
+export function keyCommand(key: string, shift: boolean, control: boolean): ViewerCommand | 'fit' | undefined {
+  if (control) {
+    if (key === 'z') {
+      return shift ? 'redo' : 'undo';
+    }
+    return key === 'y' ? 'redo' : undefined;
+  }
+  switch (key) {
+    case 'f':
+      return 'fit';
+    case 'escape':
+      return 'clearSelection';
+    case 'h':
+      return shift ? 'showAll' : 'hide';
+    case 'i':
+      return shift ? undefined : 'isolate';
+    default:
+      return undefined;
+  }
+}
+
+function sameSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
+  if (a.size !== b.size) {
+    return false;
+  }
+  for (const value of a) {
+    if (!b.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Fractions across a range, from the middle outwards: 0.5, then nearer the edges. */
+function gridFractions(steps: number): number[] {
+  return Array.from({ length: steps }, (_, i) => (i + 0.5) / steps).sort((a, b) => Math.abs(a - 0.5) - Math.abs(b - 0.5));
 }
 
 function isEditable(target: EventTarget | null): boolean {

@@ -17,6 +17,7 @@ public sealed class ViewportTests : BunitTestBase
         JSInterop.Mode = JSRuntimeMode.Strict;
         _viewer = SetupViewerModule();
         _viewer.SetupVoid("dispose").SetVoidResult();
+        _viewer.SetupVoid("setPartState", static _ => true).SetVoidResult();
     }
 
     [Fact]
@@ -113,6 +114,66 @@ public sealed class ViewportTests : BunitTestBase
         var snackbar = Assert.Single(Snackbars.ShownSnackbars);
         Assert.Equal(("Skipped notes.txt: .txt files aren't supported.", Severity.Warning), (snackbar.Message, snackbar.Severity));
     }
+
+    [Fact]
+    public async Task Relays_picks_and_key_commands_into_the_scene()
+    {
+        var cut = await LoadedAsync();
+
+        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 3, additive: false));
+        Assert.Equal([3], Scene.Models[0].Selected);
+        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 1, additive: true));
+        Assert.Equal([1, 3], Scene.Models[0].Selected.Order());
+
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("hide"));
+        Assert.Equal([1, 3], Scene.Models[0].Hidden.Order());
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("undo"));
+        Assert.Empty(Scene.Models[0].Hidden);
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("redo"));
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("showAll"));
+        Assert.Empty(Scene.Models[0].Hidden);
+
+        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 4, additive: false));
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("isolate"));
+        Assert.Equal([1, 3], Scene.Models[0].Hidden.Order());
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("clearSelection"));
+        Assert.False(Scene.HasSelection);
+
+        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 4, additive: false));
+        await cut.InvokeAsync(() => cut.Instance.OnPartPicked(null, -1, additive: false));
+        Assert.False(Scene.HasSelection);
+    }
+
+    [Fact]
+    public async Task Sends_a_models_hidden_and_selected_parts_to_the_viewer_only_when_they_change()
+    {
+        var cut = await LoadedAsync();
+        Assert.Empty(PartStates()); // nothing hidden or selected yet
+
+        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 3, additive: false));
+        await cut.InvokeAsync(() => cut.Instance.OnModelProgress(new ModelId("m1"), ImportPhase.Meshing, 0.5)); // no change to parts
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("hide"));
+
+        Assert.Equal(
+            [("m1", "", "3"), ("m1", "3", "")],
+            PartStates());
+    }
+
+    private async Task<IRenderedComponent<Viewport>> LoadedAsync()
+    {
+        var cut = Render<Viewport>();
+        await cut.InvokeAsync(() => cut.Instance.OnModelQueued(Summary("m1")));
+        await cut.InvokeAsync(() => cut.Instance.OnModelLoaded(new ModelId("m1"), Info()));
+        return cut;
+    }
+
+    /// <summary>Each setPartState call as (model, hidden nodes, selected nodes).</summary>
+    private List<(string, string, string)> PartStates() =>
+    [
+        .. _viewer.Invocations
+            .Where(static i => i.Identifier == "setPartState")
+            .Select(static i => ((string)i.Arguments[0]!, string.Join(',', (int[])i.Arguments[1]!), string.Join(',', (int[])i.Arguments[2]!))),
+    ];
 
     private SceneState Scene => Services.GetRequiredService<SceneState>();
 
