@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) in progress** (D93–D100), M7 (measurement), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-15
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), M7 (measurement), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-15
 
 ---
 
@@ -651,7 +651,7 @@ Measured in the built-in browser (Chrome 152) on the development machine's integ
 
 Planned on 2026-10-15 (D73–D92, five milestones by D85). Each starts with its own short question round (D92), so a scope below can still change; what's decided then is recorded in §2 and here.
 
-### M6 — Selection and visibility (in progress)
+### M6 — Selection and visibility ✅ ([JRB-90/j3d#8](https://github.com/JRB-90/j3d/pull/8), squash-merged as `bbaa51b`)
 
 Branch `feature/m6-selection-visibility`, from `main` after [JRB-90/j3d#7](https://github.com/JRB-90/j3d/pull/7) merged as `cc1ceba` (D91).
 
