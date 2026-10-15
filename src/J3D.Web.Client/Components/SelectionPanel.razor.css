@@ -4,12 +4,13 @@
     left: 12px;
     bottom: 12px;
     max-width: min(420px, calc(100% - 24px));
+    max-height: calc(100% - 140px);
+    overflow-y: auto;
     padding: 8px 12px;
     border: 1px solid var(--mud-palette-divider);
     border-radius: 6px;
     background: rgba(27, 30, 35, 0.92);
     color: var(--mud-palette-text-primary);
-    pointer-events: none;
 }
 
 .j3d-selection-title,
@@ -26,4 +27,87 @@
 .j3d-selection-detail {
     font-size: 0.8125rem;
     color: var(--mud-palette-text-secondary);
+}
+
+/* The Measure tool (M7, D101). */
+.j3d-measure + .j3d-measure,
+.j3d-selection-detail + .j3d-measure {
+    margin-top: 8px;
+}
+
+.j3d-measure-hint {
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.j3d-measure-card {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+.j3d-measure-card:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.j3d-measure-card--pending .j3d-measure-card-title {
+    color: var(--mud-palette-primary);
+}
+
+.j3d-measure-card--hidden {
+    opacity: 0.5;
+}
+
+.j3d-measure-card-header {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: -6px;
+}
+
+.j3d-measure-card-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.j3d-measure-rows {
+    margin: 2px 0 0;
+    font-size: 0.8125rem;
+}
+
+.j3d-measure-row {
+    display: grid;
+    grid-template-columns: minmax(90px, auto) 1fr;
+    gap: 8px;
+    align-items: center;
+}
+
+.j3d-measure-row dt {
+    color: var(--mud-palette-text-secondary);
+    white-space: nowrap;
+}
+
+.j3d-measure-row dd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.j3d-measure ::deep .j3d-measure-copy {
+    padding: 2px;
+    opacity: 0.6;
+}
+
+.j3d-measure ::deep .j3d-measure-clear {
+    margin-top: 6px;
+    text-transform: none;
 }

@@ -16,7 +16,12 @@ drawing all happen in the browser tab.
   highlighted in blue, named in a panel at the bottom left, and shown in the tree. The part under the pointer is
   highlighted faintly before you click.
 - **Hide, isolate and show** parts with the eye beside each model and tree node, or the toolbar buttons and keys
-  below. **Undo and redo** cover hiding and showing.
+  below. **Undo and redo** cover hiding and showing, and measurements.
+- **Measure** CAD models exactly from their BREP geometry: turn on **Measure** (or press `M`), click a face, edge or
+  vertex to see its properties (area, length, radius, normal, axis…) and its part's volume and size, then click a
+  second one for the distance between them, the angle between planes or lines, and the distance between circle
+  centres. Each measurement is kept, drawn in the view and listed in the panel with copy buttons. On mesh models
+  the tool measures between points, snapping to vertices, and marks the results approximate (≈).
 - **Delete** a model from the list. J3D asks first, then frees all of its memory.
 - CAD models are drawn with **shaded faces in the file's colours** and the **true BREP edges** over them; translucent
   colours are drawn translucent.
@@ -51,7 +56,8 @@ to J3D's Z-up; STL and OBJ are assumed to be Z-up already, as CAD exports are.
 | Hide the selection | | | **Hide** in the toolbar, or `H`; or a node's eye in the tree |
 | Show only the selection | | | **Isolate**, or `I` |
 | Show everything | | | **Show all**, or `Shift+H` |
-| Undo, redo (hiding and showing) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
+| Undo, redo (hiding, showing, measuring) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
+| Measure | Click a face, edge or vertex, then another | Tap | **Measure** in the toolbar, or `M`; `Esc` drops the first pick |
 
 The view fits itself to the first model you import into an empty scene; later imports leave the camera where it is.
 
@@ -63,8 +69,10 @@ The view fits itself to the first model you import into an empty scene; later im
   frames a second on its integrated GPU.
 - Overlapping translucent parts can be drawn in the wrong order from some angles.
 - Models live only as long as the tab: nothing is saved, so refreshing the page clears the scene.
-- Not in this version yet: measuring, export, and keeping models across a refresh (all planned for iteration 2);
-  sections, exploded views, and a phone or tablet layout.
+- Measurements are in millimetres: STEP and IGES are converted on import, glTF (metres by its specification) is
+  converted when measured, and STL and OBJ are taken to be in millimetres.
+- Not in this version yet: export and keeping models across a refresh (both planned for iteration 2); sections,
+  exploded views, and a phone or tablet layout.
 
 ## Browsers
 

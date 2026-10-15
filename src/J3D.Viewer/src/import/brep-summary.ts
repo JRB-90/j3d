@@ -68,6 +68,8 @@ function prototypeBounds(prototype: PrototypeMesh): Bounds {
 /** The buffers of a scene, for the `transfer` list of `postMessage`. */
 export function sceneTransferables(scene: ImportedScene): ArrayBuffer[] {
   return scene.prototypes.flatMap((p) =>
-    [p.positions, p.normals, p.indices, p.edges, ...(p.colors ? [p.colors] : [])].map((array) => array.buffer as ArrayBuffer),
+    [p.positions, p.normals, p.indices, p.edges, p.faceRanges, p.edgeRanges, p.vertices, ...(p.colors ? [p.colors] : [])].map(
+      (array) => array.buffer as ArrayBuffer,
+    ),
   );
 }

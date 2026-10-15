@@ -69,6 +69,15 @@ public sealed class ViewerSession
         }
     }
 
+    /// <summary>Copies a measurement's value to the clipboard (M7).</summary>
+    public async Task CopyTextAsync(string text)
+    {
+        if (_viewer is not null)
+        {
+            await _viewer.CopyTextAsync(text);
+        }
+    }
+
     internal void Attach(ViewerInterop viewer, ViewerCapabilities capabilities)
     {
         _viewer = viewer;

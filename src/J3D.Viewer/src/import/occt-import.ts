@@ -1,6 +1,7 @@
 import { ModelImportError, toImportError } from './errors';
 import { compileOcctModule } from './occt-module';
-import type { ModelWorkerRequest, ModelWorkerResponse, OcctFormat } from './protocol';
+import type { BrepMeasurer } from './types';
+import type { MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, OcctFormat } from './protocol';
 import { liveWorkers, type ImportRunner } from './runner';
 import type { ImportResult } from './types';
 
@@ -29,9 +30,14 @@ export function createOcctRunner(options: OcctRunnerOptions = {}): ImportRunner 
       });
       release = liveWorkers.track(worker);
 
+      const measure = measurer(worker);
       return new Promise<ImportResult>((resolve, reject) => {
         worker.onmessage = ({ data }: MessageEvent<ModelWorkerResponse>) => {
           switch (data.type) {
+            case 'measured':
+            case 'measureFailed':
+              measure.answer(data.id, data.type === 'measured' ? { result: data.result } : { message: data.message });
+              break;
             case 'progress':
               request.onProgress(data.phase, data.fraction);
               break;
@@ -40,7 +46,7 @@ export function createOcctRunner(options: OcctRunnerOptions = {}): ImportRunner 
               break;
             case 'loaded':
               resolve({
-                content: { kind: 'brep', scene: data.scene },
+                content: { kind: 'brep', scene: data.scene, measure: measure.channel },
                 tree: data.scene.nodes,
                 bounds: data.bounds,
                 stats: data.stats,
@@ -80,5 +86,39 @@ export function createOcctRunner(options: OcctRunnerOptions = {}): ImportRunner 
         release?.();
       },
     };
+  };
+}
+
+/**
+ * The query channel to a model worker (M7): each request gets an id, and its promise settles when the
+ * worker answers it. A terminated worker never answers, so its pending queries never settle.
+ */
+function measurer(worker: Worker): {
+  channel: BrepMeasurer;
+  answer(id: number, outcome: { result: unknown } | { message: string }): void;
+} {
+  let next = 0;
+  const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
+  const ask = <T>(request: MeasureRequest extends infer R ? (R extends MeasureRequest ? Omit<R, 'id'> : never) : never): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const id = ++next;
+      pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+      worker.postMessage({ ...request, id } as MeasureRequest);
+    });
+  return {
+    channel: {
+      entity: (entity) => ask({ type: 'measureEntity', entity }),
+      pair: (a, b, shapeB) => ask({ type: 'measurePair', a, b, ...(shapeB === undefined ? {} : { shapeB }) }),
+      exportEntity: (entity) => ask({ type: 'exportEntity', entity }),
+    },
+    answer(id, outcome) {
+      const waiting = pending.get(id);
+      pending.delete(id);
+      if ('result' in outcome) {
+        waiting?.resolve(outcome.result);
+      } else {
+        waiting?.reject(new Error(outcome.message));
+      }
+    },
   };
 }

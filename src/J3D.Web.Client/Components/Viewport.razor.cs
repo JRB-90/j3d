@@ -22,6 +22,10 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     private DotNetObjectReference<Viewport>? _selfReference;
     private bool _disposed;
 
+    /// <summary>What the viewer was last told of the Measure tool, so only changes are sent.</summary>
+    private bool _appliedMeasureMode;
+    private string _appliedMeasurements = "";
+
     /// <summary>What the viewer was last given for each model, so only changes are sent.</summary>
     private readonly Dictionary<ModelId, (PartSet Hidden, PartSet Selected)> _applied = [];
 
@@ -113,8 +117,22 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             case "redo":
                 scene.Redo();
                 break;
+            case "measure":
+                scene.ToggleMeasureMode();
+                break;
         }
     }
+
+    /// <summary>The Measure tool's first pick, or null when it's dropped or finished (D101).</summary>
+    [JSInvokable]
+    public void OnMeasurePending(MeasureInfo? info) => scene.SetPendingMeasure(info);
+
+    /// <summary>A measurement the Measure tool has kept.</summary>
+    [JSInvokable]
+    public void OnMeasured(MeasureInfo info) => scene.AddMeasurement(info);
+
+    [JSInvokable]
+    public void OnMeasureFailed(string message) => snackbar.Add($"Couldn't measure that: {message}", Severity.Warning);
 
     public async ValueTask DisposeAsync()
     {
@@ -159,11 +177,28 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             _applied.Remove(id);
         }
 
+        var measureMode = scene.MeasureMode;
+        var measurements = string.Join(',', scene.ShownMeasurements.Select(static measurement => measurement.Id));
+        var modeChanged = measureMode != _appliedMeasureMode;
+        var measurementsChanged = measurements != _appliedMeasurements;
+        _appliedMeasureMode = measureMode;
+        _appliedMeasurements = measurements;
+
         try
         {
             foreach (var model in pending)
             {
                 await viewer.SetPartStateAsync(model.Id, model.Hidden, model.Selected);
+            }
+
+            if (modeChanged)
+            {
+                await viewer.SetMeasureModeAsync(measureMode);
+            }
+
+            if (measurementsChanged)
+            {
+                await viewer.SetMeasurementsAsync(measurements.Length == 0 ? [] : measurements.Split(','));
             }
         }
         catch (JSDisconnectedException)

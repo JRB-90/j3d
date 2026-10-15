@@ -1,4 +1,4 @@
-import type { ImportedScene } from '@j3d/occt/facade';
+import type { EntityMeasure, EntityRef, ImportedScene, PairMeasure } from '@j3d/occt/facade';
 import type { Object3D } from 'three';
 import type { ModelFormat, ModelKind } from '../formats';
 
@@ -65,8 +65,17 @@ export interface ModelStats {
  *   world matrices (docs/plan.md §6.1). The viewer builds the Three.js objects.
  * - Mesh models arrive as a ready Three.js object, already rotated to Z-up, with each tree node's object.
  */
+/** Measurement queries to a BREP model's worker (M7), answered one at a time. */
+export interface BrepMeasurer {
+  entity(entity: EntityRef): Promise<EntityMeasure>;
+  /** `shapeB`: entity B exported from another model's worker (D102). */
+  pair(a: EntityRef, b: EntityRef, shapeB?: string): Promise<PairMeasure>;
+  /** BREP text of an entity, for a pair measured in another model's worker. */
+  exportEntity(entity: EntityRef): Promise<string>;
+}
+
 export type ModelContent =
-  | { kind: 'brep'; scene: ImportedScene }
+  | { kind: 'brep'; scene: ImportedScene; measure?: BrepMeasurer }
   /** `nodes[i]` is the object of tree node i, for picking and hiding parts (D81). */
   | { kind: 'mesh'; root: Object3D; nodes: Object3D[] };
 

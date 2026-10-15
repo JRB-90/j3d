@@ -84,6 +84,10 @@ export interface TestHook {
    * for measuring large selections (D89). .NET doesn't hear of it, so restore the state after.
    */
   timePartState(id: string, hidden: number[], selected: number[]): number | null;
+  /** The Measure tool's state (M7), or null without WebGL2. */
+  measureState(): ReturnType<Viewer['measureState']> | null;
+  /** What the Measure tool would pick at a client point. */
+  entityAt(x: number, y: number): ReturnType<Viewer['entityAt']>;
 }
 
 export interface TestHookControls {
@@ -158,6 +162,8 @@ export function installTestHook(
     hoveredPart: () => viewer?.hoveredPart ?? null,
     partState: (id) => viewer?.partState(id) ?? null,
     pickTimes: () => viewer?.takePickTimes() ?? null,
+    measureState: () => viewer?.measureState() ?? null,
+    entityAt: (x, y) => viewer?.entityAt(x, y) ?? null,
     timePartState: (id, hidden, selected) => {
       if (!viewer) return null;
       const start = performance.now();

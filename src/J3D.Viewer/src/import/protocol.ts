@@ -1,7 +1,7 @@
 // Messages between the main thread and the import workers. Bulk data always travels in transferred
 // ArrayBuffers; everything else is small.
 
-import type { ImportedScene } from '@j3d/occt/facade';
+import type { EntityRef, ImportedScene } from '@j3d/occt/facade';
 import type { SerializedMeshScene } from './mesh/serialize';
 import type { Bounds, ImportError, ImportPhase, ModelStats } from './types';
 
@@ -20,7 +20,18 @@ export interface FailedMessage {
 }
 
 /** Main thread → model worker (one per BREP model; it keeps the model alive until terminated). */
-export interface ModelWorkerRequest {
+export type ModelWorkerRequest = ImportRequestMessage | MeasureRequest;
+
+/**
+ * A measurement query to a loaded model's worker (M7, D80, D102). Each carries an id its answer
+ * echoes; the worker answers queries one at a time, in order.
+ */
+export type MeasureRequest =
+  | { type: 'measureEntity'; id: number; entity: EntityRef }
+  | { type: 'measurePair'; id: number; a: EntityRef; b: EntityRef; shapeB?: string }
+  | { type: 'exportEntity'; id: number; entity: EntityRef };
+
+export interface ImportRequestMessage {
   type: 'import';
   file: Blob;
   fileName: string;
@@ -36,6 +47,8 @@ export type ModelWorkerResponse =
   | ProgressMessage
   | FailedMessage
   | { type: 'held' }
+  | { type: 'measured'; id: number; result: unknown }
+  | { type: 'measureFailed'; id: number; message: string }
   | {
       type: 'loaded';
       scene: ImportedScene;

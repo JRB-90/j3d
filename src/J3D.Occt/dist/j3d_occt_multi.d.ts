@@ -12,6 +12,12 @@ declare class J3DMeshData {
   getUniformColor(channel: number): number;
   getEdgesPtr(): number;
   getEdgesLength(): number;
+  getFaceRangesPtr(): number;
+  getFaceRangesLength(): number;
+  getEdgeRangesPtr(): number;
+  getEdgeRangesLength(): number;
+  getVerticesPtr(): number;
+  getVerticesLength(): number;
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;
@@ -27,6 +33,9 @@ declare class J3DModel {
   extractPrototype(index: number): J3DMeshData;
   getSceneJson(): string;
   getLastError(): string;
+  measureEntity(kind: number, prototype: number, index: number, matrix: string): string;
+  measurePair(kindA: number, prototypeA: number, indexA: number, matrixA: string, kindB: number, prototypeB: number, indexB: number, matrixB: string, shapeB: string): string;
+  exportEntity(kind: number, prototype: number, index: number): string;
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;
