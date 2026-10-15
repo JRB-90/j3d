@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), M7 (measurement), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-15
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) in progress** (D101–D108), M7 (measurement), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-15
 
 ---
 
@@ -100,7 +100,7 @@ Users and auth, deployment (D75), sectioning, exploded views, mobile/tablet layo
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -204,6 +204,14 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D98 | Hidden and selected (M6) | **Hidden parts leave the selection**, however they were hidden, so the selection is always what's visible; undoing the hide doesn't select them again | |
 | D99 | Keys (M6) | **As `F`**: H, I, Shift+H, Esc, Ctrl+Z and Ctrl+Y work anywhere on the page except while focus is in a text input, where Ctrl+Z and Ctrl+Y stay the input's own | |
 | D100 | M5 leftovers (M6) | **First, before any M6 code** (D88): the built-in browser checklist and the orbit frame rate with real animation frames while the owner brings the Claude window forward, and a CI dispatch with `large_fixtures=200,curved-100` | |
+| D101 | Measure workflow (M7) | **Click A, click B, keep**: the first click picks an entity and shows its properties; the second picks another and shows the pair's results. The measurement is then kept, drawn in 3D and listed in the panel, and the next click starts a new one. Esc drops a half-done pick, Clear removes them all; adding and clearing are undoable (D84) | |
+| D102 | Pairs across models (M7) | **Exact, with the shape sent**: the second entity's face, edge or vertex is written as BREP text in its own worker and read into the first entity's worker with its world transform, measured there, then freed | Each model has its own worker and heap (§3), so the two shapes are never in one heap otherwise. |
+| D103 | Dimension labels (M7) | **HTML over the canvas**: dimension lines and points drawn in WebGL, the values as small HTML labels positioned over the canvas each frame | Crisp at any zoom, styled with the theme, readable by E2E and screen readers. |
+| D104 | Part properties (M7) | **With every pick**: a picked face, edge or vertex also lists its part's volume and bounding box in the panel, under the part's name | |
+| D105 | glTF units (M7) | **Converted to millimetres**: glTF measurements are its metres × 1000; the scene itself isn't rescaled | Settles assumption 13's open point. |
+| D106 | M7's WASM rebuild | **Measurement code only**; the STEP and BREP writers get their own rebuild in M9 (R19) | Each milestone's WASM change and size stay reviewable on their own. |
+| D107 | Pick priority (M7) | **Vertex, then edge, then face**: a vertex within 8 px wins, then an edge within 6 px, else the face under the pointer; the pre-highlight shows which before the click | |
+| D108 | Measurement lifetime (M7) | **Measurements follow their parts**: one on a hidden part is hidden with it (still listed, greyed); deleting a model removes its measurements, and M8's undo of the delete brings them back | |
 
 ---
 
@@ -687,7 +695,9 @@ Branch `feature/m6-selection-visibility`, from `main` after [JRB-90/j3d#7](https
 - **Through the UI**, from the click or key until the viewer has the new state, on the 10,437-part file with its tree open: the model's eye hiding everything took 228 ms of one task with `ImmutableHashSet`s, so they became `PartSet`s (§6.4): **86–104 ms** of synchronous work and 150–165 ms in all; isolate 93 ms (from 240); undo, redo, show all and a tree click 38–83 ms.
 - **The largest selection is the curved file's whole model:** 168 ms to build, under the line, and its overlay draws all 1.77M triangles again (74 ms against 33 ms per frame with the read-back). Neither generated file's tree has a single root, so selecting everything takes Ctrl+clicks or a node per part in practice; the figure came from the test hook's `timePartState`.
 
-### M7 — Measurement (planned)
+### M7 — Measurement (in progress)
+
+Branch `feature/m7-measurement`, from `main` after [JRB-90/j3d#8](https://github.com/JRB-90/j3d/pull/8) merged as `bbaa51b`. Decided at its start: D101–D108.
 
 - **Facade (a WASM rebuild):** topology ids, with each prototype's triangles grouped by face (within the opaque and translucent ranges), its edge segments grouped by edge, and its vertices; and queries on `J3DModel` for one entity (`BRepAdaptor_Curve` and `BRepAdaptor_Surface` for circles, planes and cylinders, `BRepGProp` for length, area and volume, bounding boxes) and for two (`BRepExtrema_DistShapeShape`, angles), placed by the instance's transform.
 - **Worker:** a request/response query channel beside `import` (§6.2), which is all the model worker answers today.
@@ -760,5 +770,5 @@ All eight open questions from the first draft are answered (D28–D36). These sm
 10. **Hidden means out of the way.** Hidden parts can't be picked or measured, and Fit all and the GLB/STL export leave them out.
 11. **The undo history lives in the tab.** It holds the last 50 steps, isn't stored, and starts empty after a refresh, even though the models come back (D82).
 12. **Measurements stay until cleared**, from the panel or with Esc in the Measure tool, and aren't stored across a refresh.
-13. **Lengths in millimetres to 3 decimals, angles in degrees to 2**; mesh measurements are prefixed "≈". STL and OBJ carry no units, so their values are taken as millimetres too (the CAD export convention, as with Z-up in §6.2). glTF is in metres by its specification, so its measurements are converted to millimetres, though the scene itself still isn't rescaled (to revisit in M7's question round).
+13. **Lengths in millimetres to 3 decimals, angles in degrees to 2**; mesh measurements are prefixed "≈". STL and OBJ carry no units, so their values are taken as millimetres too (the CAD export convention, as with Z-up in §6.2). glTF is in metres by its specification, so its measurements are converted to millimetres, though the scene itself still isn't rescaled (D105).
 14. **Zoom-to-cursor is for the wheel and pinch only.** Fit all, Home and the view cube still frame the scene about its centre.
