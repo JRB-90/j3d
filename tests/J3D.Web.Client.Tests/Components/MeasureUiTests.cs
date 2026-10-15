@@ -60,6 +60,9 @@ public sealed class MeasureUiTests : BunitTestBase
         });
         var titles = cut.FindAll("[data-testid=measurement-title]").Select(static t => t.TextContent.Trim()).ToList();
         Assert.Equal(["Angle 90.00°", "Distance 30.000 mm"], titles); // newest first
+        // Only the newest is open, so the panel stays small; the toggle opens another.
+        Assert.Equal(["90.00°"], cut.FindAll("[data-testid=measurement] [data-testid=measure-value]").Select(static v => v.TextContent));
+        cut.FindAll("[data-testid=measurement-toggle]")[1].Click();
         Assert.Equal(["90.00°", "30.000 mm"], cut.FindAll("[data-testid=measurement] [data-testid=measure-value]").Select(static v => v.TextContent));
     }
 

@@ -15,7 +15,7 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
 {
     internal const string PathSeparator = " › ";
 
-    /// <summary>Measurements whose rows are open. A new measurement opens; older ones keep their state.</summary>
+    /// <summary>Measurements whose rows are open. A new measurement opens and closes the others, so the panel stays small.</summary>
     private readonly HashSet<string> _expanded = [];
     private string? _newest;
 
@@ -67,6 +67,7 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
         if (scene.Measurements.LastOrDefault() is { } newest && newest.Id != _newest)
         {
             _newest = newest.Id;
+            _expanded.Clear();
             _expanded.Add(newest.Id);
         }
 

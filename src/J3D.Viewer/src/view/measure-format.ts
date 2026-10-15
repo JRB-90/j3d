@@ -20,29 +20,35 @@ export interface MeasureInfo {
   approximate: boolean;
 }
 
+/** A number to fixed decimals, without the "-0.000" that rounding a tiny negative gives. */
+export function fixed(value: number, digits: number): string {
+  const text = value.toFixed(digits);
+  return Number(text) === 0 ? (0).toFixed(digits) : text;
+}
+
 /** Lengths in millimetres to 3 decimals, angles in degrees to 2 (assumption 13). */
 export function length(value: number, approximate = false): string {
-  return `${approximate ? '≈ ' : ''}${value.toFixed(3)} mm`;
+  return `${approximate ? '≈ ' : ''}${fixed(value, 3)} mm`;
 }
 
 export function area(value: number): string {
-  return `${value.toFixed(3)} mm²`;
+  return `${fixed(value, 3)} mm²`;
 }
 
 export function volume(value: number): string {
-  return `${value.toFixed(3)} mm³`;
+  return `${fixed(value, 3)} mm³`;
 }
 
 export function angle(value: number): string {
-  return `${value.toFixed(2)}°`;
+  return `${fixed(value, 2)}°`;
 }
 
 export function point(xyz: readonly number[], approximate = false): string {
-  return `${approximate ? '≈ ' : ''}(${xyz.map((v) => v.toFixed(3)).join(', ')})`;
+  return `${approximate ? '≈ ' : ''}(${xyz.map((v) => fixed(v, 3)).join(', ')})`;
 }
 
 export function direction(xyz: readonly number[]): string {
-  return `(${xyz.map((v) => v.toFixed(3)).join(', ')})`;
+  return `(${xyz.map((v) => fixed(v, 3)).join(', ')})`;
 }
 
 /** What a BREP entity is, for titles: "Face (cylinder)", "Edge (circle)", "Vertex". */
@@ -113,7 +119,7 @@ export function partRows(name: string, part: PartMeasure): MeasureRow[] {
 
 /** A box's extent as "dx × dy × dz mm". */
 export function size(min: readonly number[], max: readonly number[], approximate = false): string {
-  return `${approximate ? '≈ ' : ''}${[0, 1, 2].map((axis) => (max[axis]! - min[axis]!).toFixed(3)).join(' × ')} mm`;
+  return `${approximate ? '≈ ' : ''}${[0, 1, 2].map((axis) => fixed(max[axis]! - min[axis]!, 3)).join(' × ')} mm`;
 }
 
 /** The headline of a pair: its distance, else its angle. */
@@ -138,7 +144,7 @@ export function pairRows(pair: PairMeasure, approximate = false): MeasureRow[] {
   }
   if (pair.pointA && pair.pointB) {
     const delta: Xyz = [0, 1, 2].map((axis) => pair.pointB![axis]! - pair.pointA![axis]!) as Xyz;
-    rows.push({ name: 'Δx, Δy, Δz', value: `${approximate ? '≈ ' : ''}(${delta.map((v) => v.toFixed(3)).join(', ')})` });
+    rows.push({ name: 'Δx, Δy, Δz', value: `${approximate ? '≈ ' : ''}(${delta.map((v) => fixed(v, 3)).join(', ')})` });
     rows.push({ name: 'From', value: point(pair.pointA, approximate) });
     rows.push({ name: 'To', value: point(pair.pointB, approximate) });
   }

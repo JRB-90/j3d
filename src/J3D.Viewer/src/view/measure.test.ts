@@ -31,6 +31,7 @@ describe('formatting (assumption 13)', () => {
     expect(area(200)).toBe('200.000 mm²');
     expect(angle(45)).toBe('45.00°');
     expect(point([1, 2.5, -3])).toBe('(1.000, 2.500, -3.000)');
+    expect(point([-0.0000001, 0, -0])).toBe('(0.000, 0.000, 0.000)');
     expect(size([0, 0, 0], [10, 20, 30])).toBe('10.000 × 20.000 × 30.000 mm');
   });
 

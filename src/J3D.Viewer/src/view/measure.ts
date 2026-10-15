@@ -14,7 +14,7 @@ import {
 } from 'three';
 import type { BrepMeasurer, ModelId, Vector3Tuple } from '../import/types';
 import { AccentColour, type Highlight, type HighlightMaterials, type ModelParts, type PickedEntity, type ScreenSpace } from './parts';
-import { entityName, entityRows, length, pairLabel, pairRows, partRows, point, size, type MeasureInfo, type MeasureRow } from './measure-format';
+import { angle, area, entityName, entityRows, length, pairLabel, pairRows, partRows, point, size, type MeasureInfo, type MeasureRow } from './measure-format';
 
 /** What the Measure tool needs of a model. */
 export interface MeasureModel {
@@ -329,7 +329,7 @@ export class MeasureTool {
       ends = [new Vector3(...pair.pointA), new Vector3(...pair.pointB)];
     }
     const id = `m${++this.next}`;
-    const label = pairLabel(pair, approximate) + (pair.distance !== undefined && pair.angle !== undefined ? ` · ${pair.angle.toFixed(2)}°` : '');
+    const label = pairLabel(pair, approximate) + (pair.distance !== undefined && pair.angle !== undefined ? ` · ${angle(pair.angle)}` : '');
     const nameA = `${describeKind(a.entity)} of ${modelA.nameOf(a.entity.node)}`;
     const nameB = `${describeKind(b.entity)} of ${modelB.nameOf(b.entity.node)}`;
     const info: MeasureInfo = {
@@ -416,7 +416,7 @@ function describeKind(entity: PickedEntity): string {
 function primaryValue(measure: EntityMeasure): string {
   switch (measure.kind) {
     case 'face':
-      return measure.radius !== undefined ? `R ${length(measure.radius)}` : `${measure.area.toFixed(3)} mm²`;
+      return measure.radius !== undefined ? `R ${length(measure.radius)}` : area(measure.area);
     case 'edge':
       return measure.radius !== undefined ? `R ${length(measure.radius)}` : length(measure.length);
     case 'vertex':
