@@ -2,11 +2,13 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged · **Last updated:** 2026-10-14
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): M6 (selection and visibility), M7 (measurement), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-15
 
 ---
 
-## 1. Iteration 1 goal
+## 1. Goals
+
+### Iteration 1 (complete)
 
 Let a user, entirely in the browser:
 
@@ -16,7 +18,7 @@ Let a user, entirely in the browser:
 
 The theme is dark throughout. **CAD files never leave the user's machine**: all parsing, tessellation and rendering happen client-side.
 
-### Acceptance criteria
+#### Acceptance criteria
 
 - [x] An **Import** button opens a multi-select file picker filtered to `.step .stp .iges .igs .brep .stl .obj .gltf .glb`. Dropping files onto the viewport does the same.
 - [x] Each file becomes its own model in the **model list**, showing its name, format, status, progress, and a cancel button while importing.
@@ -37,15 +39,68 @@ The theme is dark throughout. **CAD files never leave the user's machine**: all 
 
 Reviewed in M5 (D64). Each criterion is covered by the E2E suite (in Chromium, Firefox and WebKit in CI, since M5 against the published app), the manual checklists of M3 and M4, and the owner's own testing in Chrome and Edge before M5 merged; touch only through synthetic pointer events, as no touch device was available. The last two were ticked once [JRB-90/j3d#6](https://github.com/JRB-90/j3d/pull/6)'s CI had passed in all three browsers and the owner had tested by hand.
 
-### Out of scope for iteration 1
+#### Out of scope for iteration 1
 
 Persistence (models are lost on refresh), users and auth, deployment, picking/selection, highlighting from the tree, part visibility, measurement, sectioning, exploded views, export, mobile/tablet layout, zoom-to-cursor, undo.
+
+### Iteration 2 (planned)
+
+Let a user **inspect** what they've imported, still entirely in the browser:
+
+1. **Select** parts in the viewport or the tree, and **hide, show and isolate** them (D77, D78).
+2. **Measure** the exact BREP geometry: faces, edges, vertices and parts, alone or in pairs; approximately on mesh models (D80, D81).
+3. **Keep** the session across a refresh: files in the browser's private storage, with visibility and the camera (D82).
+4. **Export** what's visible as GLB or STL, and a BREP model as STEP or BREP (D83, D86).
+5. **Undo** visibility changes, measurements and deleting a model (D84).
+
+Also: zoom toward the cursor (D74). Deployment stays local-only (D75). **CAD files still never leave the user's machine**: OPFS is the browser's own storage on that machine.
+
+#### Acceptance criteria
+
+**M6: selection and visibility**
+
+- [ ] Clicking a part in the viewport selects that placed part (a tree leaf) and highlights it in the accent colour (tint and edges). Ctrl+click adds or removes a part; Esc or a click on empty space clears the selection; a click that drags doesn't select (D77).
+- [ ] The part under the pointer is faintly highlighted before it's clicked (D89).
+- [ ] Selecting a tree node selects every part under it, and a part selected in 3D expands and scrolls the tree to it (through paged levels, D60): the viewport and the tree always agree. This works for BREP assemblies and for mesh models' hierarchies (D81).
+- [ ] Every model and tree node has an eye toggle, and hiding an assembly hides its subtree. Hide, Isolate and Show all act on the selection, from the toolbar and the keys H, I and Shift+H. Hidden parts can't be picked, and Fit all frames only what's visible (D78).
+- [ ] A floating panel at the viewport's bottom-left shows the selected part's name and path, and is hidden when nothing is selected (D87).
+- [ ] The wheel and pinch zoom toward the pointer, in both projections (D74, amends D19).
+- [ ] Ctrl+Z and Ctrl+Y, and Undo and Redo buttons, undo and redo visibility changes (D84; measurements join in M7, delete in M8).
+- [ ] Iteration 1's leftovers are done: M5's manual checklist in the built-in browser with screenshots, the orbit frame rate with real animation frames, and a CI dispatch with `large_fixtures=200,curved-100` (D88).
+
+**M7: measurement**
+
+- [ ] A **Measure** tool (toolbar button and the key M) pre-highlights the face, edge or vertex under the pointer on a BREP model and picks it on click; with the tool off, clicks select parts (D79).
+- [ ] One picked entity shows its properties: an edge's length; a circle's radius, diameter and centre; a face's area; a plane's normal; a cylinder's radius and axis; a part's volume and bounding box. Two picked entities show the minimum distance with its closest points, the angle between planes or lines, and the distance between circle centres (D80).
+- [ ] Results are in millimetres, drawn as dimensions in 3D and listed in the floating panel with copy buttons (D80, D87). Adding and clearing measurements can be undone (D84).
+- [ ] On a mesh model the Measure tool gives approximate point-to-point distances (snapping to vertices) and bounding boxes, marked as approximate (D81).
+
+**M8: persistence**
+
+- [ ] Imported files, with their sidecars, are kept in the browser's private storage (OPFS) automatically. After a refresh the models are imported again in their list order, and their visibility and the camera are restored. **Clear all** removes everything stored (D82).
+- [ ] Deleting a model can be undone: it's imported again from its kept file into the same place in the list. Delete still asks first (D29) and still frees the model's memory at once (D84).
+
+**M9: export**
+
+- [ ] An **Export** menu in the toolbar saves the visible scene, or the selection when there is one, as GLB (colours and hierarchy) or STL (one merged mesh) (D83, D86).
+- [ ] A BREP model's item saves the whole model as imported, as STEP (assembly, names, colours) or BREP (D83, D86).
+
+**M10: hardening**
+
+- [ ] Overlapping and intersecting translucent parts draw without sorting artefacts: weighted blended order-independent transparency (D90, R10).
+- [ ] Hover and click picking stay below D63's ~200 ms line on the 10,437-part file (D89).
+- [ ] CI runs on `ubuntu-26.04`, all three browsers included (D88).
+- [ ] Every criterion above is covered by tests that pass in CI (unit, bUnit, Vitest with real OCCT, Playwright ×3), as in iteration 1, and by the owner's manual pass in Chrome and Edge (D64).
+
+#### Out of scope for iteration 2
+
+Users and auth, deployment (D75), sectioning, exploded views, mobile/tablet layout, exact (BREP) measurement of mesh models, exporting part of a BREP model as STEP or BREP, undoing selection or camera moves, persisting selection or measurements, editing geometry.
 
 ---
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -58,22 +113,22 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D7 | Blazor hosting | **Blazor Web App, Interactive WebAssembly** (global) | Switched from Interactive Server once OCCT moved to the browser: no SignalR circuit to drop. |
 | D8 | Renderer | **Three.js** (r186) + **camera-controls** (3.x) | camera-controls gives orthographic support, button remapping, `fitToBox` and smooth transitions. |
 | D9 | Browser language & build | **TypeScript (7.x) + Vite (8.x)**, npm workspaces | Vite output goes into the client's `wwwroot/viewer`, driven by MSBuild. |
-| D10 | Formats | **STEP, IGES, BREP** (OCCT) + **STL, OBJ, glTF/GLB** (Three.js loaders) | Mesh models are labelled "mesh" and won't get BREP features later. |
+| D10 | Formats | **STEP, IGES, BREP** (OCCT) + **STL, OBJ, glTF/GLB** (Three.js loaders) | Mesh models are labelled "mesh" and won't get BREP features later. **Amended by D81:** they get selection, visibility and approximate measurement. |
 | D11 | Scene | **Many models + model list** with per-model delete | |
-| D12 | Persistence | **Session only** | |
+| D12 | Persistence | **Session only** | **Amended by D82** for iteration 2: files and scene state kept in OPFS. |
 | D13 | Display | Shaded faces, BREP edge overlay, STEP/IGES colours, assembly tree | Needs XCAF symbols in the build. |
 | D14 | Tree interaction | **Display only**; delete is always whole-model | |
 | D15 | UI library | **MudBlazor** (9.x), dark-only theme, system font stack | |
 | D16 | Mouse | **Left = pan, middle = pan, right = rotate, wheel = zoom**; touch supported | Custom mapping: not a Three.js, SolidWorks or Fusion preset. |
 | D17 | Rotation | **Turntable**, fixed up axis | |
 | D18 | Up axis | **Z-up** | glTF (Y-up by spec) is rotated on import. |
-| D19 | Camera extras | Auto-fit on import, Fit all (button + `F`), **ortho default** + toggle | No zoom-to-cursor. |
+| D19 | Camera extras | Auto-fit on import, Fit all (button + `F`), **ortho default** + toggle | No zoom-to-cursor. **Amended by D74:** zoom-to-cursor in iteration 2. |
 | D20 | Model size | **As large as wasm32 allows**: progress, cancellation, worker per model, threaded build available | Threaded default: see D28. |
 | D21 | Import UX | Button + drag and drop, multi-file | |
 | D22 | Browsers | Evergreen Chromium + Firefox + Safari, desktop | |
 | D23 | Testing | xUnit v3 + bUnit, Vitest, Playwright E2E | |
 | D24 | CI | **Full GitHub Actions CI** (build + all tests on PRs) + the WASM build workflow | |
-| D25 | Deployment | **Local dev only** for now | |
+| D25 | Deployment | **Local dev only** for now | Confirmed for iteration 2 (D75). |
 | D26 | Naming | **`J3D.*`**, root namespace `J3D` | |
 | D27 | Deliverable this session | Plan + solution scaffold (M0) | |
 | D28 | OCCT threading | **Single-threaded by default.** Both variants are built; multi-threaded becomes the default only if the M5 benchmark (S4) shows ≥ 1.3× on our fixtures | COOP/COEP stay on regardless. See R3. |
@@ -121,6 +176,26 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D70 | If S4 loses | **The threaded build stays, unused**: both variants stay in the config and `dist/`, and the benchmark stays in the repo to re-run when OCCT or libcascade improve threading | It costs a second 6–7 min link and about 15 MB of LFS, only when the OCCT build changes. |
 | D71 | List and tree scale | **Virtualised only if measured**: the tree on the 10k-part file and a list of about 50 models are timed, and virtualised only past D63's ~200 ms line | Wide levels are already paged (D60). |
 | D72 | M5 process | **As M3/M4 (D50, D58)**: work straight through, Claude runs the manual checklist in the built-in browser, then a draft PR; the owner checks by hand, including the Chrome and Edge pass (D64), before saying merge | |
+| D73 | Iteration 2 goal | **Selection, visibility and measurement**: parts selected in 3D or the tree, hidden, shown and isolated; faces, edges and vertices picked and measured exactly from the BREP each worker keeps alive (§3) | Chosen over selection and visibility alone (part-level, no OCCT change). Measuring needs topology ids from the C++ facade (a WASM rebuild) and a query channel to the model worker, which today only answers `import`. |
+| D74 | Iteration 2 extras | **All four: zoom-to-cursor, persistence, export and undo** | Zoom-to-cursor amends D19 (camera-controls' `dollyToCursor`, off since M3). |
+| D75 | Deployment | **Stays local-only** (D25) | Deployment becomes its own iteration, after a legal review of the LGPL/Open CASCADE obligations (§7). The host prerenders on ASP.NET, so a static host would mean converting to standalone Blazor WebAssembly. |
+| D76 | Plan document | **This document is extended**: §1 gains iteration 2's goal and criteria, decisions continue at D73, milestones M6–M10 join §10, and §3–§9 are updated as things land | |
+| D77 | Selection | **Parts, multi-select**: a click selects one placed part (a tree leaf); Ctrl+click adds or removes; selecting a tree node selects every part under it; Esc or a click on empty space clears. Viewport and tree stay in sync, the tree expanding and scrolling to a part selected in 3D. Highlight: an accent tint plus accent edges | `BatchedMesh` and `InstancedMesh` raycasts already return the instance (`batchId`, `instanceId`), and each instance maps to its tree node through the scene's `instances`. |
+| D78 | Visibility | **Eye toggles in the tree and the list, plus commands**: hiding an assembly hides its subtree; Hide, Isolate and Show all act on the selection from the toolbar and the keys H, I and Shift+H. Fit all frames visible parts only | `BatchedMesh.setVisibleAt` does the drawing side (§6.3, M5). |
+| D79 | Picking entities | **A Measure tool** (toolbar toggle, key M): while it's on, the face, edge or vertex under the pointer is pre-highlighted and clicks pick entities for measuring; while it's off, clicks select parts | |
+| D80 | Measurements | **One entity or a pair**. One: edge length; circle radius, diameter and centre; face area; plane normal; cylinder radius and axis; part volume and bounding box. Two: minimum distance with its closest points (OCCT's `BRepExtrema_DistShapeShape`), the angle between planes or lines, centre to centre of circles. Drawn as dimensions in 3D and listed in the results panel (D87), in millimetres | OCCT converts STEP and IGES lengths to millimetres on import. Free points picked on surfaces (point-to-point with snapping) weren't chosen for BREP models. |
+| D81 | Mesh models | **Selection and visibility per node, plus approximate measurement**: glTF nodes, OBJ objects and an STL as one part select and hide like BREP parts; the Measure tool gives point-to-point distances snapping to vertices, and bounding boxes, marked as approximate | **Amends D10** ("won't get BREP features later"): they still get no exact measurement. |
+| D82 | Persistence | **Files and scene state in OPFS**, automatically: each imported file and its sidecars are copied into the origin private file system; after a reload the models are imported again in list order, and their visibility and the camera are restored. **Clear all** removes everything stored | **Amends D12** (session only). Selection and measurements aren't kept. A 200 MB STEP takes as long to come back as its first import (about 30 s). Caching the extracted meshes too wasn't chosen. |
+| D83 | Export formats | **GLB, STL, STEP and BREP** | STEP through OCCT's `STEPCAFControl_Writer` (assembly, names, colours), BREP through `BRepTools::Write`: both add writer code to the WASM (a rebuild). GLB and STL use three's exporters. |
+| D84 | Undo | **Visibility, measurements and deleting a model**: Ctrl+Z / Ctrl+Y and toolbar buttons. Deleting still frees the model's memory at once; undoing it imports the model again from its kept file into the same place in the list. The confirmation (D29) stays. Selection and camera moves aren't undoable | |
+| D85 | Iteration 2 milestones | **Five, foundation first**: M6 selection and visibility, zoom-to-cursor, and the undo history (visibility first); M7 picking and measurement; M8 persistence and undoing a delete; M9 export; M10 hardening | Selection comes first because measurement builds on its picking. |
+| D86 | Export scope | **Meshes of what's visible, BREP models whole**: GLB and STL export the visible scene, or the selection when there is one (STL as one merged, uncoloured mesh); STEP and BREP export one whole BREP model as imported, from its list item. An Export menu in the toolbar, plus the item's menu | Exporting part of a BREP model would need the facade to build a new XCAF document from the chosen placements. |
+| D87 | Results panel | **A floating panel at the viewport's bottom-left**: the selected part's name and path, or the measurement results with copy buttons; hidden when empty. Dimensions and their labels are drawn in 3D | The view cube is top-right and snackbars bottom-right. |
+| D88 | Iteration 1 carry-overs | **All four**: M5's not-done items early in M6 (the manual checklist in the built-in browser, the orbit frame rate with real animation frames, a CI dispatch with large fixtures); the move to `ubuntu-26.04` in M10 (D68); order-independent transparency (D90); three-mesh-bvh only if picking is measured over the ~200 ms line (D89) | |
+| D89 | Hover | **Parts pre-highlight on hover** with a faint accent tint, one raycast per animation frame at most. Measured on the 10,437-part file in M6; three-mesh-bvh if it crosses D63's ~200 ms line | `BatchedMesh.raycast` tests every instance's bounding sphere, then its triangles. |
+| D90 | Order-independent transparency | **In M10**: weighted blended OIT (two render targets and a composite pass), checked against the nested-translucency fixture | Materials will have settled by then (selection tint, measurement overlays). Resolves R10's accepted artefacts. |
+| D91 | Starting M6 | **#7 merged first** ([JRB-90/j3d#7](https://github.com/JRB-90/j3d/pull/7), the iteration 1 close-out); M6 then branches from `main` as `feature/m6-selection-visibility`, with this plan as its first commit | |
+| D92 | Iteration 2 process | **As M3–M5**: each milestone starts with its own short question round, then Claude works straight through, stopping only for contradictions; the manual checklist in the built-in browser with screenshots; a draft PR; the owner tests by hand and says merge | |
 
 ---
 
@@ -503,7 +578,7 @@ Scope as decided at the start of M5 (D61–D72):
 - **Large-model measurements**, then only the tuning they call for (D63): `BatchedMesh`, uploads spread across frames, dropping CPU copies of GPU buffers, tessellation constants. The model list and tree likewise (D71).
 - **Trimmed code tested**: E2E against the published app in CI, plus the trim analyzer (D65).
 - **About dialog and `THIRD-PARTY-NOTICES.md`** (D66), **README and `docs/development.md`** (D67), and Safari-specific fixes as WebKit finds them.
-- **Exit:** every acceptance criterion in §1 is ticked, as amended by D64.
+- **Exit:** every iteration 1 acceptance criterion in §1 is ticked, as amended by D64.
 
 **As built**
 
@@ -555,7 +630,48 @@ Measured in the built-in browser (Chrome 152) on the development machine's integ
 
 **Not done:** the manual checklist in the built-in browser (D72). The pane was hidden for the whole session, so it couldn't draw or take screenshots; the owner tested by hand in Chrome and Edge instead. The orbit frame rate was never measured with real animation frames for the same reason: the figures above are a draw plus a GPU read-back.
 
-**Exit met:** every acceptance criterion in §1 is ticked, as amended by D64. Iteration 1 is complete.
+**Exit met:** every iteration 1 acceptance criterion in §1 is ticked, as amended by D64. Iteration 1 is complete.
+
+### Iteration 2 milestones (planned)
+
+Planned on 2026-10-15 (D73–D92, five milestones by D85). Each starts with its own short question round (D92), so a scope below can still change; what's decided then is recorded in §2 and here.
+
+### M6 — Selection and visibility (planned)
+
+Branch `feature/m6-selection-visibility`, from `main` after [JRB-90/j3d#7](https://github.com/JRB-90/j3d/pull/7) merged as `cc1ceba` (D91).
+
+- **First, iteration 1's leftovers (D88):** M5's manual checklist in the built-in browser with screenshots (the Claude window has to be in front, or animation frames don't run), the orbit frame rate with real animation frames, and a CI dispatch with `large_fixtures=200,curved-100`.
+- **Viewer:** picking a part (raycast → model and instance → tree node, skipping hidden instances; a click that drags doesn't select), hover pre-highlight at one raycast per animation frame at most (D89), the selection highlight (accent tint and edges) per instance in `BatchedMesh` and `InstancedMesh` and on mesh models' nodes (D81), visibility per instance (`setVisibleAt` and the instanced path's equivalent), Fit all over visible parts (D78), and zoom-to-cursor (D74). Batched parts' edges are merged into one `LineSegments` per model (§6.3), so hiding or highlighting one part's edges needs a design of its own, settled at M6's start.
+- **Interop:** selection and visibility in both directions, by model id and tree node.
+- **Blazor:** `SceneState` gains selection and visibility; eye toggles on list items and tree nodes; the tree follows a selection made in 3D through its lazy levels and pages (D60); Hide, Isolate, Show all, Undo and Redo in the toolbar, with their keys; the floating panel (D87) with the selected part's name and path; the undo history, whose first commands are visibility changes (D84).
+- **Measured:** hover and click picking on the 10,437-part file; three-mesh-bvh only past ~200 ms (D89).
+- **Exit:** M6's criteria in §1 pass in E2E (×3 browsers) and bUnit, and the manual checklist runs in the built-in browser.
+
+### M7 — Measurement (planned)
+
+- **Facade (a WASM rebuild):** topology ids, with each prototype's triangles grouped by face (within the opaque and translucent ranges), its edge segments grouped by edge, and its vertices; and queries on `J3DModel` for one entity (`BRepAdaptor_Curve` and `BRepAdaptor_Surface` for circles, planes and cylinders, `BRepGProp` for length, area and volume, bounding boxes) and for two (`BRepExtrema_DistShapeShape`, angles), placed by the instance's transform.
+- **Worker:** a request/response query channel beside `import` (§6.2), which is all the model worker answers today.
+- **Viewer:** the Measure tool (D79): faces picked from the triangle hit, edges and vertices by screen-space distance (lines are 1 px wide, and three's line raycast threshold is in world units), the pre-highlight, and dimensions with labels in 3D (D80); approximate measurement on mesh models, snapping to vertices, and their bounding boxes (D81).
+- **Blazor:** the Measure toggle and key, the results with copy buttons in the floating panel (D87), and measurements as undoable commands (D84).
+- **Exit:** M7's criteria in §1; real-OCCT Vitest checks each measurement against fixtures with known answers (`box.brep`, a cylinder, `curved-part.step`).
+
+### M8 — Persistence (planned)
+
+- **Store (D82):** each model's files and sidecars in OPFS, with a manifest of list order, visibility and the camera; restored on load through the normal import path; **Clear all**; `navigator.storage.persist()` requested, and running out of quota reported. Engines differ in how OPFS files are written (R18), so WebKit and Firefox are checked early.
+- **Undoing a delete (D84):** a deleted model's files stay stored while the history can still bring it back; undo imports it again into its old place in the list.
+- **Exit:** M8's criteria in §1, with E2E tests that reload the page.
+
+### M9 — Export (planned)
+
+- **Meshes (D86):** GLB and STL of the visible scene, or of the selection, through three's `GLTFExporter` and `STLExporter`, with batched and instanced parts unpacked into a mesh per part for export.
+- **BREP models (D83, D86):** STEP (`STEPCAFControl_Writer`) and BREP (`BRepTools::Write`) of a whole model, written in its worker. A WASM rebuild, whose size change is recorded.
+- **UI:** the toolbar's Export menu and the list item's menu; files are saved through a `blob:` URL download.
+- **Exit:** M9's criteria in §1, with round trips (export, import again, compare counts and bounds) in Vitest and E2E.
+
+### M10 — Hardening (planned)
+
+- Weighted blended order-independent transparency (D90, R10); CI moved to `ubuntu-26.04`, re-checking headed Firefox under Xvfb first (D88, R22); picking speed on the large files, with three-mesh-bvh if M6 didn't already need it (D89); Safari-specific fixes as WebKit finds them; README, `docs/development.md` and `THIRD-PARTY-NOTICES.md` brought up to date for anything new.
+- **Exit:** every iteration 2 acceptance criterion in §1 is ticked.
 
 ---
 
@@ -572,17 +688,25 @@ Measured in the built-in browser (Chrome 152) on the development machine's integ
 | R7 | IGES has no stream reader, so it needs a MEMFS copy (2× input memory) | Acceptable, since IGES files are typically smaller. Documented. |
 | R8 | Git LFS quota and bandwidth | LFS objects are cached in CI since M2; WASM changes are infrequent. |
 | R9 | Changing the symbol set locally needs Docker | Docker Desktop (WSL2 backend) is installed for local builds (D38); CI still builds and commits `dist/`. |
-| R10 | Translucent rendering: per-object sorting can't resolve intersecting or interleaved translucent parts, and many translucent parts add sorting cost | Accept artefacts for iteration 1 (the usual CAD-viewer trade-off). Order-independent transparency is a later option. Fixture with nested translucent parts for E2E. |
+| R10 | Translucent rendering: per-object sorting can't resolve intersecting or interleaved translucent parts, and many translucent parts add sorting cost | Accept artefacts for iteration 1 (the usual CAD-viewer trade-off). Order-independent transparency is a later option. Fixture with nested translucent parts for E2E. **Planned for M10 (D90):** weighted blended OIT, see R21. |
 | R11 | View cube vs turntable at the poles: exactly-Top/Bottom views are degenerate for azimuth/polar controls | Use polar ε / π−ε with a fixed azimuth so +Y is up on screen. Unit-test the 26 region mappings. |
 | R12 | Draco/Basis decoders add ~1–2 MB of assets and their own worker/WASM loading paths | Vite emits them same-origin automatically (three locates them via `import.meta.url`), and they're fetched only when a file uses them. The Draco and KTX2 fixtures load in all three browsers. |
 | R13 | **Headless Firefox in CI has no WebGL** (found in M2: creating a `WebGLRenderer` failed), which M3's rendering and pixel-sampling tests need | M2's import path no longer needs WebGL. **Resolved in M3 (D47):** Firefox's E2E job runs headed under `xvfb-run` (with the `webgl.force-enabled` prefs), where Mesa's software renderer provides WebGL2. Software rendering is slow, so camera waits allow 30 s. |
 | R14 | **Firefox CI screenshots sometimes missed the WebGL canvas** (found in M3): a pixel check saw a blank canvas (not even the view cube) or a stale one (the STL of an import but not its STEP), while the scene held the models, the camera was at rest and the context wasn't lost. A view cube hover also sometimes came undone. Never seen in Chromium, WebKit or by hand. Firefox's "WebGL context was lost." warning was a red herring: Firefox logs it for any loss, including the capability probe's own `loseContext()`. **Cause:** headed Firefox under Xvfb has no window manager, so parallel tests' windows open stacked at the same spot. GTK reports the covered windows as fully obscured, which Firefox treats as occluded (`nsWindow::OnVisibilityNotifyEvent`) and doesn't paint, and windows opening and closing under the X pointer send it pointer crossings. | **Resolved (D51):** Firefox's test classes run one at a time; 10/10 dispatched runs passed (3/10 in parallel). A failed pixel check now reports what a fresh frame draws at the samples, read from the canvas, beside its screenshot, which separates "not drawn" from "not painted". `ci.yml` can be dispatched for one browser, with runs side by side, to repeat a flaky job (§9). |
+| R15 | **Picking cost on large models** (iteration 2): `BatchedMesh.raycast` tests every instance's bounding sphere and then its triangles, so hovering over the 10,437-part file may cost a lot per pointer move | One raycast per animation frame at most; measured in M6; three-mesh-bvh past ~200 ms (D89). |
+| R16 | **Long measurement queries**: the model worker is single-threaded, so a slow `BRepExtrema_DistShapeShape` between complex faces blocks the queries behind it, and terminating the worker would lose the model | Queries run one at a time per model with a busy state in the panel; timed on `curved-part.step` and the large files in M7. |
+| R17 | **Edges and vertices are hard to hit**: lines are 1 px wide and three's line raycast threshold is in world units | Pick edges and vertices by screen-space distance to their projections, within a few pixels, on the part under the pointer only (M7). |
+| R18 | **OPFS differs between engines**, and storage can run out or be evicted: writable streams versus synchronous access handles (worker only), quota, and `persist()` being declined | Write from a worker where the main thread can't; report quota failures instead of losing models silently; check WebKit and Firefox early in M8. |
+| R19 | **The writers grow the WASM**: STEP and BREP export link writer code into the trimmed 15.4 MB build | Measure the change in M9 and record it in §6.1; the build stays one file per variant. |
+| R20 | **Undoing a delete takes as long as the import**: memory is freed at delete (D84), so a 200 MB STEP takes about 30 s to come back | Shown as an ordinary import, with progress and cancel; documented in the README. |
+| R21 | **Order-independent transparency** needs float render targets (WebGL2 `EXT_color_buffer_float`), touches every surface material (batched, instanced, mesh), and may be slow under CI's software renderers | Fall back to today's sorted blending where float targets are missing; measured in M10 (D90). |
+| R22 | **`ubuntu-26.04` is unproven for headed Firefox under Xvfb** (D47, D51), which the Firefox E2E job relies on | Dispatch Firefox runs on 26.04 side by side before switching the pin (M10, D88). |
 
 ---
 
 ## 12. Remaining assumptions
 
-All eight open questions from the first draft are answered (D28–D36). These smaller defaults follow from those answers (5–7 from M2) and are open to change:
+All eight open questions from the first draft are answered (D28–D36). These smaller defaults follow from those answers (5–7 from M2, 8–14 from planning iteration 2) and are open to change:
 
 1. **Cancel and dismiss don't confirm.** Only deleting a *loaded* model shows the confirmation dialog (D29). Cancelling an in-progress import and dismissing a failed entry are immediate, since there's nothing loaded to lose.
 2. **Home = isometric + fit all.** Clicking a view cube region keeps the current zoom (D31); the Home button also re-frames everything.
@@ -591,3 +715,10 @@ All eight open questions from the first draft are answered (D28–D36). These sm
 5. **Files inside a dropped folder are reported only if they matter.** Unsupported or unused files found inside a dropped folder (READMEs, thumbnails) are skipped silently; files picked or dropped individually are reported as rejected.
 6. **glTF lights and cameras are dropped** on import: J3D lights the scene itself (M3).
 7. **A reader failure close to the 4 GB ceiling is `OutOfMemory`.** OCCT doesn't distinguish the two, and above 90 % of the heap the file is almost certainly too large rather than malformed.
+8. **The selection uses the accent colour** (`#4F9DFF`, §6.6); hover is a fainter tint of the same.
+9. **Isolate and Show all act on the whole scene.** Isolate hides every part outside the selection, in every model; Show all shows every part of every model.
+10. **Hidden means out of the way.** Hidden parts can't be picked or measured, and Fit all and the GLB/STL export leave them out.
+11. **The undo history lives in the tab.** It holds the last 50 steps, isn't stored, and starts empty after a refresh, even though the models come back (D82).
+12. **Measurements stay until cleared**, from the panel or with Esc in the Measure tool, and aren't stored across a refresh.
+13. **Lengths in millimetres to 3 decimals, angles in degrees to 2**; mesh measurements are prefixed "≈". STL and OBJ carry no units, so their values are taken as millimetres too (the CAD export convention, as with Z-up in §6.2). glTF is in metres by its specification, so its measurements are converted to millimetres, though the scene itself still isn't rescaled (to revisit in M7's question round).
+14. **Zoom-to-cursor is for the wheel and pinch only.** Fit all, Home and the view cube still frame the scene about its centre.
