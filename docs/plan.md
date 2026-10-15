@@ -59,13 +59,13 @@ Also: zoom toward the cursor (D74). Deployment stays local-only (D75). **CAD fil
 
 **M6: selection and visibility**
 
-- [ ] Clicking a part in the viewport selects that placed part (a tree leaf) and highlights it in the accent colour (tint and edges). Ctrl+click adds or removes a part; Esc or a click on empty space clears the selection; a click that drags doesn't select (D77).
-- [ ] The part under the pointer is faintly highlighted before it's clicked (D89).
-- [ ] Selecting a tree node selects every part under it, and a part selected in 3D expands and scrolls the tree to it (through paged levels, D60): the viewport and the tree always agree. This works for BREP assemblies and for mesh models' hierarchies (D81).
-- [ ] Every model and tree node has an eye toggle, and hiding an assembly hides its subtree. Hide, Isolate and Show all act on the selection, from the toolbar and the keys H, I and Shift+H. Hidden parts can't be picked, and Fit all frames only what's visible (D78).
-- [ ] A floating panel at the viewport's bottom-left shows the selected part's name and path, and is hidden when nothing is selected (D87).
-- [ ] The wheel and pinch zoom toward the pointer, in both projections (D74, amends D19).
-- [ ] Ctrl+Z and Ctrl+Y, and Undo and Redo buttons, undo and redo visibility changes (D84; measurements join in M7, delete in M8).
+- [x] Clicking a part in the viewport selects that placed part (a tree leaf) and highlights it in the accent colour (tint and edges). Ctrl+click adds or removes a part; Esc or a click on empty space clears the selection; a click that drags doesn't select (D77).
+- [x] The part under the pointer is faintly highlighted before it's clicked (D89).
+- [x] Selecting a tree node selects every part under it, and a part selected in 3D expands and scrolls the tree to it (through paged levels, D60): the viewport and the tree always agree. This works for BREP assemblies and for mesh models' hierarchies (D81).
+- [x] Every model and tree node has an eye toggle, and hiding an assembly hides its subtree. Hide, Isolate and Show all act on the selection, from the toolbar and the keys H, I and Shift+H. Hidden parts can't be picked, and Fit all frames only what's visible (D78).
+- [x] A floating panel at the viewport's bottom-left shows the selected part's name and path, and is hidden when nothing is selected (D87).
+- [x] The wheel and pinch zoom toward the pointer, in both projections (D74, amends D19). The wheel is tested (E2E, orthographic); pinch uses the same camera-controls setting and wasn't tested separately.
+- [x] Ctrl+Z and Ctrl+Y, and Undo and Redo buttons, undo and redo visibility changes (D84; measurements join in M7, delete in M8).
 - [x] Iteration 1's leftovers are done: M5's manual checklist in the built-in browser with screenshots, the orbit frame rate with real animation frames, and a CI dispatch with `large_fixtures=200,curved-100` (D88).
 
 **M7: measurement**
@@ -670,6 +670,8 @@ Branch `feature/m6-selection-visibility`, from `main` after [JRB-90/j3d#7](https
 - **Viewer:** `parts.ts` (`ModelParts`, `MeshParts`, the highlight materials) and `BrepParts` in `brep-object.ts`, which now records where each placement is drawn; `Viewer` picks, hovers, takes clicks, applies `setPartState`, draws the selection and hover overlays, fits visible parts, sends Esc, H, I, Shift+H, Ctrl+Z and Ctrl+Y to .NET, and zooms to the cursor (§6.3). Mesh models' content carries each tree node's object.
 - **Interop:** `setPartState`, `scrollIntoView`, `OnPartPicked` and `OnViewerCommand` (§6.4).
 - **Blazor:** `PartSet`, `ModelTree`'s parts and ancestors, `ModelEntry`'s parts and visibility, `SceneState`'s commands and `UndoHistory`; the eyes, tree selection and reveal in `ModelListItem`; `SelectionPanel`; the toolbar's group (§6.4).
+- **Manual checklist** (D92, built-in browser, pane visible, real mouse and keys) on `assembly.step`, `part.glb` and `curved-part.step` together: Fit all; hover tint with accent edges; a click selecting the curved part (tint, accent edges, the panel, the tree opened to it and highlighted, Hide and Isolate enabled); Ctrl+click adding the glTF post ("2 parts selected in 2 models"); I isolating them across all three models, with closed, half and dimmed eyes; Shift+H and Esc; the wheel zooming toward the pointer; a tree eye hiding the curved part with its edges; the toolbar's Undo restoring it. No console or server errors. A warm colour under the selection tint (the orange part) reads as grey-blue rather than blue; the accent edges carry the highlight.
+- **CI** on the branch (run 38719601613): build, unit and E2E in Chromium, Firefox and WebKit against the published app, all green.
 - **Tests:** Vitest 134 in the viewer (10 new); client 126 (`SelectionStateTests`, `SelectionUiTests`, the Viewport's relays); E2E 51 with `SelectionTests` and the zoom-to-cursor test, passing locally in Chromium and WebKit; `LargeModelTests` now also times picks and selecting, hiding and showing.
 
 **Measurements (D89)**, on the development machine (Chrome 152 in the built-in browser, Intel Iris Xe; the pane hidden, so frames are a draw plus a GPU read-back):
