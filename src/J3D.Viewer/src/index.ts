@@ -32,6 +32,10 @@ export interface ViewerHandle {
   setProjection(projection: Projection): void;
   /** Applies a model's hidden and selected part nodes, which .NET owns (D95). */
   setPartState(id: string, hidden: number[], selected: number[]): void;
+  /** Turns the Measure tool on or off (M7, D79). */
+  setMeasureMode(active: boolean): void;
+  /** Shows exactly these kept measurements (D108). */
+  setMeasurements(shown: string[]): void;
   dispose(): void;
 }
 
@@ -53,6 +57,10 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
         // Picks and key commands go to .NET, which owns selection, visibility and undo (D95).
         onPick: (part, additive) => call(dotnet, 'OnPartPicked', part?.id ?? null, part?.node ?? -1, additive),
         onCommand: (command) => call(dotnet, 'OnViewerCommand', command),
+        // The Measure tool's results go to .NET, which lists them and owns their undo (M7).
+        onMeasurePending: (info) => call(dotnet, 'OnMeasurePending', info),
+        onMeasured: (info) => call(dotnet, 'OnMeasured', info),
+        onMeasureError: (message) => call(dotnet, 'OnMeasureFailed', message),
       })
     : undefined;
   const testControls = isTestHookEnabled() ? createTestHookControls() : undefined;
@@ -113,6 +121,12 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     setPartState(id, hidden, selected) {
       view?.setPartState(id, hidden, selected);
     },
+    setMeasureMode(active) {
+      view?.setMeasureMode(active);
+    },
+    setMeasurements(shown) {
+      view?.setMeasurements(shown);
+    },
     dispose() {
       removeTestHook?.();
       removeDropTarget();
@@ -126,6 +140,11 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       delete host.dataset['viewerReady'];
     },
   };
+}
+
+/** Copies a measurement value to the clipboard (M7, D87). */
+export async function copyText(text: string): Promise<void> {
+  await navigator.clipboard.writeText(text);
 }
 
 /** Scrolls an element into view if it isn't, e.g. a tree node a 3D pick revealed (D96). */

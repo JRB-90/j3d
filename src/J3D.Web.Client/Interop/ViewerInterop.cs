@@ -50,6 +50,19 @@ public sealed class ViewerInterop : IAsyncDisposable
     public ValueTask SetPartStateAsync(ModelId id, IEnumerable<int> hidden, IEnumerable<int> selected) =>
         _viewer.InvokeVoidAsync("setPartState", id.Value, hidden.Order().ToArray(), selected.Order().ToArray());
 
+    /// <summary>Turns the Measure tool on or off (M7, D79).</summary>
+    public ValueTask SetMeasureModeAsync(bool active) => _viewer.InvokeVoidAsync("setMeasureMode", active);
+
+    /// <summary>Shows exactly these kept measurements (D108).</summary>
+    public ValueTask SetMeasurementsAsync(IEnumerable<string> shown)
+    {
+        string[] ids = [.. shown];
+        return _viewer.InvokeVoidAsync("setMeasurements", (object)ids); // one argument, not one per id
+    }
+
+    /// <summary>Copies text to the clipboard: a measurement's value (D87).</summary>
+    public ValueTask CopyTextAsync(string text) => _module.InvokeVoidAsync("copyText", text);
+
     /// <summary>Scrolls the element a CSS selector finds into view, if it isn't already (D96).</summary>
     public ValueTask ScrollIntoViewAsync(string selector) => _module.InvokeVoidAsync("scrollIntoView", selector);
 

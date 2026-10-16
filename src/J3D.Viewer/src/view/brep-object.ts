@@ -1,4 +1,4 @@
-import type { ImportedScene, PrototypeMesh, SceneInstance } from '@j3d/occt/facade';
+import { EntityKind, type ImportedScene, type PrototypeMesh, type SceneInstance } from '@j3d/occt/facade';
 import {
   BatchedMesh,
   Box3,
@@ -10,6 +10,7 @@ import {
   InstancedMesh,
   LineSegments,
   Matrix4,
+  Mesh,
   Vector3,
   type Intersection,
   type Material,
@@ -17,7 +18,17 @@ import {
   type Object3D,
 } from 'three';
 import { EdgeVisibilityAttribute, type LinearRgba, type MaterialCache } from './materials';
-import type { Highlight, HighlightKind, HighlightMaterials, ModelParts } from './parts';
+import {
+  EdgePickRadius,
+  pointHighlight,
+  VertexPickRadius,
+  type Highlight,
+  type HighlightKind,
+  type HighlightMaterials,
+  type ModelParts,
+  type PickedEntity,
+  type ScreenSpace,
+} from './parts';
 
 /** Prototypes placed at least this many times are drawn with one instanced draw call (docs/plan.md §6.3). */
 export const InstancingThreshold = 16;
@@ -33,6 +44,8 @@ export interface BrepObject {
 /** The surfaces drawn with one material: each prototype range once, and an instance per placement. */
 interface Batch {
   geometries: BufferGeometry[];
+  /** Where each geometry's indices start in its prototype's index array: 0, or after the opaque ones. */
+  offsets: number[];
   placements: { geometry: number; instance: number }[];
 }
 
@@ -61,6 +74,7 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
   const used: Material[] = [];
   const slots: PlacementSlots[] = scene.instances.map(() => ({ surfaces: [] }));
   const pickedPlacement = new Map<Object3D, Int32Array>();
+  const indexOffsets = new Map<BatchedMesh, number[]>();
 
   const instancesOf = new Map<number, number[]>();
   scene.instances.forEach((instance, index) => {
@@ -91,10 +105,11 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
       used.push(material);
       let batch = batches.get(material);
       if (!batch) {
-        batch = { geometries: [], placements: [] };
+        batch = { geometries: [], offsets: [], placements: [] };
         batches.set(material, batch);
       }
       const geometry = batch.geometries.push(range.geometry) - 1;
+      batch.offsets.push(range.translucent ? prototype.opaqueIndexCount : 0);
       for (const instance of instances) {
         batch.placements.push({ geometry, instance });
       }
@@ -107,7 +122,7 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
   });
 
   const matrix = new Matrix4();
-  for (const [material, { geometries, placements }] of batches) {
+  for (const [material, { geometries, offsets, placements }] of batches) {
     const vertices = geometries.reduce((sum, g) => sum + g.getAttribute('position').count, 0);
     const indices = geometries.reduce((sum, g) => sum + g.index!.count, 0);
     const batch = new BatchedMesh(placements.length, vertices, indices, material);
@@ -115,6 +130,9 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
     // Back to front for translucent parts; opaque ones gain nothing from sorting.
     batch.sortObjects = material.transparent;
     const ids = geometries.map((geometry) => batch.addGeometry(geometry));
+    const offsetOf: number[] = [];
+    ids.forEach((id, g) => (offsetOf[id] = offsets[g]!));
+    indexOffsets.set(batch, offsetOf);
     const placementOf = new Int32Array(placements.length);
     for (const placement of placements) {
       const id = batch.addInstance(ids[placement.geometry]!);
@@ -149,7 +167,7 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
     root.add(lines);
   }
 
-  const parts = new BrepParts(scene, slots, pickedPlacement);
+  const parts = new BrepParts(scene, slots, pickedPlacement, indexOffsets);
   return {
     object: root,
     parts,
@@ -184,6 +202,7 @@ class BrepParts implements ModelParts {
     private readonly scene: ImportedScene,
     private readonly slots: readonly PlacementSlots[],
     private readonly pickedPlacement: ReadonlyMap<Object3D, Int32Array>,
+    private readonly indexOffsets: ReadonlyMap<BatchedMesh, readonly number[]>,
   ) {
     scene.instances.forEach((instance, index) => {
       const list = this.placementsOf.get(instance.node);
@@ -198,10 +217,136 @@ class BrepParts implements ModelParts {
   }
 
   nodeOf(hit: Intersection): number {
+    const placement = this.placementOf(hit);
+    return placement === undefined ? -1 : (this.scene.instances[placement]?.node ?? -1);
+  }
+
+  /**
+   * A vertex within reach of the pointer, else an edge, else the face under it (D107). Vertices and
+   * edges are found on screen, and only count if nothing nearer the camera hides them.
+   */
+  entityAt(hit: Intersection, screen: ScreenSpace): PickedEntity | undefined {
+    const placement = this.placementOf(hit);
+    if (placement === undefined) {
+      return undefined;
+    }
+    const instance = this.scene.instances[placement]!;
+    const mesh = this.scene.prototypes[instance.prototype]!;
+    const matrix = new Matrix4().fromArray(instance.matrix);
+    const boxes = (this.placementBoxes ??= this.computePlacementBoxes());
+    const tolerance =
+      Math.hypot(boxes[placement * 6 + 3]! - boxes[placement * 6]!, boxes[placement * 6 + 4]! - boxes[placement * 6 + 1]!, boxes[placement * 6 + 5]! - boxes[placement * 6 + 2]!) * 0.01;
+    const visible = (depth: number) => depth <= screen.hitDepth + tolerance;
+    const ref = (kind: EntityKind, index: number) => ({ kind, prototype: instance.prototype, index, matrix: instance.matrix });
+    const point = new Vector3();
+
+    let vertex: { index: number; distance: number; point: Vector3 } | undefined;
+    for (let i = 0; i < mesh.vertices.length / 3; i++) {
+      point.fromArray(mesh.vertices, i * 3).applyMatrix4(matrix);
+      const onScreen = screen.project(point);
+      const distance = Math.hypot(onScreen.x - screen.x, onScreen.y - screen.y);
+      if (distance <= VertexPickRadius && visible(onScreen.depth) && (!vertex || distance < vertex.distance)) {
+        vertex = { index: i, distance, point: point.clone() };
+      }
+    }
+    if (vertex) {
+      return { kind: 'vertex', node: instance.node, ref: ref(EntityKind.Vertex, vertex.index), point: vertex.point.toArray() };
+    }
+
+    const a = new Vector3();
+    const b = new Vector3();
+    let edge: { index: number; distance: number; point: Vector3 } | undefined;
+    for (let e = 0; e < mesh.edgeRanges.length / 2; e++) {
+      const first = mesh.edgeRanges[e * 2]!;
+      const count = mesh.edgeRanges[e * 2 + 1]!;
+      for (let p = first; p < first + count; p += 2) {
+        a.fromArray(mesh.edges, p * 3).applyMatrix4(matrix);
+        b.fromArray(mesh.edges, p * 3 + 3).applyMatrix4(matrix);
+        const sa = screen.project(a);
+        const sb = screen.project(b);
+        const dx = sb.x - sa.x;
+        const dy = sb.y - sa.y;
+        const length2 = dx * dx + dy * dy;
+        const t = length2 > 0 ? Math.min(1, Math.max(0, ((screen.x - sa.x) * dx + (screen.y - sa.y) * dy) / length2)) : 0;
+        const distance = Math.hypot(sa.x + dx * t - screen.x, sa.y + dy * t - screen.y);
+        if (distance <= EdgePickRadius && visible(sa.depth + (sb.depth - sa.depth) * t) && (!edge || distance < edge.distance)) {
+          edge = { index: e, distance, point: a.clone().lerp(b, t) };
+        }
+      }
+    }
+    if (edge) {
+      return { kind: 'edge', node: instance.node, ref: ref(EntityKind.Edge, edge.index), point: edge.point.toArray() };
+    }
+
+    const position = this.indexPosition(hit);
+    if (position === undefined) {
+      return undefined;
+    }
+    for (let f = 0; f < mesh.faceRanges.length / 2; f++) {
+      const start = mesh.faceRanges[f * 2]!;
+      if (position >= start && position < start + mesh.faceRanges[f * 2 + 1]!) {
+        return { kind: 'face', node: instance.node, ref: ref(EntityKind.Face, f), point: hit.point.toArray() };
+      }
+    }
+    return undefined;
+  }
+
+  /** A face's triangles, an edge's segments or a vertex's dot, where the placement puts them. */
+  entityHighlight(entity: PickedEntity, kind: HighlightKind, materials: HighlightMaterials): Highlight | undefined {
+    if (entity.kind === 'point' || entity.kind === 'vertex') {
+      return pointHighlight(entity.point, kind, materials);
+    }
+    const mesh = this.scene.prototypes[entity.ref.prototype];
+    if (!mesh) {
+      return undefined;
+    }
+    const geometry = new BufferGeometry();
+    const order = materials.renderOrder(kind);
+    let object: Mesh | LineSegments;
+    if (entity.kind === 'face') {
+      const start = mesh.faceRanges[entity.ref.index * 2]!;
+      const count = mesh.faceRanges[entity.ref.index * 2 + 1]!;
+      geometry.setAttribute('position', new BufferAttribute(mesh.positions, 3));
+      geometry.setIndex(new BufferAttribute(mesh.indices.subarray(start, start + count), 1));
+      object = new Mesh(geometry, materials.surface(kind));
+      object.renderOrder = order.surface;
+    } else {
+      const first = mesh.edgeRanges[entity.ref.index * 2]!;
+      const count = mesh.edgeRanges[entity.ref.index * 2 + 1]!;
+      geometry.setAttribute('position', new BufferAttribute(mesh.edges.subarray(first * 3, (first + count) * 3), 3));
+      object = new LineSegments(geometry, materials.edges(kind));
+      object.renderOrder = order.edges;
+    }
+    object.matrixAutoUpdate = false;
+    object.matrix.fromArray(entity.ref.matrix);
+    object.raycast = noRaycast;
+    return {
+      object,
+      dispose() {
+        geometry.dispose();
+      },
+    };
+  }
+
+  /** The placement an intersection hit: a batch instance or an instanced copy. */
+  private placementOf(hit: Intersection): number | undefined {
     const placements = this.pickedPlacement.get(hit.object);
     const id = (hit as Intersection & { batchId?: number }).batchId ?? hit.instanceId;
-    const placement = placements !== undefined && id !== undefined ? placements[id] : undefined;
-    return placement === undefined ? -1 : (this.scene.instances[placement]?.node ?? -1);
+    return placements !== undefined && id !== undefined ? placements[id] : undefined;
+  }
+
+  /** Where the hit triangle starts in its prototype's index array. */
+  private indexPosition(hit: Intersection): number | undefined {
+    if (hit.faceIndex === undefined || hit.faceIndex === null) {
+      return undefined;
+    }
+    if (hit.object instanceof BatchedMesh) {
+      const batchId = (hit as Intersection & { batchId?: number }).batchId!;
+      const geometryId = hit.object.getGeometryIdAt(batchId);
+      const range = hit.object.getGeometryRangeAt(geometryId);
+      return hit.faceIndex * 3 - (range?.indexStart ?? 0) + (this.indexOffsets.get(hit.object)?.[geometryId] ?? 0);
+    }
+    return hit.faceIndex * 3; // an InstancedMesh draws the prototype's whole index array
   }
 
   setHidden(hidden: ReadonlySet<number>): void {
@@ -247,6 +392,18 @@ class BrepParts implements ModelParts {
       }
     }
     return target;
+  }
+
+  nodeBounds(node: number): Box3 {
+    const boxes = (this.placementBoxes ??= this.computePlacementBoxes());
+    const bounds = new Box3();
+    const box = new Box3();
+    for (const placement of this.placementsOf.get(node) ?? []) {
+      if (boxes[placement * 6]! <= boxes[placement * 6 + 3]!) {
+        bounds.union(box.set(new Vector3().fromArray(boxes, placement * 6), new Vector3().fromArray(boxes, placement * 6 + 3)));
+      }
+    }
+    return bounds;
   }
 
   /**

@@ -70,3 +70,25 @@
         color: #e6e8eb;
         font-size: 1rem;
     }
+
+    /* Measurement labels (M7, D103): HTML over the canvas, moved by the viewer after every frame. */
+    .j3d-viewport ::deep .j3d-measure-labels {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+    }
+
+    .j3d-viewport ::deep .j3d-measure-label {
+        position: absolute;
+        left: 0;
+        top: 0;
+        padding: 2px 6px;
+        border: 1px solid #4f9dff;
+        border-radius: 4px;
+        background: rgba(27, 30, 35, 0.92);
+        color: #e6e8eb;
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }

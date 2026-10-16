@@ -9,7 +9,8 @@ namespace J3D.Web.Client.State;
 /// <c>Viewport</c> feeds it from the viewer's callbacks and the <c>ModelList</c> renders it. Scoped
 /// (D56): one per tab under WebAssembly, and never shared between the host's prerender requests.
 /// Since M6 it also owns each model's selected and hidden parts and the undo history (D95): the
-/// <c>Viewport</c> applies them to the viewer.
+/// <c>Viewport</c> applies them to the viewer. Since M7 it holds the Measure tool's mode, its pending
+/// first pick and the kept measurements (D101), which follow their parts (D108).
 /// </summary>
 public sealed class SceneState
 {
@@ -22,6 +23,22 @@ public sealed class SceneState
     public event Action<ModelId, int>? RevealRequested;
 
     public ImmutableList<ModelEntry> Models { get; private set; } = [];
+
+    /// <summary>The Measure tool is on: clicks pick faces, edges and vertices instead of parts (D79).</summary>
+    public bool MeasureMode { get; private set; }
+
+    /// <summary>The Measure tool's first pick, with its properties, until the second (D101).</summary>
+    public MeasureInfo? PendingMeasure { get; private set; }
+
+    /// <summary>Kept measurements, oldest first.</summary>
+    public ImmutableList<MeasureInfo> Measurements { get; private set; } = [];
+
+    /// <summary>The kept measurements whose parts are all visible: the ones the viewer draws (D108).</summary>
+    public IReadOnlyList<MeasureInfo> ShownMeasurements => [.. Measurements.Where(IsShown)];
+
+    /// <summary>A measurement is shown while every part it measures is listed, loaded and visible.</summary>
+    public bool IsShown(MeasureInfo measurement) => measurement.Parts.All(part =>
+        Find(part.ModelId) is { Tree: not null } model && !model.Hidden.Contains(part.Node));
 
     public bool CanUndo => _history.CanUndo;
 
@@ -64,7 +81,13 @@ public sealed class SceneState
         if (index >= 0)
         {
             _history.Forget(id);
-            Set(Models.RemoveAt(index));
+            Measurements = Measurements.RemoveAll(measurement => measurement.Touches(id));
+            if (PendingMeasure?.Touches(id) == true)
+            {
+                PendingMeasure = null;
+            }
+
+            Set(Models.RemoveAt(index), always: true);
         }
     }
 
@@ -72,11 +95,53 @@ public sealed class SceneState
     public void Clear()
     {
         _history.Clear();
-        if (!Models.IsEmpty)
+        PendingMeasure = null;
+        var hadMeasurements = !Measurements.IsEmpty;
+        Measurements = [];
+        if (!Models.IsEmpty || hadMeasurements)
         {
-            Set([]);
+            Set([], always: true);
         }
     }
+
+    /// <summary>The toolbar's Measure button or the M key (D79). Turning it off drops a pending pick.</summary>
+    public void ToggleMeasureMode() => SetMeasureMode(!MeasureMode);
+
+    public void SetMeasureMode(bool on)
+    {
+        if (on != MeasureMode)
+        {
+            MeasureMode = on;
+            PendingMeasure = on ? PendingMeasure : null;
+            Set(Models, always: true);
+        }
+    }
+
+    /// <summary>The viewer's first pick, or null when it was dropped or finished.</summary>
+    public void SetPendingMeasure(MeasureInfo? pending)
+    {
+        if (pending != PendingMeasure)
+        {
+            PendingMeasure = MeasureMode ? pending : null;
+            Set(Models, always: true);
+        }
+    }
+
+    /// <summary>A measurement the viewer has kept: listed and undoable (D84, D101).</summary>
+    public void AddMeasurement(MeasureInfo measurement)
+    {
+        if (Measurements.Any(kept => kept.Id == measurement.Id) || !measurement.Parts.All(part => Find(part.ModelId) is not null))
+        {
+            return;
+        }
+
+        ChangeMeasurements(Measurements.Add(measurement));
+    }
+
+    public void RemoveMeasurement(string id) => ChangeMeasurements(Measurements.RemoveAll(measurement => measurement.Id == id));
+
+    /// <summary>The panel's Clear: removes every kept measurement, as one undoable step.</summary>
+    public void ClearMeasurements() => ChangeMeasurements([]);
 
     /// <summary>
     /// A click in the viewport (D77): on a part, it becomes the selection, or with Ctrl it's added
@@ -182,7 +247,7 @@ public sealed class SceneState
     {
         if (_history.Undo() is { } step)
         {
-            Set(step.Undo(Models), always: true);
+            Apply(step.Undo(new SceneContent(Models, Measurements)));
         }
     }
 
@@ -190,8 +255,26 @@ public sealed class SceneState
     {
         if (_history.Redo() is { } step)
         {
-            Set(step.Redo(Models), always: true);
+            Apply(step.Redo(new SceneContent(Models, Measurements)));
         }
+    }
+
+    private void Apply(SceneContent content)
+    {
+        Measurements = content.Measurements;
+        Set(content.Models, always: true);
+    }
+
+    private void ChangeMeasurements(ImmutableList<MeasureInfo> measurements)
+    {
+        if (measurements.SequenceEqual(Measurements))
+        {
+            return;
+        }
+
+        _history.Push(new MeasurementsStep(Measurements, measurements));
+        Measurements = measurements;
+        Set(Models, always: true);
     }
 
     /// <summary>Applies new hidden parts to loaded models and records the change as one undoable step, if anything changed.</summary>

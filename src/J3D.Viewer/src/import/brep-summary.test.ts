@@ -12,6 +12,9 @@ function cube(): PrototypeMesh {
     opaqueIndexCount: 36,
     uniformColor: [1, 1, 1, 1],
     edges: new Float32Array(18),
+    faceRanges: new Uint32Array(0),
+    edgeRanges: new Uint32Array(0),
+    vertices: new Float32Array(0),
   };
 }
 
@@ -50,6 +53,6 @@ describe('sceneTransferables', () => {
   it('lists every buffer, including optional vertex colours', () => {
     const plain = cube();
     const coloured = { ...cube(), colors: new Float32Array(32) };
-    expect(sceneTransferables({ nodes: [], instances: [], prototypes: [plain, coloured] })).toHaveLength(9);
+    expect(sceneTransferables({ nodes: [], instances: [], prototypes: [plain, coloured] })).toHaveLength(15); // 7 arrays each, and the colours
   });
 });

@@ -1,17 +1,21 @@
 using System.Collections.Immutable;
+using J3D.Web.Client.Interop;
 using J3D.Web.Client.Models;
 
 namespace J3D.Web.Client.State;
 
+/// <summary>What undo works on: the models (with their parts) and the kept measurements (M7).</summary>
+public sealed record SceneContent(ImmutableList<ModelEntry> Models, ImmutableList<MeasureInfo> Measurements);
+
 /// <summary>
-/// One undoable change to the scene (decision D84). Steps are pure: each maps the model list to the
-/// list before or after the change, leaving models it didn't touch, or no longer has, alone.
+/// One undoable change to the scene (decision D84). Steps are pure: each maps the scene to how it was
+/// before or after the change, leaving what it didn't touch, or no longer exists, alone.
 /// </summary>
 public interface ISceneStep
 {
-    ImmutableList<ModelEntry> Undo(ImmutableList<ModelEntry> models);
+    SceneContent Undo(SceneContent scene);
 
-    ImmutableList<ModelEntry> Redo(ImmutableList<ModelEntry> models);
+    SceneContent Redo(SceneContent scene);
 
     /// <summary>The step without a model that has gone, or null when nothing of it is left.</summary>
     ISceneStep? Without(ModelId id);
@@ -23,9 +27,9 @@ public interface ISceneStep
 /// </summary>
 public sealed record VisibilityStep(ImmutableDictionary<ModelId, (PartSet Before, PartSet After)> Changes) : ISceneStep
 {
-    public ImmutableList<ModelEntry> Undo(ImmutableList<ModelEntry> models) => Apply(models, static change => change.Before);
+    public SceneContent Undo(SceneContent scene) => scene with { Models = Apply(scene.Models, static change => change.Before) };
 
-    public ImmutableList<ModelEntry> Redo(ImmutableList<ModelEntry> models) => Apply(models, static change => change.After);
+    public SceneContent Redo(SceneContent scene) => scene with { Models = Apply(scene.Models, static change => change.After) };
 
     public ISceneStep? Without(ModelId id)
     {
@@ -37,6 +41,24 @@ public sealed record VisibilityStep(ImmutableDictionary<ModelId, (PartSet Before
         ImmutableList<ModelEntry> models,
         Func<(PartSet Before, PartSet After), PartSet> pick) =>
         models.ConvertAll(model => Changes.TryGetValue(model.Id, out var change) ? model.WithParts(pick(change), model.Selected) : model);
+}
+
+/// <summary>
+/// Adding, removing or clearing measurements (M7, D84, D101): the kept measurements before and after.
+/// A removed model takes its measurements out of both.
+/// </summary>
+public sealed record MeasurementsStep(ImmutableList<MeasureInfo> Before, ImmutableList<MeasureInfo> After) : ISceneStep
+{
+    public SceneContent Undo(SceneContent scene) => scene with { Measurements = Before };
+
+    public SceneContent Redo(SceneContent scene) => scene with { Measurements = After };
+
+    public ISceneStep? Without(ModelId id)
+    {
+        var before = Before.RemoveAll(measurement => measurement.Touches(id));
+        var after = After.RemoveAll(measurement => measurement.Touches(id));
+        return before.SequenceEqual(after) ? null : new MeasurementsStep(before, after);
+    }
 }
 
 /// <summary>

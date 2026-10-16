@@ -39,6 +39,19 @@
         <MudToggleItem Value="Projection.Perspective" Text="Perspective" />
     </MudToggleGroup>
 
+    @* The Measure tool (M7, D79): a toggle, highlighted while it's on. *@
+    <MudTooltip Text="@(Scene.MeasureMode ? "Stop measuring (M)" : "Measure (M)")">
+        <MudIconButton Icon="@Icons.Material.Filled.Straighten"
+                       Color="@(Scene.MeasureMode ? Color.Primary : Color.Inherit)"
+                       Variant="@(Scene.MeasureMode ? Variant.Outlined : Variant.Text)"
+                       Disabled="@(!Session.IsReady)"
+                       OnClick="Scene.ToggleMeasureMode"
+                       aria-label="Measure"
+                       aria-pressed="@(Scene.MeasureMode ? "true" : "false")"
+                       Class="j3d-measure-button"
+                       data-testid="measure-button" />
+    </MudTooltip>
+
     @* Visibility of the selection, then the undo history (decision D97). *@
     <div class="j3d-toolbar-group" role="group" aria-label="Visibility and history" data-testid="visibility-tools">
         <MudTooltip Text="Hide selection (H)">

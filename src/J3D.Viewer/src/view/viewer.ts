@@ -25,7 +25,7 @@ import {
   type Texture,
 } from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import type { LoadedModel, ModelId, Vector3Tuple } from '../import/types';
+import type { BrepMeasurer, LoadedModel, ModelId, TreeNode, Vector3Tuple } from '../import/types';
 import { buildBrepObject } from './brep-object';
 import {
   clippingPlanes,
@@ -44,7 +44,9 @@ import {
   type Projection,
 } from './camera-math';
 import { MaterialCache } from './materials';
-import { HighlightMaterials, MeshParts, type Highlight, type HighlightKind, type ModelParts } from './parts';
+import { MeasureTool, type MeasureModel } from './measure';
+import type { MeasureInfo } from './measure-format';
+import { HighlightMaterials, MeshParts, type Highlight, type HighlightKind, type ModelParts, type ScreenSpace } from './parts';
 import { ViewCube } from './view-cube';
 import { HomeRegion, regionView, type ViewRegion } from './view-regions';
 
@@ -101,12 +103,17 @@ export interface PartRef {
 }
 
 /** What the keyboard asks of .NET, which owns selection, visibility and the undo history (D95, D99). */
-export type ViewerCommand = 'clearSelection' | 'hide' | 'isolate' | 'showAll' | 'undo' | 'redo';
+export type ViewerCommand = 'clearSelection' | 'hide' | 'isolate' | 'showAll' | 'undo' | 'redo' | 'measure';
 
 export interface ViewerOptions {
   /** A click that didn't drag: the part under the pointer, or undefined on empty space. */
   onPick?: (part: PartRef | undefined, additive: boolean) => void;
   onCommand?: (command: ViewerCommand) => void;
+  /** The Measure tool's first pick, or null when it's dropped or finished (M7, D101). */
+  onMeasurePending?: (info: MeasureInfo | null) => void;
+  /** A measurement the Measure tool has kept. */
+  onMeasured?: (info: MeasureInfo) => void;
+  onMeasureError?: (message: string) => void;
 }
 
 interface SceneModel {
@@ -116,6 +123,12 @@ interface SceneModel {
   hidden: Set<number>;
   selected: number[];
   selection?: Highlight | undefined;
+  tree: readonly TreeNode[];
+  /** BREP models' measurement channel (M7). */
+  measure?: BrepMeasurer | undefined;
+  prototypes?: MeasureModel['prototypes'];
+  /** Model units to millimetres (D105). */
+  unitScale: number;
   /** BREP models are built here and freed here; mesh models are freed by their import task. */
   dispose?: () => void;
 }
@@ -157,6 +170,8 @@ export class Viewer {
   private hoverPoint: { x: number; y: number } | undefined;
   private hoverRequest = 0;
   private lastPick = { milliseconds: 0, count: 0, longest: 0 };
+  private readonly labels: HTMLElement;
+  private readonly measureTool: MeasureTool;
 
   constructor(
     private readonly host: HTMLElement,
@@ -181,6 +196,33 @@ export class Viewer {
     this.scene.environment = this.environment;
     this.scene.environmentIntensity = EnvironmentIntensity;
     this.scene.add(this.headlight, this.headlight.target, this.overlays);
+
+    // Measurement labels: HTML over the canvas, moved after every frame (D103).
+    this.labels = document.createElement('div');
+    this.labels.className = 'j3d-measure-labels';
+    host.append(this.labels);
+    this.measureTool = new MeasureTool(
+      {
+        hitAt: (x, y) => this.hitAt(x, y),
+        screenAt: (x, y, hitPoint) => this.screenAt(x, y, hitPoint),
+        model: (id) => this.measureModel(id),
+        toClient: (world) => {
+          this.camera.updateMatrixWorld();
+          const ndc = world.clone().project(this.camera);
+          const rect = this.renderer.domElement.getBoundingClientRect();
+          return { x: rect.left + ((ndc.x + 1) / 2) * rect.width, y: rect.top + ((1 - ndc.y) / 2) * rect.height, visible: ndc.z <= 1 };
+        },
+        overlays: this.overlays,
+        highlights: this.highlights,
+        labels: this.labels,
+        requestRender: () => this.requestRender(),
+      },
+      {
+        ...(options.onMeasurePending ? { onPending: options.onMeasurePending } : {}),
+        ...(options.onMeasured ? { onMeasured: options.onMeasured } : {}),
+        ...(options.onMeasureError ? { onError: options.onMeasureError } : {}),
+      },
+    );
 
     this.orthographic = new OrthographicCamera();
     this.perspective = new PerspectiveCamera(PerspectiveFov);
@@ -278,11 +320,23 @@ export class Viewer {
     let entry: SceneModel;
     if (model.content.kind === 'brep') {
       const built = buildBrepObject(model.summary.fileName, model.content.scene, this.materials);
-      entry = { object: built.object, bounds, parts: built.parts, hidden: new Set(), selected: [], dispose: built.dispose };
+      entry = {
+        object: built.object,
+        bounds,
+        parts: built.parts,
+        hidden: new Set(),
+        selected: [],
+        tree: model.tree,
+        measure: model.content.measure,
+        prototypes: model.content.scene.prototypes,
+        unitScale: 1,
+        dispose: built.dispose,
+      };
     } else {
       model.content.root.updateMatrixWorld(true);
       const parts = new MeshParts(model.content.nodes, model.tree);
-      entry = { object: model.content.root, bounds, parts, hidden: new Set(), selected: [] };
+      // glTF is in metres by its specification; STL and OBJ are taken as millimetres (D105, assumption 13).
+      entry = { object: model.content.root, bounds, parts, hidden: new Set(), selected: [], tree: model.tree, unitScale: model.summary.format === 'gltf' ? 1000 : 1 };
     }
     this.models.set(model.summary.id, entry);
     this.scene.add(entry.object);
@@ -300,6 +354,7 @@ export class Viewer {
       return;
     }
     this.models.delete(id);
+    this.measureTool.removeModel(id);
     this.setSelectionHighlight(entry, undefined);
     if (this.hovered?.id === id) {
       this.setHovered(undefined);
@@ -351,6 +406,54 @@ export class Viewer {
 
   /** The visible part under a client point, if any. */
   pickPart(clientX: number, clientY: number): PartRef | undefined {
+    const found = this.hitAt(clientX, clientY);
+    return found && { id: found.id, node: found.node };
+  }
+
+  /** Turns the Measure tool on or off (D79); .NET decides, from the toolbar or the M key. */
+  setMeasureMode(active: boolean): void {
+    if (active) {
+      this.setHovered(undefined);
+    }
+    this.measureTool.setActive(active);
+  }
+
+  /** Shows exactly these kept measurements (D108). */
+  setMeasurements(shown: readonly string[]): void {
+    this.measureTool.setShown(shown);
+  }
+
+  /** The Measure tool's state, for tests: whether it's on, what it would pick, the pending pick and the kept measurements. */
+  measureState(): {
+    active: boolean;
+    busy: boolean;
+    hovered: { id: string; kind: string; node: number; index: number } | null;
+    pending: { id: string; kind: string; node: number; index: number } | null;
+    measurements: { id: string; label: string; shown: boolean }[];
+  } {
+    const brief = (picked: ReturnType<MeasureTool['entityAt']>) =>
+      picked
+        ? { id: picked.id, kind: picked.entity.kind, node: picked.entity.node, index: picked.entity.kind === 'point' ? -1 : picked.entity.ref.index }
+        : null;
+    return {
+      active: this.measureTool.isActive,
+      busy: this.measureTool.busy,
+      hovered: brief(this.measureTool.hoveredEntity),
+      pending: brief(this.measureTool.pendingEntity),
+      measurements: this.measureTool.list(),
+    };
+  }
+
+  /** What the Measure tool would pick at a client point (for tests). */
+  entityAt(clientX: number, clientY: number): { id: string; kind: string; node: number; index: number } | null {
+    const picked = this.measureTool.entityAt(clientX, clientY);
+    return picked
+      ? { id: picked.id, kind: picked.entity.kind, node: picked.entity.node, index: picked.entity.kind === 'point' ? -1 : picked.entity.ref.index }
+      : null;
+  }
+
+  /** The nearest visible part surface under a client point, with the intersection. */
+  private hitAt(clientX: number, clientY: number): { id: ModelId; node: number; hit: Intersection } | undefined {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     const started = performance.now();
@@ -361,16 +464,49 @@ export class Viewer {
       entries.map(([, entry]) => entry.object),
       true,
     );
-    let part: PartRef | undefined;
+    let found: { id: ModelId; node: number; hit: Intersection } | undefined;
     for (const hit of hits) {
-      part = this.partOf(entries, hit);
+      const part = this.partOf(entries, hit);
       if (part) {
+        found = { ...part, hit };
         break;
       }
     }
     const milliseconds = performance.now() - started;
     this.lastPick = { milliseconds, count: this.lastPick.count + 1, longest: Math.max(this.lastPick.longest, milliseconds) };
-    return part;
+    return found;
+  }
+
+  /** Where world points land on screen around a client point, for picking vertices and edges (D107). */
+  private screenAt(x: number, y: number, hitPoint: Vector3): ScreenSpace {
+    const camera = this.camera;
+    camera.updateMatrixWorld();
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const view = camera.matrixWorldInverse;
+    const depthOf = (world: Vector3) => -world.clone().applyMatrix4(view).z;
+    return {
+      x,
+      y,
+      hitDepth: depthOf(hitPoint),
+      project: (world) => {
+        const ndc = world.clone().project(camera);
+        return { x: rect.left + ((ndc.x + 1) / 2) * rect.width, y: rect.top + ((1 - ndc.y) / 2) * rect.height, depth: depthOf(world) };
+      },
+    };
+  }
+
+  private measureModel(id: ModelId): MeasureModel | undefined {
+    const entry = this.models.get(id);
+    if (!entry) {
+      return undefined;
+    }
+    return {
+      parts: entry.parts,
+      measure: entry.measure,
+      prototypes: entry.prototypes,
+      unitScale: entry.unitScale,
+      nameOf: (node) => entry.tree[node]?.name || '(unnamed)',
+    };
   }
 
   /** The part under the pointer, faintly highlighted (D89). */
@@ -558,6 +694,8 @@ export class Viewer {
     for (const id of [...this.models.keys()]) {
       this.remove(id);
     }
+    this.measureTool.dispose();
+    this.labels.remove();
     this.materials.dispose();
     this.highlights.dispose();
     this.viewCube.dispose();
@@ -670,6 +808,7 @@ export class Viewer {
     const { calls, triangles, lines } = this.renderer.info.render;
     this.lastFrame = { drawCalls: calls, triangles, lines };
     this.viewCube.render(this.renderer, camera, this.width, this.height);
+    this.measureTool.updateLabels();
     this.needsRender = false;
     this.frames++;
   }
@@ -687,6 +826,9 @@ export class Viewer {
     if (command === 'fit') {
       this.fitAll();
     } else if (command) {
+      if (command === 'clearSelection') {
+        this.measureTool.cancelPending(); // Esc also drops a half-done measurement (D101)
+      }
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault(); // not the browser's own undo
       }
@@ -761,7 +903,11 @@ export class Viewer {
       ) {
         return;
       }
-      this.options.onPick?.(this.pickPart(event.clientX, event.clientY), event.ctrlKey || event.metaKey);
+      if (this.measureTool.isActive) {
+        void this.measureTool.click(event.clientX, event.clientY);
+      } else {
+        this.options.onPick?.(this.pickPart(event.clientX, event.clientY), event.ctrlKey || event.metaKey);
+      }
     });
     this.listen(canvas, 'pointermove', (event) => {
       if (event.pointerType !== 'mouse' || event.buttons !== 0 || this.interacting) {
@@ -772,17 +918,19 @@ export class Viewer {
         this.hoverRequest = requestAnimationFrame(() => {
           this.hoverRequest = 0;
           const point = this.hoverPoint;
-          if (!point || this.viewCubeRegionAt(point.x, point.y) !== undefined) {
-            this.setHovered(undefined);
-            return;
+          const over = point && this.viewCubeRegionAt(point.x, point.y) === undefined ? point : undefined;
+          if (this.measureTool.isActive) {
+            this.measureTool.hover(over?.x, over?.y);
+          } else {
+            this.setHovered(over && this.pickPart(over.x, over.y));
           }
-          this.setHovered(this.pickPart(point.x, point.y));
         });
       }
     });
     this.listen(canvas, 'pointerleave', () => {
       this.hoverPoint = undefined;
       this.setHovered(undefined);
+      this.measureTool.hover(undefined, undefined);
     });
   }
 
@@ -876,6 +1024,8 @@ export function keyCommand(key: string, shift: boolean, control: boolean): Viewe
       return shift ? 'showAll' : 'hide';
     case 'i':
       return shift ? undefined : 'isolate';
+    case 'm':
+      return shift ? undefined : 'measure';
     default:
       return undefined;
   }

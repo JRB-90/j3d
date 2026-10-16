@@ -7,7 +7,7 @@ import createOcct, { type InitOpenCascadeOptions } from '@j3d/occt/single';
 import { sceneTransferables, summariseBrepScene } from '../brep-summary';
 import { toImportError } from '../errors';
 import { throttleProgress } from '../progress';
-import type { ModelWorkerRequest, ModelWorkerResponse, OcctFormat, WorkerScope } from '../protocol';
+import type { ImportRequestMessage, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, OcctFormat, WorkerScope } from '../protocol';
 import type { ImportPhase } from '../types';
 
 const scope = globalThis as unknown as WorkerScope<ModelWorkerRequest, ModelWorkerResponse>;
@@ -21,12 +21,30 @@ const occtFormats: Readonly<Record<OcctFormat, ImportFormat>> = {
 // Indexed by the facade's numeric ImportPhase.
 const phases: readonly ImportPhase[] = ['reading', 'parsing', 'transferring', 'meshing', 'extracting'];
 
-// Held only to keep the C++ model (and its BREP) alive for later features such as picking.
+// Kept alive, with its BREP, for measuring (M7).
 let model: OcctModel | undefined;
 
-scope.onmessage = ({ data }) => void runImport(data);
+scope.onmessage = ({ data }) => (data.type === 'import' ? void runImport(data) : measure(data));
 
-async function runImport(request: ModelWorkerRequest): Promise<void> {
+/** Answers a measurement query on the loaded model (M7). Queries run one at a time, in order. */
+function measure(request: MeasureRequest): void {
+  try {
+    if (!model) {
+      throw new Error('The model is not loaded.');
+    }
+    const result =
+      request.type === 'measureEntity'
+        ? model.measureEntity(request.entity)
+        : request.type === 'measurePair'
+          ? model.measurePair(request.a, request.b, request.shapeB)
+          : model.exportEntity(request.entity);
+    scope.postMessage({ type: 'measured', id: request.id, result });
+  } catch (error) {
+    scope.postMessage({ type: 'measureFailed', id: request.id, message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function runImport(request: ImportRequestMessage): Promise<void> {
   const report = throttleProgress((phase, fraction) => scope.postMessage({ type: 'progress', phase, fraction }));
   try {
     report('reading', 0);

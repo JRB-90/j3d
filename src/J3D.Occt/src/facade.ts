@@ -33,6 +33,12 @@ export interface J3DMeshDataHandle {
   getUniformColor(channel: number): number;
   getEdgesPtr(): number;
   getEdgesLength(): number;
+  getFaceRangesPtr(): number;
+  getFaceRangesLength(): number;
+  getEdgeRangesPtr(): number;
+  getEdgeRangesLength(): number;
+  getVerticesPtr(): number;
+  getVerticesLength(): number;
   delete(): void;
 }
 
@@ -45,6 +51,19 @@ export interface J3DModelHandle {
   extractPrototype(index: number): J3DMeshDataHandle;
   getSceneJson(): string;
   getLastError(): string;
+  measureEntity(kind: number, prototype: number, index: number, matrix: string): string;
+  measurePair(
+    kindA: number,
+    prototypeA: number,
+    indexA: number,
+    matrixA: string,
+    kindB: number,
+    prototypeB: number,
+    indexB: number,
+    matrixB: string,
+    shapeB: string,
+  ): string;
+  exportEntity(kind: number, prototype: number, index: number): string;
   delete(): void;
 }
 
@@ -67,6 +86,12 @@ export interface PrototypeMesh {
   uniformColor: [number, number, number, number];
   /** Line segments, two xyz points each. */
   edges: Float32Array;
+  /** (first index, index count) per BREP face, in face order: the face's triangles in `indices` (M7). */
+  faceRanges: Uint32Array;
+  /** (first point, point count) per BREP edge, in edge order: the edge's segments in `edges`. */
+  edgeRanges: Uint32Array;
+  /** xyz per BREP vertex, in vertex order. */
+  vertices: Float32Array;
 }
 
 export interface SceneNode {
@@ -121,6 +146,84 @@ export class OcctImportError extends Error {
   }
 }
 
+/** Must match the entity kinds in wrappers/j3d_facade.cpp. */
+export const EntityKind = { Face: 0, Edge: 1, Vertex: 2 } as const;
+export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
+
+/** A face, edge or vertex of one placement of a prototype (M7). */
+export interface EntityRef {
+  kind: EntityKind;
+  prototype: number;
+  /** The face, edge or vertex number, as in the prototype's ranges and vertices. */
+  index: number;
+  /** The placement's world transform, column-major 4x4. */
+  matrix: readonly number[];
+}
+
+export type Xyz = [number, number, number];
+
+/** A part's whole-shape properties, reported with every entity (D104). */
+export interface PartMeasure {
+  /** 0 for open shells. */
+  volume: number;
+  area: number;
+  centroid: Xyz;
+  min?: Xyz;
+  max?: Xyz;
+}
+
+/** One entity's properties in world coordinates (wrappers/j3d_facade.cpp, describeEntity). */
+export type EntityMeasure = (
+  | {
+      kind: 'face';
+      area: number;
+      surface: 'plane' | 'cylinder' | 'cone' | 'sphere' | 'torus' | 'other';
+      normal?: Xyz;
+      radius?: number;
+      majorRadius?: number;
+      minorRadius?: number;
+      semiAngle?: number;
+      axis?: Xyz;
+      origin?: Xyz;
+      centre?: Xyz;
+    }
+  | {
+      kind: 'edge';
+      length: number;
+      curve: 'line' | 'circle' | 'ellipse' | 'other';
+      start?: Xyz;
+      end?: Xyz;
+      direction?: Xyz;
+      radius?: number;
+      majorRadius?: number;
+      minorRadius?: number;
+      centre?: Xyz;
+      normal?: Xyz;
+    }
+  | { kind: 'vertex'; point: Xyz }
+) & { anchor: Xyz; part: PartMeasure };
+
+/** Two entities (describePair): what applies of distance, angle and centre distance. */
+export interface PairMeasure {
+  kind: 'pair';
+  distance?: number;
+  pointA?: Xyz;
+  pointB?: Xyz;
+  angleOf?: 'planes' | 'lines' | 'line and plane';
+  /** Degrees, 0-90. */
+  angle?: number;
+  centreDistance?: number;
+  centreA?: Xyz;
+  centreB?: Xyz;
+}
+
+export class OcctMeasureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OcctMeasureError';
+  }
+}
+
 /** One imported model. Owns its C++ J3DModel (and therefore its BREP) until disposed. */
 export class OcctModel implements Disposable {
   private constructor(
@@ -163,6 +266,30 @@ export class OcctModel implements Disposable {
     }
   }
 
+  /** One entity's properties and its part's (D80, D104). Throws {@link OcctMeasureError}. */
+  measureEntity(entity: EntityRef): EntityMeasure {
+    return parseMeasure(this.live().measureEntity(entity.kind, entity.prototype, entity.index, entity.matrix.join(',')));
+  }
+
+  /**
+   * Two entities of this model, or `a` of this model and `b` from another model's {@link exportEntity}
+   * (D102), whose `prototype` and `index` are then ignored.
+   */
+  measurePair(a: EntityRef, b: EntityRef, shapeB = ''): PairMeasure {
+    return parseMeasure(
+      this.live().measurePair(a.kind, a.prototype, a.index, a.matrix.join(','), b.kind, b.prototype, b.index, b.matrix.join(','), shapeB),
+    );
+  }
+
+  /** An entity as BREP text in its part's own coordinates, for {@link measurePair} in another model. */
+  exportEntity(entity: Pick<EntityRef, 'kind' | 'prototype' | 'index'>): string {
+    const text = this.live().exportEntity(entity.kind, entity.prototype, entity.index);
+    if (text.startsWith('{"error"')) {
+      parseMeasure(text);
+    }
+    return text;
+  }
+
   /** WASM heap size of the module this model lives in (one module per worker). */
   get memoryBytes(): number {
     return this.module.wasmMemory.buffer.byteLength;
@@ -171,6 +298,13 @@ export class OcctModel implements Disposable {
   dispose(): void {
     this.handle?.delete();
     this.handle = undefined;
+  }
+
+  private live(): J3DModelHandle {
+    if (!this.handle) {
+      throw new OcctMeasureError('The model has been disposed.');
+    }
+    return this.handle;
   }
 
   [Symbol.dispose](): void {
@@ -232,6 +366,9 @@ function extractPrototype(module: OcctModule, handle: J3DModelHandle, index: num
       opaqueIndexCount: data.getOpaqueIndexCount(),
       uniformColor: [0, 1, 2, 3].map((channel) => data.getUniformColor(channel)) as PrototypeMesh['uniformColor'],
       edges: copyFloat32(module, data.getEdgesPtr(), data.getEdgesLength()),
+      faceRanges: copyUint32(module, data.getFaceRangesPtr(), data.getFaceRangesLength()),
+      edgeRanges: copyUint32(module, data.getEdgeRangesPtr(), data.getEdgeRangesLength()),
+      vertices: copyFloat32(module, data.getVerticesPtr(), data.getVerticesLength()),
     };
     if (colorsLength > 0) {
       mesh.colors = copyFloat32(module, data.getColorsPtr(), colorsLength);
@@ -240,6 +377,14 @@ function extractPrototype(module: OcctModule, handle: J3DModelHandle, index: num
   } finally {
     data.delete();
   }
+}
+
+function parseMeasure<T>(json: string): T {
+  const result = JSON.parse(json) as T | { error: string };
+  if (typeof result === 'object' && result !== null && 'error' in result) {
+    throw new OcctMeasureError(result.error);
+  }
+  return result;
 }
 
 function copyFloat32(module: OcctModule, address: number, length: number): Float32Array {

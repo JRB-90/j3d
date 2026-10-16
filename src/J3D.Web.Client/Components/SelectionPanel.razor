@@ -1,7 +1,95 @@
-@if (Summary is { } summary)
+@if (IsVisible)
 {
     <div class="j3d-selection-panel" role="status" aria-live="polite" data-testid="selection-panel">
-        <div class="j3d-selection-title" title="@summary.Title" data-testid="selection-title">@summary.Title</div>
-        <div class="j3d-selection-detail" title="@summary.Detail" data-testid="selection-detail">@summary.Detail</div>
+        @if (Summary is { } summary)
+        {
+            <div class="j3d-selection-title" title="@summary.Title" data-testid="selection-title">@summary.Title</div>
+            <div class="j3d-selection-detail" title="@summary.Detail" data-testid="selection-detail">@summary.Detail</div>
+        }
+
+        @if (Scene.MeasureMode || !Scene.Measurements.IsEmpty)
+        {
+            <div class="j3d-measure" data-testid="measure-panel">
+                @if (Scene.MeasureMode)
+                {
+                    @if (Scene.PendingMeasure is { } pending)
+                    {
+                        <div class="j3d-measure-card j3d-measure-card--pending" data-testid="measure-pending">
+                            <div class="j3d-measure-card-title">@pending.Title</div>
+                            @Rows(pending)
+                        </div>
+                        <div class="j3d-measure-hint" data-testid="measure-hint">Pick a second face, edge or vertex, or Esc.</div>
+                    }
+                    else
+                    {
+                        <div class="j3d-measure-hint" data-testid="measure-hint">Pick a face, edge or vertex.</div>
+                    }
+                }
+
+                @foreach (var measurement in Scene.Measurements.Reverse())
+                {
+                    var expanded = _expanded.Contains(measurement.Id);
+                    var shown = Scene.IsShown(measurement);
+                    <div class="@($"j3d-measure-card{(shown ? "" : " j3d-measure-card--hidden")}")"
+                         data-testid="measurement"
+                         data-measure-id="@measurement.Id"
+                         data-shown="@(shown ? "true" : "false")">
+                        <div class="j3d-measure-card-header">
+                            <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
+                                           Size="Size.Small"
+                                           aria-label="@(expanded ? "Collapse" : "Expand")"
+                                           aria-expanded="@(expanded ? "true" : "false")"
+                                           OnClick="@(() => Toggle(measurement.Id))"
+                                           data-testid="measurement-toggle" />
+                            <span class="j3d-measure-card-title" title="@measurement.Title" data-testid="measurement-title">
+                                @measurement.Title@(shown ? "" : " (hidden)")
+                            </span>
+                            <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                           Size="Size.Small"
+                                           aria-label="@($"Remove {measurement.Title}")"
+                                           OnClick="@(() => Scene.RemoveMeasurement(measurement.Id))"
+                                           data-testid="measurement-remove" />
+                        </div>
+                        @if (expanded)
+                        {
+                            @Rows(measurement)
+                        }
+                    </div>
+                }
+
+                @if (!Scene.Measurements.IsEmpty)
+                {
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Text"
+                               StartIcon="@Icons.Material.Filled.ClearAll"
+                               OnClick="Scene.ClearMeasurements"
+                               Class="j3d-measure-clear"
+                               data-testid="measure-clear">
+                        Clear measurements
+                    </MudButton>
+                }
+            </div>
+        }
     </div>
+}
+
+@code {
+    private RenderFragment Rows(MeasureInfo info) =>
+        @<dl class="j3d-measure-rows">
+            @foreach (var row in info.Rows)
+            {
+                <div class="j3d-measure-row" data-testid="measure-row">
+                    <dt>@row.Name</dt>
+                    <dd>
+                        <span data-testid="measure-value">@row.Value</span>
+                        <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy"
+                                       Size="Size.Small"
+                                       aria-label="@($"Copy {row.Name}")"
+                                       OnClick="@(() => CopyAsync(row.Value))"
+                                       Class="j3d-measure-copy"
+                                       data-testid="measure-copy" />
+                    </dd>
+                </div>
+            }
+        </dl>;
 }

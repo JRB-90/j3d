@@ -31,6 +31,10 @@ function quad(): PrototypeMesh {
     opaqueIndexCount: 6,
     uniformColor: [0.5, 0.5, 0.5, 1],
     edges: new Float32Array([0, 0, 0, 1, 0, 0]),
+    // One face (both triangles), one edge (the segment), and that edge's two ends.
+    faceRanges: new Uint32Array([0, 6]),
+    edgeRanges: new Uint32Array([0, 2]),
+    vertices: new Float32Array([0, 0, 0, 1, 0, 0]),
   };
 }
 

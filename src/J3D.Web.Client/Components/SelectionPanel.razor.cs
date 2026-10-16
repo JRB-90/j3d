@@ -1,18 +1,29 @@
 using System.Globalization;
+using J3D.Web.Client.Interop;
 using J3D.Web.Client.State;
 
 namespace J3D.Web.Client.Components;
 
 /// <summary>
 /// The floating panel at the viewport's bottom-left (decision D87): the selected part's name and
-/// its path from the model down, or how many parts are selected. Hidden when nothing is. M7 adds
-/// the measurement results.
+/// its path from the model down, or how many parts are selected. Since M7 it also shows the Measure
+/// tool: its pending first pick with a copy button per value, a hint, and the kept measurements,
+/// newest first and expandable, each removable, with Clear for them all (D101). Hidden when there is
+/// nothing to show.
 /// </summary>
-public sealed partial class SelectionPanel(SceneState scene) : IDisposable
+public sealed partial class SelectionPanel(SceneState scene, ViewerSession session) : IDisposable
 {
     internal const string PathSeparator = " › ";
 
-    private (string Title, string Detail)? Summary => Describe(scene.Selection);
+    /// <summary>Measurements whose rows are open. A new measurement opens and closes the others, so the panel stays small.</summary>
+    private readonly HashSet<string> _expanded = [];
+    private string? _newest;
+
+    private SceneState Scene => scene;
+
+    private (string Title, string Detail)? Summary => scene.MeasureMode ? null : Describe(scene.Selection);
+
+    private bool IsVisible => Summary is not null || scene.MeasureMode || !scene.Measurements.IsEmpty;
 
     protected override void OnInitialized() => scene.Changed += OnSceneChanged;
 
@@ -41,5 +52,25 @@ public sealed partial class SelectionPanel(SceneState scene) : IDisposable
     private static string NameOf(ModelTree tree, int node) =>
         string.IsNullOrWhiteSpace(tree[node].Name) ? "(unnamed)" : tree[node].Name;
 
-    private void OnSceneChanged() => _ = InvokeAsync(StateHasChanged);
+    private void Toggle(string id)
+    {
+        if (!_expanded.Remove(id))
+        {
+            _expanded.Add(id);
+        }
+    }
+
+    private Task CopyAsync(string text) => session.CopyTextAsync(text);
+
+    private void OnSceneChanged()
+    {
+        if (scene.Measurements.LastOrDefault() is { } newest && newest.Id != _newest)
+        {
+            _newest = newest.Id;
+            _expanded.Clear();
+            _expanded.Add(newest.Id);
+        }
+
+        _ = InvokeAsync(StateHasChanged);
+    }
 }

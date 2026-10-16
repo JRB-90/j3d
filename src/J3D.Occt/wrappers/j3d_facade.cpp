@@ -10,6 +10,23 @@
 // Addresses are returned as unsigned int: with MAXIMUM_MEMORY=4GB they can exceed INT_MAX.
 
 #include <BRepBndLib.hxx>
+#include <BRepAdaptor_Surface.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
+#include <GeomAbs_CurveType.hxx>
+#include <GeomAbs_SurfaceType.hxx>
+#include <NCollection_IndexedMap.hxx>
+#include <TopoDS_Vertex.hxx>
+#include <gp_Circ.hxx>
+#include <gp_Cone.hxx>
+#include <gp_Cylinder.hxx>
+#include <gp_Elips.hxx>
+#include <gp_Lin.hxx>
+#include <gp_Pln.hxx>
+#include <gp_Sphere.hxx>
+#include <gp_Torus.hxx>
+#include <gp_Trsf.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Builder.hxx>
@@ -67,6 +84,7 @@
 #include <istream>
 #include <new>
 #include <sstream>
+#include <stdexcept>
 #include <streambuf>
 #include <string>
 #include <unordered_map>
@@ -216,6 +234,305 @@ T* copyToMalloc(const std::vector<T>& values) {
   return data;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Measurement helpers (M7)
+// ---------------------------------------------------------------------------------------------
+
+constexpr int EntityFace = 0;
+constexpr int EntityEdge = 1;
+constexpr int EntityVertex = 2;
+
+constexpr double DegreesPerRadian = 57.29577951308232;
+
+inline std::string errorJson(const std::string& message) {
+  std::string json = "{\"error\":";
+  appendJsonString(json, message);
+  return json + '}';
+}
+
+inline void appendXyz(std::string& out, const gp_XYZ& xyz) {
+  out += '[';
+  appendNumber(out, xyz.X());
+  out += ',';
+  appendNumber(out, xyz.Y());
+  out += ',';
+  appendNumber(out, xyz.Z());
+  out += ']';
+}
+
+inline void appendField(std::string& out, const char* name, double value) {
+  out += ",\"";
+  out += name;
+  out += "\":";
+  appendNumber(out, value);
+}
+
+inline void appendField(std::string& out, const char* name, const gp_XYZ& xyz) {
+  out += ",\"";
+  out += name;
+  out += "\":";
+  appendXyz(out, xyz);
+}
+
+inline void appendField(std::string& out, const char* name, const char* text) {
+  out += ",\"";
+  out += name;
+  out += "\":\"";
+  out += text;
+  out += '"';
+}
+
+/** 16 comma-separated numbers, column-major (Three.js Matrix4 order), to a rigid OCCT transform. */
+inline gp_Trsf parseMatrix(const std::string& text) {
+  double m[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  const char* cursor = text.c_str();
+  for (int i = 0; i < 16 && *cursor != '\0'; ++i) {
+    char* end = nullptr;
+    m[i] = std::strtod(cursor, &end);
+    if (end == cursor) {
+      break;
+    }
+    cursor = *end == ',' ? end + 1 : end;
+  }
+  gp_Trsf trsf;
+  trsf.SetValues(m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13], m[2], m[6], m[10], m[14]);
+  return trsf;
+}
+
+inline TopoDS_Shape readShape(const std::string& brep) {
+  std::istringstream stream(brep);
+  TopoDS_Shape shape;
+  BRep_Builder builder;
+  BRepTools::Read(shape, stream, builder);
+  if (shape.IsNull()) {
+    throw std::runtime_error("The other model's shape couldn't be read.");
+  }
+  return shape;
+}
+
+/** A planar face's outward normal, or false. */
+inline bool planeNormal(const TopoDS_Shape& shape, gp_Dir& normal) {
+  if (shape.ShapeType() != TopAbs_FACE) {
+    return false;
+  }
+  const TopoDS_Face& face = TopoDS::Face(shape);
+  BRepAdaptor_Surface surface(face);
+  if (surface.GetType() != GeomAbs_Plane) {
+    return false;
+  }
+  normal = surface.Plane().Axis().Direction();
+  if (face.Orientation() == TopAbs_REVERSED) {
+    normal.Reverse();
+  }
+  return true;
+}
+
+/** A straight edge's direction, or false. */
+inline bool lineDirection(const TopoDS_Shape& shape, gp_Dir& direction) {
+  if (shape.ShapeType() != TopAbs_EDGE || BRep_Tool::Degenerated(TopoDS::Edge(shape))) {
+    return false;
+  }
+  BRepAdaptor_Curve curve(TopoDS::Edge(shape));
+  if (curve.GetType() != GeomAbs_Line) {
+    return false;
+  }
+  direction = curve.Line().Direction();
+  return true;
+}
+
+/** A circular edge's centre, or false. */
+inline bool circleCentre(const TopoDS_Shape& shape, gp_Pnt& centre) {
+  if (shape.ShapeType() != TopAbs_EDGE || BRep_Tool::Degenerated(TopoDS::Edge(shape))) {
+    return false;
+  }
+  BRepAdaptor_Curve curve(TopoDS::Edge(shape));
+  if (curve.GetType() != GeomAbs_Circle) {
+    return false;
+  }
+  centre = curve.Circle().Location();
+  return true;
+}
+
+inline void describeFace(std::string& json, const TopoDS_Face& face) {
+  GProp_GProps props;
+  BRepGProp::SurfaceProperties(face, props);
+  json += "\"kind\":\"face\"";
+  appendField(json, "area", props.Mass());
+  appendField(json, "anchor", props.CentreOfMass().XYZ());
+  BRepAdaptor_Surface surface(face);
+  switch (surface.GetType()) {
+    case GeomAbs_Plane: {
+      gp_Dir normal;
+      planeNormal(face, normal);
+      appendField(json, "surface", "plane");
+      appendField(json, "normal", normal.XYZ());
+      break;
+    }
+    case GeomAbs_Cylinder: {
+      const gp_Cylinder cylinder = surface.Cylinder();
+      appendField(json, "surface", "cylinder");
+      appendField(json, "radius", cylinder.Radius());
+      appendField(json, "axis", cylinder.Axis().Direction().XYZ());
+      appendField(json, "origin", cylinder.Location().XYZ());
+      break;
+    }
+    case GeomAbs_Cone: {
+      const gp_Cone cone = surface.Cone();
+      appendField(json, "surface", "cone");
+      appendField(json, "semiAngle", cone.SemiAngle() * DegreesPerRadian);
+      appendField(json, "axis", cone.Axis().Direction().XYZ());
+      appendField(json, "origin", cone.Location().XYZ());
+      break;
+    }
+    case GeomAbs_Sphere: {
+      const gp_Sphere sphere = surface.Sphere();
+      appendField(json, "surface", "sphere");
+      appendField(json, "radius", sphere.Radius());
+      appendField(json, "centre", sphere.Location().XYZ());
+      break;
+    }
+    case GeomAbs_Torus: {
+      const gp_Torus torus = surface.Torus();
+      appendField(json, "surface", "torus");
+      appendField(json, "majorRadius", torus.MajorRadius());
+      appendField(json, "minorRadius", torus.MinorRadius());
+      appendField(json, "axis", torus.Axis().Direction().XYZ());
+      appendField(json, "centre", torus.Location().XYZ());
+      break;
+    }
+    default:
+      appendField(json, "surface", "other");
+      break;
+  }
+}
+
+inline void describeEdge(std::string& json, const TopoDS_Edge& edge) {
+  GProp_GProps props;
+  BRepGProp::LinearProperties(edge, props);
+  json += "\"kind\":\"edge\"";
+  appendField(json, "length", props.Mass());
+  TopoDS_Vertex first;
+  TopoDS_Vertex last;
+  TopExp::Vertices(edge, first, last);
+  if (!first.IsNull()) {
+    appendField(json, "start", BRep_Tool::Pnt(first).XYZ());
+  }
+  if (!last.IsNull()) {
+    appendField(json, "end", BRep_Tool::Pnt(last).XYZ());
+  }
+  BRepAdaptor_Curve curve(edge);
+  appendField(json, "anchor", curve.Value((curve.FirstParameter() + curve.LastParameter()) / 2).XYZ());
+  switch (curve.GetType()) {
+    case GeomAbs_Line:
+      appendField(json, "curve", "line");
+      appendField(json, "direction", curve.Line().Direction().XYZ());
+      break;
+    case GeomAbs_Circle: {
+      const gp_Circ circle = curve.Circle();
+      appendField(json, "curve", "circle");
+      appendField(json, "radius", circle.Radius());
+      appendField(json, "centre", circle.Location().XYZ());
+      appendField(json, "normal", circle.Axis().Direction().XYZ());
+      break;
+    }
+    case GeomAbs_Ellipse: {
+      const gp_Elips ellipse = curve.Ellipse();
+      appendField(json, "curve", "ellipse");
+      appendField(json, "majorRadius", ellipse.MajorRadius());
+      appendField(json, "minorRadius", ellipse.MinorRadius());
+      appendField(json, "centre", ellipse.Location().XYZ());
+      break;
+    }
+    default:
+      appendField(json, "curve", "other");
+      break;
+  }
+}
+
+inline void describeEntity(std::string& json, const TopoDS_Shape& entity) {
+  switch (entity.ShapeType()) {
+    case TopAbs_FACE:
+      describeFace(json, TopoDS::Face(entity));
+      break;
+    case TopAbs_EDGE:
+      describeEdge(json, TopoDS::Edge(entity));
+      break;
+    case TopAbs_VERTEX: {
+      const gp_XYZ point = BRep_Tool::Pnt(TopoDS::Vertex(entity)).XYZ();
+      json += "\"kind\":\"vertex\"";
+      appendField(json, "point", point);
+      appendField(json, "anchor", point);
+      break;
+    }
+    default:
+      json += "\"kind\":\"other\"";
+      break;
+  }
+}
+
+/** A part's volume (0 for open shells), surface area, centre of mass and world bounds. */
+inline void describePart(std::string& json, const TopoDS_Shape& part) {
+  GProp_GProps volume;
+  BRepGProp::VolumeProperties(part, volume);
+  GProp_GProps surface;
+  BRepGProp::SurfaceProperties(part, surface);
+  Bnd_Box box;
+  BRepBndLib::AddOptimal(part, box, false, false);
+  const double mass = std::abs(volume.Mass());
+  json += "{\"volume\":";
+  appendNumber(json, mass);
+  appendField(json, "area", surface.Mass());
+  appendField(json, "centroid", (mass > 0 ? volume : surface).CentreOfMass().XYZ());
+  if (!box.IsVoid()) {
+    appendField(json, "min", box.CornerMin().XYZ());
+    appendField(json, "max", box.CornerMax().XYZ());
+  }
+  json += '}';
+}
+
+/** Degrees between two directions, folded to 0-90: planes and lines have no sense of direction. */
+inline double acuteAngle(const gp_Dir& a, const gp_Dir& b) {
+  return std::acos(std::min(1.0, std::abs(a.Dot(b)))) * DegreesPerRadian;
+}
+
+inline std::string describePair(const TopoDS_Shape& a, const TopoDS_Shape& b) {
+  std::string json = "{\"kind\":\"pair\"";
+  BRepExtrema_DistShapeShape distance(a, b);
+  if (distance.IsDone() && distance.NbSolution() > 0) {
+    appendField(json, "distance", distance.Value());
+    appendField(json, "pointA", distance.PointOnShape1(1).XYZ());
+    appendField(json, "pointB", distance.PointOnShape2(1).XYZ());
+  }
+
+  gp_Dir normalA;
+  gp_Dir normalB;
+  gp_Dir lineA;
+  gp_Dir lineB;
+  const bool planeA = planeNormal(a, normalA);
+  const bool planeB = planeNormal(b, normalB);
+  const bool straightA = lineDirection(a, lineA);
+  const bool straightB = lineDirection(b, lineB);
+  if (planeA && planeB) {
+    appendField(json, "angleOf", "planes");
+    appendField(json, "angle", acuteAngle(normalA, normalB));
+  } else if (straightA && straightB) {
+    appendField(json, "angleOf", "lines");
+    appendField(json, "angle", acuteAngle(lineA, lineB));
+  } else if ((straightA && planeB) || (planeA && straightB)) {
+    appendField(json, "angleOf", "line and plane");
+    appendField(json, "angle", 90.0 - acuteAngle(straightA ? lineA : lineB, planeA ? normalA : normalB));
+  }
+
+  gp_Pnt centreA;
+  gp_Pnt centreB;
+  if (circleCentre(a, centreA) && circleCentre(b, centreB)) {
+    appendField(json, "centreDistance", centreA.Distance(centreB));
+    appendField(json, "centreA", centreA.XYZ());
+    appendField(json, "centreB", centreB.XYZ());
+  }
+  return json + '}';
+}
+
 }  // namespace j3d
 
 // ---------------------------------------------------------------------------------------------
@@ -234,20 +551,29 @@ public:
     std::free(indices_);
     std::free(colors_);
     std::free(edges_);
+    std::free(faceRanges_);
+    std::free(edgeRanges_);
+    std::free(vertices_);
   }
 
   // Embind copies return values; like Replicad's mesh data, a copy takes ownership of the buffers.
   J3DMeshData(const J3DMeshData& other)
       : positions_(other.positions_), normals_(other.normals_), indices_(other.indices_),
-        colors_(other.colors_), edges_(other.edges_), positionCount_(other.positionCount_),
+        colors_(other.colors_), edges_(other.edges_), faceRanges_(other.faceRanges_), edgeRanges_(other.edgeRanges_),
+        vertices_(other.vertices_), positionCount_(other.positionCount_),
         indexCount_(other.indexCount_), opaqueIndexCount_(other.opaqueIndexCount_),
-        colorCount_(other.colorCount_), edgeCount_(other.edgeCount_), uniform_{other.uniform_[0], other.uniform_[1], other.uniform_[2], other.uniform_[3]} {
+        colorCount_(other.colorCount_), edgeCount_(other.edgeCount_), faceRangeCount_(other.faceRangeCount_),
+        edgeRangeCount_(other.edgeRangeCount_), vertexCount_(other.vertexCount_),
+        uniform_{other.uniform_[0], other.uniform_[1], other.uniform_[2], other.uniform_[3]} {
     auto& source = const_cast<J3DMeshData&>(other);
     source.positions_ = nullptr;
     source.normals_ = nullptr;
     source.indices_ = nullptr;
     source.colors_ = nullptr;
     source.edges_ = nullptr;
+    source.faceRanges_ = nullptr;
+    source.edgeRanges_ = nullptr;
+    source.vertices_ = nullptr;
   }
 
   J3DMeshData& operator=(const J3DMeshData&) = delete;
@@ -269,6 +595,18 @@ public:
   /** float32 xyz pairs: one line segment per two points. */
   unsigned int getEdgesPtr() const { return address(edges_); }
   int getEdgesLength() const { return edgeCount_; }
+  /**
+   * uint32 (first index, index count) per BREP face, in face order: which part of the index array
+   * draws face i (M7). A face's triangles are contiguous, in the opaque or the translucent range.
+   */
+  unsigned int getFaceRangesPtr() const { return address(faceRanges_); }
+  int getFaceRangesLength() const { return faceRangeCount_; }
+  /** uint32 (first edge point, point count) per BREP edge, in edge order: its segments in the edge array. */
+  unsigned int getEdgeRangesPtr() const { return address(edgeRanges_); }
+  int getEdgeRangesLength() const { return edgeRangeCount_; }
+  /** float32 xyz per BREP vertex, in vertex order. */
+  unsigned int getVerticesPtr() const { return address(vertices_); }
+  int getVerticesLength() const { return vertexCount_; }
 
 private:
   static unsigned int address(const void* data) {
@@ -280,11 +618,17 @@ private:
   uint32_t* indices_ = nullptr;
   float* colors_ = nullptr;
   float* edges_ = nullptr;
+  uint32_t* faceRanges_ = nullptr;
+  uint32_t* edgeRanges_ = nullptr;
+  float* vertices_ = nullptr;
   int positionCount_ = 0;
   int indexCount_ = 0;
   int opaqueIndexCount_ = 0;
   int colorCount_ = 0;
   int edgeCount_ = 0;
+  int faceRangeCount_ = 0;
+  int edgeRangeCount_ = 0;
+  int vertexCount_ = 0;
   double uniform_[4] = {0.0, 0.0, 0.0, 1.0};
 
   friend class J3DModel;
@@ -372,6 +716,7 @@ public:
       }
       linearDeflection_ = linearDeflection;
       angularDeflection_ = angularDeflection;
+      topology_.assign(prototypes_.size(), Topology());
       j3d::reportProgress(j3d::PhaseMeshing, 1.0, true);
       return j3d::StatusOk;
     });
@@ -387,8 +732,14 @@ public:
     }
     j3d::reportProgress(j3d::PhaseExtracting, static_cast<double>(index) / prototypes_.size());
     const Prototype& prototype = prototypes_[index];
-    extractFaces(prototype, data);
-    extractEdges(prototype, data);
+    if (topology_.size() < prototypes_.size()) {
+      topology_.resize(prototypes_.size());
+    }
+    Topology& topology = topology_[index];
+    topology = Topology();
+    extractFaces(prototype, data, topology);
+    extractEdges(prototype, data, topology);
+    extractVertices(prototype, data, topology);
     return data;
   }
 
@@ -400,6 +751,51 @@ public:
 
   /** Message for the last non-OK status. */
   std::string getLastError() const { return lastError_; }
+
+  // -------------------------------------------------------------------------------------------
+  // Measurement (M7, decisions D80, D102, D104). An entity is (kind, prototype, index), kind 0 face,
+  // 1 edge, 2 vertex, numbered as in the prototype's mesh data; `matrix` is the placement's world
+  // transform as 16 comma-separated numbers, column-major. Results are JSON in world coordinates
+  // (the model's length unit, millimetres for STEP and IGES), or {"error": "..."}.
+  // -------------------------------------------------------------------------------------------
+
+  /** One entity's properties, and its whole part's ("part": volume, area, centroid, bounds). */
+  std::string measureEntity(int kind, int prototype, int index, const std::string& matrix) const {
+    return measured([&] {
+      const gp_Trsf placement = j3d::parseMatrix(matrix);
+      const TopoDS_Shape entity = entityShape(kind, prototype, index).Moved(TopLoc_Location(placement));
+      std::string json = "{";
+      j3d::describeEntity(json, entity);
+      json += ",\"part\":";
+      j3d::describePart(json, prototypes_[prototype].shape.Moved(TopLoc_Location(placement)));
+      json += '}';
+      return json;
+    });
+  }
+
+  /**
+   * Two entities: the minimum distance and its closest points, the angle between planes or lines,
+   * and the distance between circle centres. When `shapeB` holds BREP text (exportEntity in another
+   * model's worker, D102), it is entity B instead of (kindB, prototypeB, indexB) here.
+   */
+  std::string measurePair(int kindA, int prototypeA, int indexA, const std::string& matrixA, int kindB, int prototypeB,
+                          int indexB, const std::string& matrixB, const std::string& shapeB) const {
+    return measured([&] {
+      const TopoDS_Shape a = entityShape(kindA, prototypeA, indexA).Moved(TopLoc_Location(j3d::parseMatrix(matrixA)));
+      TopoDS_Shape b = shapeB.empty() ? entityShape(kindB, prototypeB, indexB) : j3d::readShape(shapeB);
+      b = b.Moved(TopLoc_Location(j3d::parseMatrix(matrixB)));
+      return j3d::describePair(a, b);
+    });
+  }
+
+  /** An entity as BREP text, in its part's own coordinates, for a pair across models (D102). */
+  std::string exportEntity(int kind, int prototype, int index) const {
+    return measured([&] {
+      std::ostringstream stream;
+      BRepTools::Write(entityShape(kind, prototype, index), stream);
+      return stream.str();
+    });
+  }
 
 private:
   // Helpers are private nested classes on purpose: the libcascade bindgen binds every top-level
@@ -445,6 +841,50 @@ private:
     TopoDS_Shape shape;
     XCAFPrs_Style style;
   };
+
+  // A prototype's BREP faces, edges and vertices in the order its mesh data numbers them (M7), so a
+  // query can name one by (prototype, index). Filled by extractPrototype.
+  struct Topology {
+    std::vector<TopoDS_Face> faces;
+    std::vector<TopoDS_Edge> edges;
+    std::vector<TopoDS_Vertex> vertices;
+  };
+
+  // Runs a query, turning OCCT and range failures into {"error": "..."}.
+  template <typename Body>
+  std::string measured(Body&& body) const {
+    try {
+      return body();
+    } catch (const Standard_Failure& failure) {
+      const char* message = failure.what();
+      return j3d::errorJson(message != nullptr && *message != '\0' ? message : "OCCT couldn't measure that.");
+    } catch (const std::exception& exception) {
+      return j3d::errorJson(exception.what());
+    } catch (...) {
+      return j3d::errorJson("Unknown error.");
+    }
+  }
+
+  const TopoDS_Shape& entityShape(int kind, int prototype, int index) const {
+    if (prototype < 0 || prototype >= static_cast<int>(topology_.size())) {
+      throw std::out_of_range("No such part.");
+    }
+    const Topology& topology = topology_[prototype];
+    switch (kind) {
+      case j3d::EntityFace:
+        if (index >= 0 && index < static_cast<int>(topology.faces.size())) return topology.faces[index];
+        break;
+      case j3d::EntityEdge:
+        if (index >= 0 && index < static_cast<int>(topology.edges.size())) return topology.edges[index];
+        break;
+      case j3d::EntityVertex:
+        if (index >= 0 && index < static_cast<int>(topology.vertices.size())) return topology.vertices[index];
+        break;
+      default:
+        break;
+    }
+    throw std::out_of_range("No such face, edge or vertex.");
+  }
 
   template <typename Body>
   int guarded(Body&& body) {
@@ -610,7 +1050,7 @@ private:
     sceneJson_ = "{\"nodes\":" + nodes + "],\"instances\":" + instances + "]}";
   }
 
-  void extractFaces(const Prototype& prototype, J3DMeshData& data) const {
+  void extractFaces(const Prototype& prototype, J3DMeshData& data, Topology& topology) const {
     std::vector<float> positions;
     std::vector<float> normals;
     std::vector<float> colors;
@@ -619,6 +1059,8 @@ private:
     bool uniform = true;
     Quantity_ColorRGBA first;
     bool haveFirst = false;
+    // Per face: translucent?, first index within its range, index count.
+    std::vector<uint32_t> ranges;
 
     const Quantity_ColorRGBA fallback = j3d::styleColor(prototype.style);
     for (RWMesh_FaceIterator face(prototype.label, TopLoc_Location(), true, prototype.style); face.More();
@@ -646,17 +1088,30 @@ private:
       }
 
       std::vector<uint32_t>& target = color.Alpha() < 0.999f ? translucent : opaque;
+      const uint32_t first = static_cast<uint32_t>(target.size());
       for (int element = face.ElemLower(); element <= face.ElemUpper(); ++element) {
         const Poly_Triangle triangle = face.TriangleOriented(element);
         for (int corner = 1; corner <= 3; ++corner) {
           target.push_back(base + static_cast<uint32_t>(triangle(corner) - face.NodeLower()));
         }
       }
+      ranges.insert(ranges.end(), {&target == &translucent ? 1u : 0u, first, static_cast<uint32_t>(target.size()) - first});
+      topology.faces.push_back(face.Face());
     }
 
     data.positionCount_ = static_cast<int>(positions.size());
     data.positions_ = j3d::copyToMalloc(positions);
     data.normals_ = j3d::copyToMalloc(normals);
+
+    // Translucent ranges start after every opaque index once the two are joined.
+    std::vector<uint32_t> faceRanges;
+    faceRanges.reserve(ranges.size() / 3 * 2);
+    for (std::size_t i = 0; i < ranges.size(); i += 3) {
+      faceRanges.push_back(ranges[i + 1] + (ranges[i] != 0 ? static_cast<uint32_t>(opaque.size()) : 0u));
+      faceRanges.push_back(ranges[i + 2]);
+    }
+    data.faceRangeCount_ = static_cast<int>(faceRanges.size());
+    data.faceRanges_ = j3d::copyToMalloc(faceRanges);
 
     data.opaqueIndexCount_ = static_cast<int>(opaque.size());
     opaque.insert(opaque.end(), translucent.begin(), translucent.end());
@@ -676,8 +1131,17 @@ private:
 
   // True BREP edges as line segments, taken from the face triangulations so they sit exactly on the
   // shaded mesh. Seam and degenerated edges are skipped; free edges are discretised from the curve.
-  void extractEdges(const Prototype& prototype, J3DMeshData& data) const {
+  void extractEdges(const Prototype& prototype, J3DMeshData& data, Topology& topology) const {
     std::vector<float> segments;
+    std::vector<uint32_t> edgeRanges;
+    // Records the segments added since `first` points as one edge, if there are any.
+    const auto addEdge = [&](const TopoDS_Edge& edge, std::size_t first) {
+      const std::size_t points = segments.size() / 3;
+      if (points > first) {
+        edgeRanges.insert(edgeRanges.end(), {static_cast<uint32_t>(first), static_cast<uint32_t>(points - first)});
+        topology.edges.push_back(edge);
+      }
+    };
     const auto addSegment = [&segments](const gp_Pnt& a, const gp_Pnt& b) {
       segments.insert(segments.end(), {static_cast<float>(a.X()), static_cast<float>(a.Y()), static_cast<float>(a.Z()),
                                        static_cast<float>(b.X()), static_cast<float>(b.Y()), static_cast<float>(b.Z())});
@@ -692,9 +1156,11 @@ private:
         continue;
       }
 
+      const std::size_t first = segments.size() / 3;
       const NCollection_List<TopoDS_Shape>& faces = edgeFaces.FindFromIndex(i);
       if (faces.IsEmpty()) {
         appendFreeEdge(edge, addSegment);
+        addEdge(edge, first);
         continue;
       }
 
@@ -719,10 +1185,28 @@ private:
         addSegment(triangulation->Node(polygon->Node(n)).Transformed(trsf),
                    triangulation->Node(polygon->Node(n + 1)).Transformed(trsf));
       }
+      addEdge(edge, first);
     }
 
     data.edgeCount_ = static_cast<int>(segments.size());
     data.edges_ = j3d::copyToMalloc(segments);
+    data.edgeRangeCount_ = static_cast<int>(edgeRanges.size());
+    data.edgeRanges_ = j3d::copyToMalloc(edgeRanges);
+  }
+
+  void extractVertices(const Prototype& prototype, J3DMeshData& data, Topology& topology) const {
+    NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> vertices;
+    TopExp::MapShapes(prototype.shape, TopAbs_VERTEX, vertices);
+    std::vector<float> points;
+    points.reserve(static_cast<std::size_t>(vertices.Extent()) * 3);
+    for (int i = 1; i <= vertices.Extent(); ++i) {
+      const TopoDS_Vertex& vertex = TopoDS::Vertex(vertices.FindKey(i));
+      const gp_Pnt point = BRep_Tool::Pnt(vertex);
+      points.insert(points.end(), {static_cast<float>(point.X()), static_cast<float>(point.Y()), static_cast<float>(point.Z())});
+      topology.vertices.push_back(vertex);
+    }
+    data.vertexCount_ = static_cast<int>(points.size());
+    data.vertices_ = j3d::copyToMalloc(points);
   }
 
   template <typename AddSegment>
@@ -743,6 +1227,7 @@ private:
   Handle(TDocStd_Document) document_;
   Handle(XCAFDoc_ShapeTool) shapeTool_;
   std::vector<Prototype> prototypes_;
+  mutable std::vector<Topology> topology_;
   std::string sceneJson_ = "{\"nodes\":[],\"instances\":[]}";
   std::string lastError_;
   double linearDeflection_ = 0.1;
