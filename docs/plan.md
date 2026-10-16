@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) in progress** (D109–D117), M9 (export), M10 (hardening) · **Last updated:** 2026-10-16
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), M9 (export), M10 (hardening) · **Last updated:** 2026-10-16
 
 ---
 
@@ -77,8 +77,8 @@ Also: zoom toward the cursor (D74). Deployment stays local-only (D75). **CAD fil
 
 **M8: persistence**
 
-- [ ] Imported files, with their sidecars, are kept in the browser's private storage (OPFS) automatically. After a refresh the models are imported again in their list order, and their visibility and the camera are restored. **Clear all** removes everything stored (D82).
-- [ ] Deleting a model can be undone: it's imported again from its kept file into the same place in the list. Delete still asks first (D29) and still frees the model's memory at once (D84).
+- [x] Imported files, with their sidecars, are kept in the browser's private storage (OPFS) automatically. After a refresh the models are imported again in their list order, and their visibility and the camera are restored. **Clear all** removes everything stored (D82).
+- [x] Deleting a model can be undone: it's imported again from its kept file into the same place in the list. Delete still asks first (D29) and still frees the model's memory at once (D84). Playwright's WebKit has no private file system, so the reload tests run in Chromium and Firefox only, and Safari is checked by hand in M10 (D116).
 
 **M9: export**
 
@@ -750,7 +750,7 @@ Branch `feature/m7-measurement`, from `main` after [JRB-90/j3d#8](https://github
 - **Manual checklist** (D92, built-in browser, pane visible, real mouse and keys) on `curved-part.step` and `assembly.step` together: `M` turns the tool on (the button highlighted, the hint shown); hovering a drilled hole's rim pre-highlights it as an edge; picking it shows "Edge (circle) of Curved part", radius 2.000 mm, centre (34, 6, 20), and the part's volume and size; a second rim keeps "5.000 mm" with centres 9.000 mm apart, drawn as a dimension with its label; the curved part's top against the other model's top plate gives 20.000 mm and 0.00°, exactly; hiding the assembly hides only that measurement, greyed in the panel, and Ctrl+Z brings it back. No console or server errors. Changed after it: older measurements now collapse when a new one is kept, so the panel stays small, and values never print "-0.000". **Worth knowing:** a hovered or picked edge is drawn 1 px wide (WebGL ignores line width), so its blue is hard to see; faces and vertex dots stand out.
 - **Found and fixed while building:** finishing a pair dropped the pending pick in a way that marked the pair's own answer as stale, so nothing was kept (caught by the tool's unit test); a ray aimed exactly at a silhouette corner can miss the part, so the E2E clicks just inside corners and relies on the 8 px vertex snap, as a user would.
 
-### M8 — Persistence (in progress)
+### M8 — Persistence ✅ ([JRB-90/j3d#10](https://github.com/JRB-90/j3d/pull/10), squash-merged as `6acc434`)
 
 Branch `feature/m8-persistence`, from `main` after [JRB-90/j3d#9](https://github.com/JRB-90/j3d/pull/9) merged as `f86aed9`. Decided at its start: D109–D117.
 
