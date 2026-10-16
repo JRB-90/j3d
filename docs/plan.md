@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) in progress** (D101–D108), M7 (measurement), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-15
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-16
 
 ---
 
@@ -70,10 +70,10 @@ Also: zoom toward the cursor (D74). Deployment stays local-only (D75). **CAD fil
 
 **M7: measurement**
 
-- [ ] A **Measure** tool (toolbar button and the key M) pre-highlights the face, edge or vertex under the pointer on a BREP model and picks it on click; with the tool off, clicks select parts (D79).
-- [ ] One picked entity shows its properties: an edge's length; a circle's radius, diameter and centre; a face's area; a plane's normal; a cylinder's radius and axis; a part's volume and bounding box. Two picked entities show the minimum distance with its closest points, the angle between planes or lines, and the distance between circle centres (D80).
-- [ ] Results are in millimetres, drawn as dimensions in 3D and listed in the floating panel with copy buttons (D80, D87). Adding and clearing measurements can be undone (D84).
-- [ ] On a mesh model the Measure tool gives approximate point-to-point distances (snapping to vertices) and bounding boxes, marked as approximate (D81).
+- [x] A **Measure** tool (toolbar button and the key M) pre-highlights the face, edge or vertex under the pointer on a BREP model and picks it on click; with the tool off, clicks select parts (D79). A highlighted edge is drawn 1 px wide (WebGL ignores line width), so it's harder to see than a face or a vertex dot.
+- [x] One picked entity shows its properties: an edge's length; a circle's radius, diameter and centre; a face's area; a plane's normal; a cylinder's radius and axis; a part's volume and bounding box. Two picked entities show the minimum distance with its closest points, the angle between planes or lines, and the distance between circle centres (D80).
+- [x] Results are in millimetres, drawn as dimensions in 3D and listed in the floating panel with copy buttons (D80, D87). Adding and clearing measurements can be undone (D84).
+- [x] On a mesh model the Measure tool gives approximate point-to-point distances (snapping to vertices) and bounding boxes, marked as approximate (D81).
 
 **M8: persistence**
 
@@ -705,7 +705,7 @@ Branch `feature/m6-selection-visibility`, from `main` after [JRB-90/j3d#7](https
 - **Through the UI**, from the click or key until the viewer has the new state, on the 10,437-part file with its tree open: the model's eye hiding everything took 228 ms of one task with `ImmutableHashSet`s, so they became `PartSet`s (§6.4): **86–104 ms** of synchronous work and 150–165 ms in all; isolate 93 ms (from 240); undo, redo, show all and a tree click 38–83 ms.
 - **The largest selection is the curved file's whole model:** 168 ms to build, under the line, and its overlay draws all 1.77M triangles again (74 ms against 33 ms per frame with the read-back). Neither generated file's tree has a single root, so selecting everything takes Ctrl+clicks or a node per part in practice; the figure came from the test hook's `timePartState`.
 
-### M7 — Measurement (in progress)
+### M7 — Measurement ✅ ([JRB-90/j3d#9](https://github.com/JRB-90/j3d/pull/9), squash-merged as `f86aed9`)
 
 Branch `feature/m7-measurement`, from `main` after [JRB-90/j3d#8](https://github.com/JRB-90/j3d/pull/8) merged as `bbaa51b`. Decided at its start: D101–D108.
 
