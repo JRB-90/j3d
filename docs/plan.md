@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), M9 (export), M10 (hardening) · **Last updated:** 2026-10-16
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) in progress** (D118–D128), M10 (hardening) · **Last updated:** 2026-10-16
 
 ---
 
@@ -100,7 +100,7 @@ Users and auth, deployment (D75), sectioning, exploded views, mobile/tablet layo
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -221,6 +221,17 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D115 | Persistent storage and quota (M8) | **Asked quietly, full storage reported**: `navigator.storage.persist()` on the first import, with no dialog of J3D's own (Chrome decides silently, Firefox asks). A file that doesn't fit stays loaded for the visit; its item says "Not kept: storage full" and a snackbar says so | |
 | D116 | WebKit coverage (M8) | **CI decides**: the reload E2E tests run locally in Chromium and in all three browsers in CI. If CI's Linux WebKit can't write OPFS either, they skip WebKit with the reason recorded (R18), and Safari gets a manual check in M10 | Playwright's Windows WebKit can't write OPFS (R18). |
 | D117 | Model identity (M8) | **A model keeps its id for life**: its files are stored under it, and a reload or an undone delete imports it again under the same id, so hidden parts, measurements and history steps need no remapping. .NET still owns which models exist, their order, hidden parts and the history (D95); the viewer owns the files, the manifest and the camera, and stores what .NET has applied | Proposed with the M8 questions; no objection. |
+| D118 | Export units (M9) | **Millimetres everywhere**: GLB and STL are written in millimetres; CAD, STL and OBJ parts as they are, glTF parts × 1000 (D105) | Proposed: each format at real size (GLB in metres). GLB in millimetres departs from glTF's metres, so other glTF viewers show J3D's exports 1000× too big; it suits taking them back into CAD tools. |
+| D119 | Export commands (M9) | **A toolbar menu and an item icon**: an Export button after Import opens GLB, STL (binary) and STL (ASCII), labelled for the scene or the selection; a BREP model's list item gets a download icon that opens STEP and BREP | |
+| D120 | Saving exports (M9) | **A browser download**: the file goes through a `blob:` URL and `<a download>`, in every browser | `showSaveFilePicker` exists only in Chrome and Edge. |
+| D121 | M9's WASM rebuild | **Local Docker**, started minimized, as in M7; CI's OCCT workflow then reproduces `dist/` | Compile errors show in about a minute instead of a CI round trip. |
+| D122 | GLB axis (M9) | **Z-up, as J3D shows it**: GLB isn't rotated to glTF's Y-up | Proposed: Y-up as glTF requires. Other glTF viewers show the exports lying on their backs; the numbers match the CAD coordinates. |
+| D123 | J3D's own GLB (M9) | **Marked, and read back as marked**: J3D's GLB carries `asset.extras` `{ "unit": "mm", "up": "z" }`, and J3D's glTF import honours it: no × 1000 when measuring (D105) and no Y-up rotation, so its exports round-trip exactly | Other tools ignore the extras. |
+| D124 | GLB edges (M9) | **Faces and edges**: each BREP part's edges are written as line primitives beside its faces | Proposed: faces only. Many glTF viewers draw lines thin or not at all. |
+| D125 | Export progress (M9) | **In place, with Cancel**: a STEP or BREP export shows "Exporting STEP · 40%" and a bar in its model's item, with Cancel (OCCT's progress indicator breaks the transfer; the model stays loaded); GLB and STL show a busy Export button; failures go to a snackbar | Proposed: without Cancel. |
+| D126 | STEP schema (M9) | **AP214**, OCCT's default | The most widely read; assembly, names and colours carry over. |
+| D127 | STL encoding (M9) | **Both**: STL (binary) and STL (ASCII) are separate menu items | Proposed: binary only. |
+| D128 | Export file names (M9) | **After the source**: STEP and BREP take the model's name with the new extension (`bracket.step`); GLB and STL take the model's name when everything exported comes from one model, else `scene` or `selection` | |
 
 ---
 
@@ -768,7 +779,9 @@ Branch `feature/m8-persistence`, from `main` after [JRB-90/j3d#9](https://github
 - **Manual checklist** (D92, built-in browser, pane visible, real mouse and keys) on `assembly.step`, `part.glb` and `curved-part.step`: imported, all three kept; the top plate hidden with `H`, perspective, a wheel zoom and a pan; after a reload the three came back under the same ids and in the same order, the plate still hidden, the projection and view the same (screenshots before and after identical), with no fit; a measurement from the curved part to the pin (21.932 mm), then Delete with its confirmation: the item went, its worker ended and the measurement was hidden; Ctrl+Z brought the curved part back third in the list with its measurement drawn and listed, the view unmoved; a second tab opened empty with the "open in another tab" snackbar and the store `otherTab`; Clear all asked first, then left no models, an empty private file system and Undo disabled, and a reload stayed empty with a fresh camera. No console or server errors.
 - **Found and fixed in the checklist:** the camera was kept as camera-controls' end values, which its smoothing stops a little short of, so a restored view sat about 0.03 units off; it's now kept as drawn. **Not reproduced:** twice, right after taking a measurement, a click on a model's Delete opened no dialog (no console error, no Blazor error); it opened every time after that, including after the same steps on a reloaded page.
 
-### M9 — Export (planned)
+### M9 — Export (in progress)
+
+Branch `feature/m9-export`, from `main` after [JRB-90/j3d#10](https://github.com/JRB-90/j3d/pull/10) merged as `6acc434`. Decided at its start: D118–D128.
 
 - **Meshes (D86):** GLB and STL of the visible scene, or of the selection, through three's `GLTFExporter` and `STLExporter`, with batched and instanced parts unpacked into a mesh per part for export.
 - **BREP models (D83, D86):** STEP (`STEPCAFControl_Writer`) and BREP (`BRepTools::Write`) of a whole model, written in its worker. A WASM rebuild, whose size change is recorded.
@@ -827,5 +840,5 @@ All eight open questions from the first draft are answered (D28–D36). These sm
 10. **Hidden means out of the way.** Hidden parts can't be picked or measured, and Fit all and the GLB/STL export leave them out.
 11. **The undo history lives in the tab.** It holds the last 50 steps, isn't stored, and starts empty after a refresh, even though the models come back (D82); the files of models deleted before the refresh are dropped then.
 12. **Measurements stay until cleared**, from the panel or with Esc in the Measure tool, and aren't stored across a refresh.
-13. **Lengths in millimetres to 3 decimals, angles in degrees to 2**; mesh measurements are prefixed "≈". STL and OBJ carry no units, so their values are taken as millimetres too (the CAD export convention, as with Z-up in §6.2). glTF is in metres by its specification, so its measurements are converted to millimetres, though the scene itself still isn't rescaled (D105).
+13. **Lengths in millimetres to 3 decimals, angles in degrees to 2**; mesh measurements are prefixed "≈". STL and OBJ carry no units, so their values are taken as millimetres too (the CAD export convention, as with Z-up in §6.2). glTF is in metres by its specification, so its measurements are converted to millimetres, though the scene itself still isn't rescaled (D105). Exports are all in millimetres (D118), and J3D's own GLB says so (D123).
 14. **Zoom-to-cursor is for the wheel and pinch only.** Fit all, Home and the view cube still frame the scene about its centre.
