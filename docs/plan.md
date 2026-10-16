@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), M8 (persistence), M9 (export), M10 (hardening) · **Last updated:** 2026-10-16
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) in progress** (D109–D117), M9 (export), M10 (hardening) · **Last updated:** 2026-10-16
 
 ---
 
@@ -100,7 +100,7 @@ Users and auth, deployment (D75), sectioning, exploded views, mobile/tablet layo
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -212,6 +212,15 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D106 | M7's WASM rebuild | **Measurement code only**; the STEP and BREP writers get their own rebuild in M9 (R19) | Each milestone's WASM change and size stay reviewable on their own. |
 | D107 | Pick priority (M7) | **Vertex, then edge, then face**: a vertex within 8 px wins, then an edge within 6 px, else the face under the pointer; the pre-highlight shows which before the click | |
 | D108 | Measurement lifetime (M7) | **Measurements follow their parts**: one on a hidden part is hidden with it (still listed, greyed); deleting a model removes its measurements, and M8's undo of the delete brings them back | |
+| D109 | Several tabs (M8) | **The first tab owns the store**: it holds a Web Lock while it's open; another tab starts empty and session-only, with a snackbar saying its models won't be kept | Tabs writing one manifest would silently overwrite each other's models. |
+| D110 | Clear all (M8) | **In the Models list header, confirmed**: removes every model, stored file and measurement, and the undo history, at once; it can't be undone | D82's "removes everything stored", so nothing is kept for an undo. |
+| D111 | Camera on restore (M8) | **Restored at once**: the stored camera and projection are applied as the page opens, and D30's first-model auto-fit is skipped for a restored scene, so the models appear where the view was left | |
+| D112 | OPFS writes (M8) | **A storage worker**: one worker streams each file in chunks into synchronous access handles, so no file is ever whole in memory and the page never waits on a write | Synchronous access handles work in every engine (Safari 15.2+); `createWritable` needs Safari 26 (R18). |
+| D113 | When files are stored (M8) | **Once the model has loaded**: failed and cancelled imports are never stored, and the manifest lists a model only after all its files are written, so a refresh during the copy just leaves it out | |
+| D114 | Restoring (M8) | **Ordinary list items**: each restored model imports with its progress and cancel; cancelling it, or dismissing a failure (a file missing or evicted), deletes its stored files; Clear all stops everything | |
+| D115 | Persistent storage and quota (M8) | **Asked quietly, full storage reported**: `navigator.storage.persist()` on the first import, with no dialog of J3D's own (Chrome decides silently, Firefox asks). A file that doesn't fit stays loaded for the visit; its item says "Not kept: storage full" and a snackbar says so | |
+| D116 | WebKit coverage (M8) | **CI decides**: the reload E2E tests run locally in Chromium and in all three browsers in CI. If CI's Linux WebKit can't write OPFS either, they skip WebKit with the reason recorded (R18), and Safari gets a manual check in M10 | Playwright's Windows WebKit can't write OPFS (R18). |
+| D117 | Model identity (M8) | **A model keeps its id for life**: its files are stored under it, and a reload or an undone delete imports it again under the same id, so hidden parts, measurements and history steps need no remapping. .NET still owns which models exist, their order, hidden parts and the history (D95); the viewer owns the files, the manifest and the camera, and stores what .NET has applied | Proposed with the M8 questions; no objection. |
 
 ---
 
@@ -725,7 +734,9 @@ Branch `feature/m7-measurement`, from `main` after [JRB-90/j3d#8](https://github
 - **Manual checklist** (D92, built-in browser, pane visible, real mouse and keys) on `curved-part.step` and `assembly.step` together: `M` turns the tool on (the button highlighted, the hint shown); hovering a drilled hole's rim pre-highlights it as an edge; picking it shows "Edge (circle) of Curved part", radius 2.000 mm, centre (34, 6, 20), and the part's volume and size; a second rim keeps "5.000 mm" with centres 9.000 mm apart, drawn as a dimension with its label; the curved part's top against the other model's top plate gives 20.000 mm and 0.00°, exactly; hiding the assembly hides only that measurement, greyed in the panel, and Ctrl+Z brings it back. No console or server errors. Changed after it: older measurements now collapse when a new one is kept, so the panel stays small, and values never print "-0.000". **Worth knowing:** a hovered or picked edge is drawn 1 px wide (WebGL ignores line width), so its blue is hard to see; faces and vertex dots stand out.
 - **Found and fixed while building:** finishing a pair dropped the pending pick in a way that marked the pair's own answer as stale, so nothing was kept (caught by the tool's unit test); a ray aimed exactly at a silhouette corner can miss the part, so the E2E clicks just inside corners and relies on the 8 px vertex snap, as a user would.
 
-### M8 — Persistence (planned)
+### M8 — Persistence (in progress)
+
+Branch `feature/m8-persistence`, from `main` after [JRB-90/j3d#9](https://github.com/JRB-90/j3d/pull/9) merged as `f86aed9`. Decided at its start: D109–D117.
 
 - **Store (D82):** each model's files and sidecars in OPFS, with a manifest of list order, visibility and the camera; restored on load through the normal import path; **Clear all**; `navigator.storage.persist()` requested, and running out of quota reported. Engines differ in how OPFS files are written (R18), so WebKit and Firefox are checked early.
 - **Undoing a delete (D84):** a deleted model's files stay stored while the history can still bring it back; undo imports it again into its old place in the list.
@@ -766,7 +777,7 @@ Branch `feature/m7-measurement`, from `main` after [JRB-90/j3d#8](https://github
 | R15 | **Picking cost on large models** (iteration 2): `BatchedMesh.raycast` tests every instance's bounding sphere and then its triangles, so hovering over the 10,437-part file may cost a lot per pointer move | One raycast per animation frame at most; measured in M6; three-mesh-bvh past ~200 ms (D89). |
 | R16 | **Long measurement queries**: the model worker is single-threaded, so a slow `BRepExtrema_DistShapeShape` between complex faces blocks the queries behind it, and terminating the worker would lose the model | Queries run one at a time per model with a busy state in the panel; timed on `curved-part.step` and the large files in M7. |
 | R17 | **Edges and vertices are hard to hit**: lines are 1 px wide and three's line raycast threshold is in world units | Pick edges and vertices by screen-space distance to their projections, within a few pixels, on the part under the pointer only (M7). |
-| R18 | **OPFS differs between engines**, and storage can run out or be evicted: writable streams versus synchronous access handles (worker only), quota, and `persist()` being declined | Write from a worker where the main thread can't; report quota failures instead of losing models silently; check WebKit and Firefox early in M8. |
+| R18 | **OPFS differs between engines**, and storage can run out or be evicted: writable streams versus synchronous access handles (worker only), quota, and `persist()` being declined | Write from a worker where the main thread can't; report quota failures instead of losing models silently; check WebKit and Firefox early in M8. **Found at M8's start:** Chromium writes OPFS through both. Playwright's Windows WebKit (Safari 26.6's engine) throws `UnknownError` from `getDirectory()` in a fresh context, and in a persistent profile its writable streams finish without writing a byte and synchronous access handles are `NotSupportedError`, so WebKit is checked in CI only (D116), like Firefox. |
 | R19 | **The writers grow the WASM**: STEP and BREP export link writer code into the trimmed 15.4 MB build | Measure the change in M9 and record it in §6.1; the build stays one file per variant. |
 | R20 | **Undoing a delete takes as long as the import**: memory is freed at delete (D84), so a 200 MB STEP takes about 30 s to come back | Shown as an ordinary import, with progress and cancel; documented in the README. |
 | R21 | **Order-independent transparency** needs float render targets (WebGL2 `EXT_color_buffer_float`), touches every surface material (batched, instanced, mesh), and may be slow under CI's software renderers | Fall back to today's sorted blending where float targets are missing; measured in M10 (D90). |
@@ -788,7 +799,7 @@ All eight open questions from the first draft are answered (D28–D36). These sm
 8. **The selection uses the accent colour** (`#4F9DFF`, §6.6); hover is a fainter tint of the same.
 9. **Isolate and Show all act on the whole scene.** Isolate hides every part outside the selection, in every model; Show all shows every part of every model.
 10. **Hidden means out of the way.** Hidden parts can't be picked or measured, and Fit all and the GLB/STL export leave them out.
-11. **The undo history lives in the tab.** It holds the last 50 steps, isn't stored, and starts empty after a refresh, even though the models come back (D82).
+11. **The undo history lives in the tab.** It holds the last 50 steps, isn't stored, and starts empty after a refresh, even though the models come back (D82); the files of models deleted before the refresh are dropped then.
 12. **Measurements stay until cleared**, from the panel or with Esc in the Measure tool, and aren't stored across a refresh.
 13. **Lengths in millimetres to 3 decimals, angles in degrees to 2**; mesh measurements are prefixed "≈". STL and OBJ carry no units, so their values are taken as millimetres too (the CAD export convention, as with Z-up in §6.2). glTF is in metres by its specification, so its measurements are converted to millimetres, though the scene itself still isn't rescaled (D105).
 14. **Zoom-to-cursor is for the wheel and pinch only.** Fit all, Home and the view cube still frame the scene about its centre.
