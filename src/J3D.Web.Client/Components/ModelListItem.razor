@@ -80,6 +80,10 @@
                     </MudTooltip>
                 }
             </div>
+            @if (Model.NotKept is { } notKept)
+            {
+                <div class="j3d-model-detail j3d-model-not-kept" data-testid="model-not-kept">Not kept: @notKept</div>
+            }
             <MudButton Variant="Variant.Text"
                        Size="Size.Small"
                        StartIcon="@(_treeOpen ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"

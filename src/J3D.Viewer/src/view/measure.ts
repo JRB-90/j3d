@@ -190,20 +190,45 @@ export class MeasureTool {
     this.host.requestRender();
   }
 
-  /** A model has gone: its measurements and picks go with it. */
-  removeModel(id: ModelId): void {
+  /**
+   * A model has gone: its picks go with it, and so do its measurements, unless an undo can bring the
+   * model back (M8, D84), when they're only hidden until .NET shows them again (D108).
+   */
+  removeModel(id: ModelId, keepMeasurements = false): void {
     if (this.pending?.id === id) {
       this.cancelPending();
     }
     if (this.hovered?.id === id) {
       this.setHovered(undefined);
     }
+    if (!keepMeasurements) {
+      this.forgetModel(id);
+      return;
+    }
+    for (const kept of this.kept.values()) {
+      if (kept.info.parts.some((part) => part.id === id)) {
+        kept.group.visible = false;
+        kept.label.hidden = true;
+      }
+    }
+  }
+
+  /** Drops a model's measurements for good. */
+  forgetModel(id: ModelId): void {
     for (const [key, kept] of this.kept) {
       if (kept.info.parts.some((part) => part.id === id)) {
         kept.dispose();
         this.kept.delete(key);
       }
     }
+  }
+
+  /** Drops every kept measurement (Clear all, D110). */
+  forgetAll(): void {
+    for (const kept of this.kept.values()) {
+      kept.dispose();
+    }
+    this.kept.clear();
   }
 
   /** The kept measurements, for tests. */
@@ -227,10 +252,7 @@ export class MeasureTool {
   dispose(): void {
     this.setHovered(undefined);
     this.cancelPending(false);
-    for (const kept of this.kept.values()) {
-      kept.dispose();
-    }
-    this.kept.clear();
+    this.forgetAll();
     this.lineMaterial.dispose();
   }
 

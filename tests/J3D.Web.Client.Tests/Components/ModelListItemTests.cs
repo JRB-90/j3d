@@ -71,6 +71,16 @@ public sealed class ModelListItemTests : BunitTestBase
     }
 
     [Fact]
+    public void A_model_that_could_not_be_kept_says_why()
+    {
+        Assert.Empty(RenderItem(Loaded()).FindAll("[data-testid=model-not-kept]"));
+
+        var cut = RenderItem(Loaded().AsNotKept("storage full"));
+
+        Assert.Equal("Not kept: storage full", Text(cut, "model-not-kept"));
+    }
+
+    [Fact]
     public void A_failed_model_shows_its_error_and_can_be_dismissed()
     {
         var cut = RenderItem(Failed());

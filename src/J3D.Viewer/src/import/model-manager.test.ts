@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ModelImportError } from './errors';
 import { ModelManager, type ModelManagerListener } from './model-manager';
 import type { ImportRequest, ImportRunner, ImportTask } from './runner';
@@ -167,6 +167,62 @@ describe('ModelManager', () => {
     const { manager, events } = setup();
     manager.importFiles(files('texture.png'));
     expect(events).toEqual([`rejected texture.png: ${UnusedSidecarReason}`]);
+  });
+
+  it("keeps a model's file and the sidecars its import used, not the rest of its batch (D113)", async () => {
+    const { manager, tasks } = setup();
+    manager.importFiles(files('a.gltf', 'b.gltf', 'a.bin', 'b.bin', 'shared.png'));
+    tasks[0]!.request.sidecars.find('a.bin', 'a.gltf');
+    tasks[0]!.request.sidecars.find('shared.png', 'a.gltf');
+    tasks[1]!.request.sidecars.find('b.bin', 'b.gltf');
+    tasks[1]!.request.sidecars.find('missing.png', 'b.gltf');
+
+    expect(manager.sourcesOf('m1')?.map((source) => source.path)).toEqual(['a.gltf', 'a.bin', 'shared.png']);
+    expect(manager.sourcesOf('m2')?.map((source) => source.path)).toEqual(['b.gltf', 'b.bin']);
+    expect(manager.sourcesOf('unknown')).toBeUndefined();
+  });
+
+  it('imports a kept model again under its own id once its files are read (D117)', async () => {
+    const { manager, tasks, events, statuses } = setup();
+    let read!: (files: BatchFile[]) => void;
+    const summary = { id: 'kept', fileName: 'scene.gltf', format: 'gltf', kind: 'mesh', sizeBytes: 4 } as const;
+
+    manager.importStored(summary, new Promise((resolve) => (read = resolve)), [2, 5]);
+    manager.importStored(summary, Promise.resolve([]), []); // already listed: ignored
+    expect(events).toEqual(['queued kept scene.gltf gltf mesh']);
+    expect(statuses()).toEqual(['kept:queued']);
+    expect(tasks).toHaveLength(0);
+
+    read([...files('scene.gltf'), { ...files('scene.bin')[0]!, fromFolder: true }]);
+    await flush();
+    expect(tasks[0]!.request.sidecars.find('scene.bin', 'scene.gltf')?.path).toBe('scene.bin');
+    const loaded: string[] = [];
+    manager.subscribe({ loaded: (model) => loaded.push(JSON.stringify(model.restored)) });
+    tasks[0]!.resolve();
+    await flush();
+
+    expect(loaded).toEqual([JSON.stringify({ hidden: [2, 5] })]);
+    expect(manager.sourcesOf('kept')?.map((source) => source.path)).toEqual(['scene.gltf', 'scene.bin']);
+    expect(events.filter((event) => event.startsWith('rejected'))).toEqual([]);
+  });
+
+  it("fails a kept model whose files can't be read, and imports nothing for one removed while they're read", async () => {
+    const { manager, tasks, events } = setup();
+    const summary = (id: string) => ({ id, fileName: `${id}.step`, format: 'step', kind: 'brep', sizeBytes: 4 }) as const;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    manager.importStored(summary('gone'), Promise.reject(new Error('NotFoundError')), []);
+    let read!: (files: BatchFile[]) => void;
+    manager.importStored(summary('cancelled'), new Promise((resolve) => (read = resolve)), []);
+    expect(manager.remove('cancelled')).toBe(true);
+    read(files('cancelled.step'));
+    await flush();
+
+    expect(events).toContain("failed gone MissingFile: Its kept copy couldn't be read.");
+    expect(events).toContain('removed cancelled');
+    expect(tasks).toHaveLength(0);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 
   it('disposes everything without raising events', async () => {

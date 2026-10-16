@@ -10,7 +10,9 @@ namespace J3D.Web.Client.State;
 /// (D56): one per tab under WebAssembly, and never shared between the host's prerender requests.
 /// Since M6 it also owns each model's selected and hidden parts and the undo history (D95): the
 /// <c>Viewport</c> applies them to the viewer. Since M7 it holds the Measure tool's mode, its pending
-/// first pick and the kept measurements (D101), which follow their parts (D108).
+/// first pick and the kept measurements (D101), which follow their parts (D108). Since M8 it lists
+/// the models kept from the last visit, and deleting a model is an undoable step (D84): the viewer
+/// frees the model, keeping its files, and an undo imports it again under the same id (D117).
 /// </summary>
 public sealed class SceneState
 {
@@ -21,6 +23,18 @@ public sealed class SceneState
 
     /// <summary>Raised when a part picked in 3D should be shown in its model's tree (D96).</summary>
     public event Action<ModelId, int>? RevealRequested;
+
+    /// <summary>Raised when a model is deleted, or a delete redone: the viewer frees it but keeps its files (D84).</summary>
+    public event Action<ModelId>? DeleteRequested;
+
+    /// <summary>Raised when models are listed again, from the last visit or by an undo: the viewer imports them from their kept files.</summary>
+    public event Action<IReadOnlyList<ModelEntry>>? RestoreRequested;
+
+    /// <summary>Raised when no step can bring a deleted model back any more: the viewer drops its files and measurements.</summary>
+    public event Action<ModelId>? ForgetRequested;
+
+    /// <summary>Raised by Clear all (D110): the viewer removes every model and everything kept.</summary>
+    public event Action? ClearAllRequested;
 
     public ImmutableList<ModelEntry> Models { get; private set; } = [];
 
@@ -43,6 +57,9 @@ public sealed class SceneState
     public bool CanUndo => _history.CanUndo;
 
     public bool CanRedo => _history.CanRedo;
+
+    /// <summary>Clear all has something to clear: a model, or a deleted one an undo could bring back (D110).</summary>
+    public bool CanClearAll => !Models.IsEmpty || CanUndo || CanRedo;
 
     /// <summary>Every selected part, in list order, then tree order.</summary>
     public IReadOnlyList<(ModelEntry Model, int Node)> Selection =>
@@ -74,7 +91,55 @@ public sealed class SceneState
 
     public void MarkFailed(ModelId id, ImportError error) => Update(id, model => model.AsFailed(error));
 
-    /// <summary>The viewer cancelled, deleted or dismissed the model. Its undo steps go with it (until M8, D84).</summary>
+    /// <summary>
+    /// The models kept from the last visit, in their order, each to be imported again with its hidden
+    /// parts (D82). They follow any already listed.
+    /// </summary>
+    public void Restore(IEnumerable<StoredModel> models)
+    {
+        List<ModelEntry> added = [.. models
+            .Where(model => Find(model.Summary.Id) is null)
+            .DistinctBy(model => model.Summary.Id)
+            .Select(model => ModelEntry.Restoring(model.Summary, model.Hidden))];
+        if (added.Count > 0)
+        {
+            Set(Models.AddRange(added));
+            RestoreRequested?.Invoke(added);
+        }
+    }
+
+    /// <summary>
+    /// Deletes a model as an undoable step (D84): its measurements go with it (D108), and the viewer
+    /// frees it at once, keeping its files for an undo.
+    /// </summary>
+    public void Delete(ModelId id)
+    {
+        var index = Models.FindIndex(model => model.Id == id);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var step = new DeleteStep(Models[index], index, Measurements.RemoveAll(measurement => !measurement.Touches(id)));
+        Record(step);
+        Apply(step.Redo(new SceneContent(Models, Measurements)));
+    }
+
+    /// <summary>Clear all (D110): every model, measurement and step goes, and the viewer removes everything kept. It can't be undone.</summary>
+    public void ClearAll()
+    {
+        _history.Clear();
+        PendingMeasure = null;
+        Measurements = [];
+        Set([], always: true);
+        ClearAllRequested?.Invoke();
+    }
+
+    /// <summary>The viewer couldn't keep a model's files for the next visit (D115).</summary>
+    public void MarkNotKept(ModelId id, bool full) =>
+        Update(id, model => model.AsNotKept(full ? "storage full" : "couldn't be stored"));
+
+    /// <summary>The viewer cancelled or dismissed the model: it's gone for good, and its undo steps go with it.</summary>
     public void Remove(ModelId id)
     {
         var index = Models.FindIndex(model => model.Id == id);
@@ -259,10 +324,41 @@ public sealed class SceneState
         }
     }
 
+    /// <summary>Applies an undo, a redo or a delete, and has the viewer free models that left the list and import those that came back.</summary>
     private void Apply(SceneContent content)
     {
+        var before = Models;
         Measurements = content.Measurements;
+        if (PendingMeasure is { } pending && !pending.Parts.All(part => content.Models.Exists(model => model.Id == part.ModelId)))
+        {
+            PendingMeasure = null;
+        }
+
         Set(content.Models, always: true);
+
+        foreach (var gone in before.Where(model => !content.Models.Exists(kept => kept.Id == model.Id)))
+        {
+            DeleteRequested?.Invoke(gone.Id);
+        }
+
+        List<ModelEntry> back = [.. content.Models.Where(model => !before.Exists(was => was.Id == model.Id))];
+        if (back.Count > 0)
+        {
+            RestoreRequested?.Invoke(back);
+        }
+    }
+
+    /// <summary>Adds a step; a deleted model that no step can bring back any more is forgotten.</summary>
+    private void Record(ISceneStep step)
+    {
+        foreach (var dropped in _history.Push(step).OfType<DeleteStep>())
+        {
+            if (Find(dropped.Id) is null && !_history.CanRestore(dropped.Id))
+            {
+                _history.Forget(dropped.Id);
+                ForgetRequested?.Invoke(dropped.Id);
+            }
+        }
     }
 
     private void ChangeMeasurements(ImmutableList<MeasureInfo> measurements)
@@ -272,7 +368,7 @@ public sealed class SceneState
             return;
         }
 
-        _history.Push(new MeasurementsStep(Measurements, measurements));
+        Record(new MeasurementsStep(Measurements, measurements));
         Measurements = measurements;
         Set(Models, always: true);
     }
@@ -299,7 +395,7 @@ public sealed class SceneState
 
         if (changes.Count > 0)
         {
-            _history.Push(new VisibilityStep(changes.ToImmutable()));
+            Record(new VisibilityStep(changes.ToImmutable()));
         }
 
         Set(models);

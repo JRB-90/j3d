@@ -45,8 +45,13 @@ export function planBatch(files: readonly BatchFile[]): BatchPlan {
 
 export const UnusedSidecarReason = 'Not used by any model in the same selection.';
 
+/** Finds the files a model references (buffers, materials, textures) among its batch's sidecars. */
+export interface Sidecars {
+  find(uri: string, fromPath: string): BatchFile | undefined;
+}
+
 /** The sidecar files of one batch, and which of them models have claimed. */
-export class SidecarSet {
+export class SidecarSet implements Sidecars {
   private readonly used = new Set<BatchFile>();
 
   constructor(readonly files: readonly BatchFile[]) {}
@@ -70,6 +75,19 @@ export class SidecarSet {
   /** Individually chosen sidecars that no model referenced. */
   unused(): BatchFile[] {
     return this.files.filter((entry) => !entry.fromFolder && !this.used.has(entry));
+  }
+
+  /** A view of the set for one model, recording the files it finds, which are kept with it (M8, D113). */
+  forModel(found: Set<BatchFile>): Sidecars {
+    return {
+      find: (uri, fromPath) => {
+        const match = this.find(uri, fromPath);
+        if (match) {
+          found.add(match);
+        }
+        return match;
+      },
+    };
   }
 }
 

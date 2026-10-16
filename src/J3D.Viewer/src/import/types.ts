@@ -93,4 +93,9 @@ export interface ImportResult {
 
 export interface LoadedModel extends ImportResult {
   summary: ModelSummary;
+  /**
+   * Imported again from its kept files, after a reload or an undone delete (M8): the hidden parts to
+   * apply as it's added. The view doesn't fit to it (D111).
+   */
+  restored?: { hidden: number[] };
 }

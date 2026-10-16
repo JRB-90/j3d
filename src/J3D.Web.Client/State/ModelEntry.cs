@@ -25,6 +25,17 @@ public enum PartVisibility
 /// </summary>
 public sealed record ModelEntry(ModelSummary Summary)
 {
+    /// <summary>
+    /// A model to import again from its kept files (M8): after a reload, or when a delete is undone.
+    /// Its hidden parts apply once it has loaded (D82).
+    /// </summary>
+    public static ModelEntry Restoring(ModelSummary summary, IEnumerable<int> hidden) =>
+        new(summary) { Hidden = PartSet.From(hidden), IsRestored = true };
+
+    /// <summary>A deleted model coming back (D84): as it was, but queued, with nothing selected.</summary>
+    public static ModelEntry Restoring(ModelEntry deleted) =>
+        new(deleted.Summary) { Hidden = deleted.Hidden, NotKept = deleted.NotKept, IsRestored = true };
+
     public ModelStatus Status { get; private init; } = ModelStatus.Queued;
 
     /// <summary>The phase being imported; set only while <see cref="ModelStatus.Importing"/>.</summary>
@@ -46,6 +57,12 @@ public sealed record ModelEntry(ModelSummary Summary)
     /// <summary>The selected part nodes; never hidden ones (D98).</summary>
     public PartSet Selected { get; private init; } = PartSet.Empty;
 
+    /// <summary>Why the model's files couldn't be kept for the next visit (D115), or null.</summary>
+    public string? NotKept { get; private init; }
+
+    /// <summary>Imported again from its kept files, after a reload or an undone delete (M8).</summary>
+    public bool IsRestored { get; private init; }
+
     public ModelId Id => Summary.Id;
 
     /// <summary>Queued or importing: removing it cancels the import.</summary>
@@ -55,21 +72,40 @@ public sealed record ModelEntry(ModelSummary Summary)
     public ModelEntry WithProgress(ImportPhase phase, double? fraction) =>
         IsPending ? this with { Status = ModelStatus.Importing, Phase = phase, Fraction = fraction } : this;
 
-    public ModelEntry AsLoaded(ModelLoadedInfo info) =>
-        this with { Status = ModelStatus.Loaded, Phase = null, Fraction = null, Info = info, Error = null, Tree = new ModelTree(info.Tree) };
+    /// <summary>Loaded, keeping only those hidden parts (set while it was restored) that are parts of its tree.</summary>
+    public ModelEntry AsLoaded(ModelLoadedInfo info)
+    {
+        var tree = new ModelTree(info.Tree);
+        return this with
+        {
+            Status = ModelStatus.Loaded,
+            Phase = null,
+            Fraction = null,
+            Info = info,
+            Error = null,
+            Tree = tree,
+            Hidden = Hidden.IsEmpty ? Hidden : Hidden.Where(tree.IsPart),
+        };
+    }
+
+    /// <summary>The model's files couldn't be kept: <paramref name="reason"/> says why (D115).</summary>
+    public ModelEntry AsNotKept(string reason) => NotKept == reason ? this : this with { NotKept = reason };
 
     public ModelEntry AsFailed(ImportError error) =>
         this with { Status = ModelStatus.Failed, Phase = null, Fraction = null, Info = null, Error = error, Tree = null };
 
     /// <summary>
     /// New hidden and selected parts, keeping only part nodes of this tree, and dropping hidden parts
-    /// from the selection (D98). Only a loaded model has parts; the same sets return this entry.
+    /// from the selection (D98). Only a loaded model has parts, but a model being imported again from
+    /// its kept files takes hidden parts for when it has loaded (an undo meanwhile, M8). The same sets
+    /// return this entry.
     /// </summary>
     public ModelEntry WithParts(IEnumerable<int> hidden, IEnumerable<int> selected)
     {
         if (Tree is not { } tree)
         {
-            return this;
+            var pending = PartSet.From(hidden);
+            return !IsPending || !IsRestored || pending.SetEquals(Hidden) ? this : this with { Hidden = pending };
         }
 
         var nextHidden = PartSet.From(hidden).Where(tree.IsPart);

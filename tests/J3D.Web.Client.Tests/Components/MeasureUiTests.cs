@@ -109,6 +109,7 @@ public sealed class MeasureUiTests : BunitTestBase
         _viewer.SetupVoid("setPartState", static _ => true).SetVoidResult();
         _viewer.SetupVoid("setMeasureMode", static _ => true).SetVoidResult();
         _viewer.SetupVoid("setMeasurements", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("setModelOrder", static _ => true).SetVoidResult();
         _viewer.SetupVoid("dispose").SetVoidResult();
         var cut = Render<Viewport>();
 

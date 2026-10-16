@@ -11,6 +11,7 @@ namespace J3D.Web.Client.Tests.Components;
 public sealed class ViewportTests : BunitTestBase
 {
     private readonly BunitJSModuleInterop _viewer;
+    private readonly JSRuntimeInvocationHandler<StoredScene> _restoreScene;
 
     public ViewportTests()
     {
@@ -18,6 +19,13 @@ public sealed class ViewportTests : BunitTestBase
         _viewer = SetupViewerModule();
         _viewer.SetupVoid("dispose").SetVoidResult();
         _viewer.SetupVoid("setPartState", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("setModelOrder", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("restoreModels", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("removeModel", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("forgetModel", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("clearAll").SetVoidResult();
+        _restoreScene = _viewer.Setup<StoredScene>("restoreScene");
+        _restoreScene.SetResult(StoredScene.Empty);
     }
 
     [Fact]
@@ -157,6 +165,74 @@ public sealed class ViewportTests : BunitTestBase
         Assert.Equal(
             [("m1", "", "3"), ("m1", "3", "")],
             PartStates());
+    }
+
+    [Fact]
+    public async Task Lists_the_kept_models_and_restores_the_projection_once_the_viewer_is_ready()
+    {
+        _restoreScene.SetResult(new StoredScene(
+            StoreStatus.Kept,
+            [new StoredModel(Summary("k1", "a.step"), [3]), new StoredModel(Summary("k2", "b.stl", ModelFormat.Stl), [])],
+            new StoredCamera(Projection.Perspective)));
+        var cut = Render<Viewport>();
+
+        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
+
+        cut.WaitForAssertion(() => Assert.Equal(["k1", "k2"], Scene.Models.Select(static model => model.Id.Value)));
+        Assert.Equal(Projection.Perspective, Session.Projection);
+        var restored = Assert.Single(_viewer.Invocations, static i => i.Identifier == "restoreModels");
+        var models = (StoredModel[])restored.Arguments[0]!;
+        Assert.Equal([("k1", "3"), ("k2", "")], models.Select(static m => (m.Summary.Id.Value, string.Join(',', m.Hidden))));
+        cut.WaitForAssertion(() => Assert.Equal("k1,k2", string.Join(',', (string[])_viewer.Invocations.Last(static i => i.Identifier == "setModelOrder").Arguments[0]!)));
+        Assert.Empty(Snackbars.ShownSnackbars);
+    }
+
+    [Theory]
+    [InlineData(StoreStatus.OtherTab, "J3D is open in another tab, so the models you import here won't be kept for your next visit.")]
+    [InlineData(StoreStatus.Unavailable, "This browser can't keep models for your next visit.")]
+    public async Task Says_when_this_tab_wont_keep_its_models(StoreStatus status, string message)
+    {
+        _restoreScene.SetResult(StoredScene.Empty with { Status = status });
+        var cut = Render<Viewport>();
+
+        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
+
+        cut.WaitForAssertion(() => Assert.Equal((message, Severity.Info), (Assert.Single(Snackbars.ShownSnackbars).Message, Assert.Single(Snackbars.ShownSnackbars).Severity)));
+        Assert.Equal(Projection.Orthographic, Session.Projection);
+    }
+
+    [Fact]
+    public async Task Has_the_viewer_delete_restore_forget_and_clear_models_as_the_scene_asks()
+    {
+        var cut = await LoadedAsync();
+
+        await cut.InvokeAsync(() => Scene.Delete(new ModelId("m1")));
+        await cut.InvokeAsync(Scene.Undo);
+        await cut.InvokeAsync(Scene.ClearAll);
+
+        var calls = _viewer.Invocations
+            .Where(static i => i.Identifier is "removeModel" or "restoreModels" or "forgetModel" or "clearAll")
+            .Select(static i => i.Identifier switch
+            {
+                "removeModel" => $"remove {i.Arguments[0]} {i.Arguments[1]}",
+                "restoreModels" => $"restore {string.Join(',', ((StoredModel[])i.Arguments[0]!).Select(static m => m.Summary.Id.Value))}",
+                _ => i.Identifier,
+            });
+        Assert.Equal(["remove m1 True", "restore m1", "clearAll"], calls);
+    }
+
+    [Fact]
+    public async Task A_model_that_could_not_be_kept_is_marked_and_reported()
+    {
+        var cut = await LoadedAsync();
+
+        await cut.InvokeAsync(() => cut.Instance.OnModelNotKept(new ModelId("m1"), full: true));
+
+        Assert.Equal("storage full", Scene.Find(new ModelId("m1"))!.NotKept);
+        var snackbar = Assert.Single(Snackbars.ShownSnackbars);
+        Assert.Equal(
+            ("Couldn't keep part.step for your next visit: the browser's storage is full. It stays open until the page is closed.", Severity.Warning),
+            (snackbar.Message, snackbar.Severity));
     }
 
     private async Task<IRenderedComponent<Viewport>> LoadedAsync()

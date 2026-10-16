@@ -100,3 +100,8 @@
 .j3d-model ::deep .j3d-eye--mixed {
     opacity: 0.5;
 }
+
+/* A model whose files couldn't be kept for the next visit (D115). */
+.j3d-model-not-kept {
+    color: var(--mud-palette-warning);
+}

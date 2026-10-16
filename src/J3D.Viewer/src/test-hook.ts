@@ -4,6 +4,7 @@
 import type { ModelEntry, ModelManager } from './import/model-manager';
 import { liveWorkers } from './import/runner';
 import type { Bounds, ImportError, ImportPhase, ModelStats, TreeNode } from './import/types';
+import type { ModelStore } from './store/model-store';
 import { findRegion } from './view/view-regions';
 import type { CameraState, PartRef, RenderStats, Viewer } from './view/viewer';
 
@@ -88,6 +89,10 @@ export interface TestHook {
   measureState(): ReturnType<Viewer['measureState']> | null;
   /** What the Measure tool would pick at a client point. */
   entityAt(x: number, y: number): ReturnType<Viewer['entityAt']>;
+  /** What the store keeps (M8): this tab's status, the kept models, the order .NET gave and the camera. */
+  store(): ModelStore['state'];
+  /** Resolves once the store has written everything asked of it so far, the manifest included. */
+  storeIdle(): Promise<void>;
 }
 
 export interface TestHookControls {
@@ -117,6 +122,7 @@ export function installTestHook(
   controls: ReturnType<typeof createTestHookControls>,
   attachFileInput: (input: HTMLInputElement) => () => void,
   viewer: Viewer | undefined,
+  store: ModelStore,
 ): () => void {
   const events: TestEvent[] = [];
   const unsubscribe = manager.subscribe({
@@ -164,6 +170,8 @@ export function installTestHook(
     pickTimes: () => viewer?.takePickTimes() ?? null,
     measureState: () => viewer?.measureState() ?? null,
     entityAt: (x, y) => viewer?.entityAt(x, y) ?? null,
+    store: () => store.state,
+    storeIdle: () => store.idle(),
     timePartState: (id, hidden, selected) => {
       if (!viewer) return null;
       const start = performance.now();
