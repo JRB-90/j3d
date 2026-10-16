@@ -46,6 +46,11 @@ dotnet build J3D.slnx -p:SkipViewerBuild=true
 In Development the host also renders a `<meta name="j3d-test-hook">`, which turns on the viewer's test hook
 (`window.__j3dTest`, `src/J3D.Viewer/src/test-hook.ts`): the E2E tests drive and inspect the viewer through it.
 
+The app keeps imported models in the browser's origin private file system and imports them again on every load
+(docs/plan.md §6.2). To start from an empty scene, use **Clear all** above the model list, or clear the site's data for
+the dev server's origin in the browser. Only one tab keeps models, so a second tab of the dev server starts empty. Each
+E2E test runs in a fresh browser context, so it starts with an empty store.
+
 ## Tests
 
 | Suite | Command |

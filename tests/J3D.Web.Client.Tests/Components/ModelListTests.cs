@@ -69,7 +69,7 @@ public sealed class ModelListTests : BunitTestBase
     }
 
     [Fact]
-    public async Task Deleting_a_loaded_model_asks_first()
+    public async Task Deleting_a_loaded_model_asks_first_and_can_be_undone()
     {
         await StartViewerAsync();
         var dialogs = Render<MudDialogProvider>();
@@ -78,15 +78,45 @@ public sealed class ModelListTests : BunitTestBase
 
         cut.WaitForElement("[data-testid=delete-model]").Click();
         dialogs.WaitForAssertion(() => Assert.Contains("Delete gearbox.step?", dialogs.Find(".mud-dialog").TextContent, StringComparison.Ordinal));
-        Assert.Empty(RemovedIds());
 
         dialogs.FindAll(".mud-dialog button").Single(static b => b.TextContent.Trim() == "Cancel").Click();
         dialogs.WaitForAssertion(() => Assert.Empty(dialogs.FindAll(".mud-dialog")));
-        Assert.Empty(RemovedIds());
+        Assert.Single(Scene.Models);
 
         cut.Find("[data-testid=delete-model]").Click();
         dialogs.WaitForElement("[data-testid=confirm-delete]").Click();
-        cut.WaitForAssertion(() => Assert.Equal(["m1"], RemovedIds()));
+
+        // The scene deletes it as an undoable step (D84); the Viewport has the viewer free it, keeping its files.
+        cut.WaitForAssertion(() => Assert.Empty(Scene.Models));
+        Assert.True(Scene.CanUndo);
+        Assert.Empty(RemovedIds());
+    }
+
+    [Fact]
+    public async Task Clear_all_asks_first_then_removes_every_model_and_the_history()
+    {
+        await StartViewerAsync();
+        var dialogs = Render<MudDialogProvider>();
+        var cut = Render<ModelList>();
+        Assert.True(cut.Find("[data-testid=clear-all]").HasAttribute("disabled"));
+        await AddAsync("m1", "gearbox.step", ModelStatus.Loaded);
+        await AddAsync("m2", "shaft.step", ModelStatus.Importing);
+        var cleared = 0;
+        Scene.ClearAllRequested += () => cleared++;
+
+        cut.WaitForAssertion(() => Assert.False(cut.Find("[data-testid=clear-all]").HasAttribute("disabled")));
+        cut.Find("[data-testid=clear-all]").Click();
+        dialogs.WaitForAssertion(() => Assert.Contains("can't be undone", dialogs.Find(".mud-dialog").TextContent, StringComparison.Ordinal));
+        dialogs.FindAll(".mud-dialog button").Single(static b => b.TextContent.Trim() == "Cancel").Click();
+        dialogs.WaitForAssertion(() => Assert.Empty(dialogs.FindAll(".mud-dialog")));
+        Assert.Equal(2, Scene.Models.Count);
+
+        cut.Find("[data-testid=clear-all]").Click();
+        dialogs.WaitForElement("[data-testid=confirm-clear-all]").Click();
+        cut.WaitForAssertion(() => Assert.Empty(Scene.Models));
+        Assert.Equal(1, cleared);
+        Assert.False(Scene.CanUndo);
+        Assert.True(cut.Find("[data-testid=clear-all]").HasAttribute("disabled"));
     }
 
     /// <summary>Puts a model in the scene, taken as far as <paramref name="status"/>.</summary>

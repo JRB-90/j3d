@@ -62,6 +62,30 @@ public sealed record MeasurementsStep(ImmutableList<MeasureInfo> Before, Immutab
 }
 
 /// <summary>
+/// Deleting a model (M8, D84): the model as it was, where it was in the list, and the measurements
+/// that went with it (D108). Undoing it lists the model again, queued to be imported from its kept
+/// files under the same id (D117); redoing it deletes the model again, whatever its state.
+/// </summary>
+public sealed record DeleteStep(ModelEntry Model, int Index, ImmutableList<MeasureInfo> Measurements) : ISceneStep
+{
+    public ModelId Id => Model.Id;
+
+    public SceneContent Undo(SceneContent scene) => scene.Models.Any(model => model.Id == Id)
+        ? scene
+        : new SceneContent(
+            scene.Models.Insert(Math.Min(Index, scene.Models.Count), ModelEntry.Restoring(Model)),
+            scene.Measurements.AddRange(Measurements.Where(measurement => !scene.Measurements.Any(kept => kept.Id == measurement.Id))));
+
+    public SceneContent Redo(SceneContent scene) => new(
+        scene.Models.RemoveAll(model => model.Id == Id),
+        scene.Measurements.RemoveAll(measurement => measurement.Touches(Id)));
+
+    /// <summary>Another model gone for good takes the measurements it shared with this one.</summary>
+    public ISceneStep? Without(ModelId id) =>
+        id == Id ? null : this with { Measurements = Measurements.RemoveAll(measurement => measurement.Touches(id)) };
+}
+
+/// <summary>
 /// The scene's undo and redo stacks: per tab, not stored, and the last <see cref="Capacity"/> steps
 /// (assumption 11). A new step clears what could be redone.
 /// </summary>
@@ -78,16 +102,23 @@ public sealed class UndoHistory
 
     public int Count => _undo.Count;
 
-    public void Push(ISceneStep step)
+    /// <summary>Adds a step, and returns the steps that dropped out: the oldest, past the capacity, and what could be redone.</summary>
+    public IReadOnlyList<ISceneStep> Push(ISceneStep step)
     {
+        List<ISceneStep> dropped = [.. _redo];
         _undo.AddLast(step);
         if (_undo.Count > Capacity)
         {
+            dropped.Add(_undo.First!.Value);
             _undo.RemoveFirst();
         }
 
         _redo.Clear();
+        return dropped;
     }
+
+    /// <summary>Whether a step can still undo or redo the deletion of this model (M8).</summary>
+    public bool CanRestore(ModelId id) => _undo.Concat(_redo).Any(step => step is DeleteStep delete && delete.Id == id);
 
     /// <summary>The step to undo, now redoable, or null.</summary>
     public ISceneStep? Undo()

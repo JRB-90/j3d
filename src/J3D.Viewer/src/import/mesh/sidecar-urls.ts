@@ -1,4 +1,4 @@
-import type { SidecarSet } from '../sidecars';
+import type { Sidecars } from '../sidecars';
 
 /** A 1×1 white PNG, used in place of a texture that wasn't supplied so nothing is fetched from the server. */
 export const MissingTextureUrl =
@@ -12,7 +12,7 @@ export class SidecarUrls {
   private readonly urls = new Map<string, string>();
 
   constructor(
-    private readonly sidecars: SidecarSet,
+    private readonly sidecars: Sidecars,
     private readonly fromPath: string,
     private readonly warnings: string[],
   ) {}

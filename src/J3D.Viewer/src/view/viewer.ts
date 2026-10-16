@@ -26,6 +26,7 @@ import {
 } from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { BrepMeasurer, LoadedModel, ModelId, TreeNode, Vector3Tuple } from '../import/types';
+import type { CameraSnapshot } from '../store/types';
 import { buildBrepObject } from './brep-object';
 import {
   clippingPlanes,
@@ -114,6 +115,8 @@ export interface ViewerOptions {
   /** A measurement the Measure tool has kept. */
   onMeasured?: (info: MeasureInfo) => void;
   onMeasureError?: (message: string) => void;
+  /** The camera moved, zoomed or changed projection: drawn with a different view (M8, D82). */
+  onCameraChange?: () => void;
 }
 
 interface SceneModel {
@@ -172,6 +175,8 @@ export class Viewer {
   private lastPick = { milliseconds: 0, count: 0, longest: 0 };
   private readonly labels: HTMLElement;
   private readonly measureTool: MeasureTool;
+  /** The view last drawn, to report camera changes. */
+  private drawnView = '';
 
   constructor(
     private readonly host: HTMLElement,
@@ -310,7 +315,11 @@ export class Viewer {
     return { ...this.lastFrame, geometries, textures, bufferBytes };
   }
 
-  /** Adds a loaded model. The view fits only when it is the first model in an empty scene (D30). */
+  /**
+   * Adds a loaded model. The view fits only when it is the first model in an empty scene (D30), and
+   * never to a model imported again from its kept files, which comes back where the view was left
+   * (D111). Such a model's hidden parts are applied before it's first drawn.
+   */
   add(model: LoadedModel): void {
     if (this.models.has(model.summary.id)) {
       return;
@@ -340,21 +349,28 @@ export class Viewer {
     }
     this.models.set(model.summary.id, entry);
     this.scene.add(entry.object);
+    if (model.restored?.hidden.length) {
+      this.setPartState(model.summary.id, model.restored.hidden, []);
+    }
     this.updateSceneBounds();
-    if (wasEmpty) {
+    if (wasEmpty && !model.restored) {
       this.fitAll(false);
     }
     this.requestRender();
   }
 
-  /** Removes a model and frees what the viewer built for it. The camera doesn't move. */
-  remove(id: ModelId): void {
+  /**
+   * Removes a model and frees what the viewer built for it. The camera doesn't move. A deleted model
+   * that an undo can bring back keeps its measurements, hidden (M8).
+   */
+  remove(id: ModelId, keepMeasurements = false): void {
     const entry = this.models.get(id);
     if (!entry) {
+      this.measureTool.removeModel(id, keepMeasurements);
       return;
     }
     this.models.delete(id);
-    this.measureTool.removeModel(id);
+    this.measureTool.removeModel(id, keepMeasurements);
     this.setSelectionHighlight(entry, undefined);
     if (this.hovered?.id === id) {
       this.setHovered(undefined);
@@ -362,6 +378,40 @@ export class Viewer {
     entry.object.removeFromParent();
     entry.dispose?.();
     this.updateSceneBounds();
+    this.requestRender();
+  }
+
+  /** Drops a removed model's measurements for good: it can't come back (M8). */
+  forgetModel(id: ModelId): void {
+    this.measureTool.forgetModel(id);
+  }
+
+  /** Drops every kept measurement (Clear all, D110). */
+  forgetMeasurements(): void {
+    this.measureTool.forgetAll();
+  }
+
+  /** Where the camera is, for keeping it (D82). */
+  cameraSnapshot(): CameraSnapshot {
+    return {
+      projection: this.projectionMode,
+      position: this.controls.getPosition(new Vector3(), true).toArray(),
+      target: this.controls.getTarget(new Vector3(), true).toArray(),
+      focalOffset: this.controls.getFocalOffset(new Vector3(), true).toArray(),
+      zoom: this.camera.zoom,
+    };
+  }
+
+  /** Puts the camera where a snapshot says, at once: the stored view when the page opens (D111). */
+  restoreCamera({ projection, position, target, focalOffset, zoom }: CameraSnapshot): void {
+    this.setProjection(projection);
+    this.controls.stop();
+    void this.controls.setLookAt(...position, ...target, false);
+    void this.controls.setFocalOffset(...focalOffset, false);
+    if (projection === 'orthographic') {
+      void this.controls.zoomTo(zoom, false);
+    }
+    this.controls.update(0);
     this.requestRender();
   }
 
@@ -811,6 +861,12 @@ export class Viewer {
     this.measureTool.updateLabels();
     this.needsRender = false;
     this.frames++;
+
+    const view = `${this.projectionMode} ${camera.zoom} ${camera.matrixWorld.elements.join(' ')}`;
+    if (view !== this.drawnView) {
+      this.drawnView = view;
+      this.options.onCameraChange?.();
+    }
   }
 
   /**

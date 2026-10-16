@@ -1,6 +1,6 @@
 import type { ModelFormat } from '../formats';
 import type { ProgressListener } from './progress';
-import type { SidecarSet } from './sidecars';
+import type { Sidecars } from './sidecars';
 import type { ImportResult } from './types';
 
 /** Everything an importer needs for one file. */
@@ -11,7 +11,7 @@ export interface ImportRequest {
   path: string;
   format: ModelFormat;
   /** Other files of the same batch that this file may reference (.bin, .mtl, textures). */
-  sidecars: SidecarSet;
+  sidecars: Sidecars;
   onProgress: ProgressListener;
 }
 

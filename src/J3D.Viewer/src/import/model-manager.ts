@@ -2,7 +2,7 @@ import { kindOf, type ModelFormat } from '../formats';
 import { ModelImportError, toImportError } from './errors';
 import { throttleProgress, type ProgressListener } from './progress';
 import type { ImportRunner, ImportTask } from './runner';
-import { planBatch, UnusedSidecarReason, type BatchFile, type SidecarSet } from './sidecars';
+import { planBatch, SidecarSet, UnusedSidecarReason, type BatchFile } from './sidecars';
 import type { ImportError, ImportPhase, ImportResult, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types';
 
 /** Model lifecycle events. Progress is limited to 10 reports per second per model. */
@@ -35,8 +35,12 @@ interface Batch {
 }
 
 interface Entry extends ModelEntry {
-  file: BatchFile;
+  /** The model's file; a kept model has none until its files are read from the store. */
+  file?: BatchFile;
   batch: Batch;
+  /** The sidecars its import found, which are kept with it (D113). */
+  used: Set<BatchFile>;
+  restored?: { hidden: number[] };
   task?: ImportTask;
   finished: boolean;
   report: ProgressListener;
@@ -91,14 +95,7 @@ export class ModelManager {
         kind: kindOf(format),
         sizeBytes: file.file.size,
       };
-      const entry: Entry = {
-        summary,
-        status: 'queued',
-        file,
-        batch,
-        finished: false,
-        report: throttleProgress((phase, fraction) => this.emit((l) => l.progress?.(summary.id, phase, fraction))),
-      };
+      const entry: Entry = { summary, status: 'queued', file, batch, used: new Set(), finished: false, report: this.reporter(summary.id) };
       this.entries.set(summary.id, entry);
       this.queue.push(entry);
       this.emit((l) => l.queued?.(summary));
@@ -110,6 +107,56 @@ export class ModelManager {
     }
     this.pump();
     return summaries;
+  }
+
+  /**
+   * Queues a model again from its kept files, under its old id (M8, D117): after a reload or an
+   * undone delete. It's listed at once and imports once the files are read, its own file first;
+   * when they can't be read, it fails with `MissingFile`. Its hidden parts go with the loaded model.
+   */
+  importStored(summary: ModelSummary, files: Promise<readonly BatchFile[]>, hidden: readonly number[]): void {
+    if (this.entries.has(summary.id)) {
+      return;
+    }
+    const entry: Entry = {
+      summary,
+      status: 'queued',
+      batch: { sidecars: new SidecarSet([]), pending: 1 },
+      used: new Set(),
+      restored: { hidden: [...hidden] },
+      finished: false,
+      report: this.reporter(summary.id),
+    };
+    this.entries.set(summary.id, entry);
+    this.emit((l) => l.queued?.(summary));
+
+    const waiting = () => this.entries.get(summary.id) === entry && entry.status === 'queued' && !entry.file;
+    files.then(
+      ([file, ...sidecars]) => {
+        if (waiting()) {
+          if (file) {
+            entry.file = file;
+            entry.batch.sidecars = new SidecarSet(sidecars);
+            this.queue.push(entry);
+            this.pump();
+          } else {
+            this.fail(entry, { code: 'MissingFile', message: "Its kept copy couldn't be read." });
+          }
+        }
+      },
+      (error: unknown) => {
+        if (waiting()) {
+          console.warn(`J3D: the kept copy of ${summary.fileName} couldn't be read.`, error);
+          this.fail(entry, { code: 'MissingFile', message: "Its kept copy couldn't be read." });
+        }
+      },
+    );
+  }
+
+  /** A model's file and the sidecars its import used, for keeping it (D113). */
+  sourcesOf(id: ModelId): BatchFile[] | undefined {
+    const entry = this.entries.get(id);
+    return entry?.file ? [entry.file, ...entry.used] : undefined;
   }
 
   /**
@@ -160,11 +207,11 @@ export class ModelManager {
 
     try {
       entry.task = this.runnerFor(summary.format)({
-        file: file.file,
+        file: file!.file,
         fileName: summary.fileName,
-        path: file.path,
+        path: file!.path,
         format: summary.format,
-        sidecars: batch.sidecars,
+        sidecars: batch.sidecars.forModel(entry.used),
         onProgress: (phase, fraction) => {
           if (this.entries.get(summary.id) === entry && entry.status === 'importing') {
             entry.phase = phase;
@@ -190,20 +237,27 @@ export class ModelManager {
 
     this.running--;
     if ('content' in outcome) {
-      const model: LoadedModel = { summary: entry.summary, ...outcome };
+      const model: LoadedModel = { summary: entry.summary, ...outcome, ...(entry.restored ? { restored: entry.restored } : {}) };
       entry.status = 'loaded';
       entry.model = model;
       this.emit((l) => l.loaded?.(model));
       this.finish(entry);
     } else {
-      const error: ImportError = { code: outcome.code, message: outcome.message };
-      entry.status = 'failed';
-      entry.error = error;
-      entry.task?.dispose(); // a failed import keeps nothing alive
-      this.emit((l) => l.failed?.(entry.summary.id, error));
-      this.finish(entry);
+      this.fail(entry, { code: outcome.code, message: outcome.message });
     }
     this.pump();
+  }
+
+  private fail(entry: Entry, error: ImportError): void {
+    entry.status = 'failed';
+    entry.error = error;
+    entry.task?.dispose(); // a failed import keeps nothing alive
+    this.emit((l) => l.failed?.(entry.summary.id, error));
+    this.finish(entry);
+  }
+
+  private reporter(id: ModelId): ProgressListener {
+    return throttleProgress((phase, fraction) => this.emit((l) => l.progress?.(id, phase, fraction)));
   }
 
   /** Counts the model off its batch; the last one to finish reports the batch's unused sidecars. */

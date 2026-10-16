@@ -13,7 +13,9 @@ namespace J3D.Web.Client.Components;
 /// through the <see cref="ViewerSession"/>, and relays the viewer's model events into the
 /// <see cref="SceneState"/>, with snackbars for failures and rejected files (decision D54).
 /// Since M6 it also relays picks and key commands to the <see cref="SceneState"/>, which owns
-/// selection, visibility and undo, and applies each model's parts back to the viewer (D95).
+/// selection, visibility and undo, and applies each model's parts back to the viewer (D95). Since M8
+/// it lists the models kept from the last visit, and has the viewer delete, restore and forget models
+/// as the scene asks, and keep their order (D117).
 /// </summary>
 public sealed partial class Viewport(IJSRuntime js, ViewerSession session, SceneState scene, ISnackbar snackbar) : IAsyncDisposable
 {
@@ -21,10 +23,14 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     private ViewerInterop? _viewer;
     private DotNetObjectReference<Viewport>? _selfReference;
     private bool _disposed;
+    private bool _restoreStarted;
 
     /// <summary>What the viewer was last told of the Measure tool, so only changes are sent.</summary>
     private bool _appliedMeasureMode;
     private string _appliedMeasurements = "";
+
+    /// <summary>The model order the viewer was last given.</summary>
+    private string _appliedOrder = "";
 
     /// <summary>What the viewer was last given for each model, so only changes are sent.</summary>
     private readonly Dictionary<ModelId, (PartSet Hidden, PartSet Selected)> _applied = [];
@@ -52,6 +58,10 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
 
         _viewer = viewer;
         scene.Changed += OnSceneChanged;
+        scene.DeleteRequested += OnDeleteRequested;
+        scene.RestoreRequested += OnRestoreRequested;
+        scene.ForgetRequested += OnForgetRequested;
+        scene.ClearAllRequested += OnClearAllRequested;
         AttachToSession();
     }
 
@@ -134,10 +144,28 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     [JSInvokable]
     public void OnMeasureFailed(string message) => snackbar.Add($"Couldn't measure that: {message}", Severity.Warning);
 
+    /// <summary>A loaded model's files couldn't be kept for the next visit (D115); it stays loaded.</summary>
+    [JSInvokable]
+    public void OnModelNotKept(ModelId id, bool full)
+    {
+        var fileName = scene.Find(id)?.Summary.FileName ?? "a model";
+        scene.MarkNotKept(id, full);
+        snackbar.Add(
+            full
+                ? $"Couldn't keep {fileName} for your next visit: the browser's storage is full. It stays open until the page is closed."
+                : $"Couldn't keep {fileName} for your next visit. It stays open until the page is closed.",
+            Severity.Warning,
+            options => options.VisibleStateDuration = 10_000);
+    }
+
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
         scene.Changed -= OnSceneChanged;
+        scene.DeleteRequested -= OnDeleteRequested;
+        scene.RestoreRequested -= OnRestoreRequested;
+        scene.ForgetRequested -= OnForgetRequested;
+        scene.ClearAllRequested -= OnClearAllRequested;
         if (_viewer is not null)
         {
             session.Detach(_viewer);
@@ -150,6 +178,72 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     }
 
     private void OnSceneChanged() => _ = ApplyPartsAsync();
+
+    private void OnDeleteRequested(ModelId id) => _ = CallViewerAsync(viewer => viewer.DeleteModelAsync(id));
+
+    private void OnRestoreRequested(IReadOnlyList<ModelEntry> models) =>
+        _ = CallViewerAsync(viewer => viewer.RestoreModelsAsync(models.Select(static model => new StoredModel(model.Summary, [.. model.Hidden.Order()]))));
+
+    private void OnForgetRequested(ModelId id) => _ = CallViewerAsync(viewer => viewer.ForgetModelAsync(id));
+
+    private void OnClearAllRequested() => _ = CallViewerAsync(static viewer => viewer.ClearAllAsync());
+
+    private async Task CallViewerAsync(Func<ViewerInterop, ValueTask> call)
+    {
+        if (_viewer is { } viewer)
+        {
+            try
+            {
+                await call(viewer);
+            }
+            catch (JSDisconnectedException)
+            {
+                // The page is going away.
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lists the models kept from the last visit, which the viewer then imports again, and says when
+    /// this tab won't keep its models (D82, D109). The viewer has put the stored camera back by now.
+    /// </summary>
+    private async Task RestoreAsync(ViewerInterop viewer)
+    {
+        StoredScene stored;
+        try
+        {
+            stored = await viewer.RestoreSceneAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (stored.Camera is { } camera)
+        {
+            session.RestoreProjection(camera.Projection);
+        }
+
+        switch (stored.Status)
+        {
+            case StoreStatus.OtherTab:
+                snackbar.Add(
+                    "J3D is open in another tab, so the models you import here won't be kept for your next visit.",
+                    Severity.Info,
+                    options => options.VisibleStateDuration = 10_000);
+                break;
+            case StoreStatus.Unavailable:
+                snackbar.Add("This browser can't keep models for your next visit.", Severity.Info);
+                break;
+        }
+
+        scene.Restore(stored.Models);
+    }
 
     /// <summary>Sends each loaded model's hidden and selected parts to the viewer when they've changed.</summary>
     private async Task ApplyPartsAsync()
@@ -177,6 +271,11 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             _applied.Remove(id);
         }
 
+        List<ModelId> ids = [.. scene.Models.Select(static model => model.Id)];
+        var order = string.Join(',', ids);
+        var orderChanged = order != _appliedOrder;
+        _appliedOrder = order;
+
         var measureMode = scene.MeasureMode;
         var measurements = string.Join(',', scene.ShownMeasurements.Select(static measurement => measurement.Id));
         var modeChanged = measureMode != _appliedMeasureMode;
@@ -186,6 +285,11 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
 
         try
         {
+            if (orderChanged)
+            {
+                await viewer.SetModelOrderAsync(ids);
+            }
+
             foreach (var model in pending)
             {
                 await viewer.SetPartStateAsync(model.Id, model.Hidden, model.Selected);
@@ -207,12 +311,20 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         }
     }
 
-    /// <summary>The viewer reports its capabilities while it starts, so either may be known first.</summary>
+    /// <summary>
+    /// The viewer reports its capabilities while it starts, so either may be known first. Once both
+    /// are, the models kept from the last visit come back (D82).
+    /// </summary>
     private void AttachToSession()
     {
         if (_viewer is not null && Capabilities is not null)
         {
             session.Attach(_viewer, Capabilities);
+            if (!_restoreStarted)
+            {
+                _restoreStarted = true;
+                _ = RestoreAsync(_viewer);
+            }
         }
     }
 }

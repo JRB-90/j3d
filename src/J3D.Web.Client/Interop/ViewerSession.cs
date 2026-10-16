@@ -86,6 +86,16 @@ public sealed class ViewerSession
         Changed?.Invoke();
     }
 
+    /// <summary>The viewer put back the camera kept from the last visit, in this projection (D111).</summary>
+    internal void RestoreProjection(Projection projection)
+    {
+        if (projection != Projection)
+        {
+            Projection = projection;
+            Changed?.Invoke();
+        }
+    }
+
     internal void Detach(ViewerInterop viewer)
     {
         if (ReferenceEquals(_viewer, viewer))

@@ -1,5 +1,17 @@
 <section class="j3d-model-list" aria-label="Models" data-testid="model-list">
-    <MudText Typo="Typo.subtitle2" Class="px-4 pt-4 pb-2 mud-text-secondary">Models</MudText>
+    <div class="d-flex align-center justify-space-between pl-4 pr-2 pt-3 pb-1">
+        <MudText Typo="Typo.subtitle2" Class="mud-text-secondary">Models</MudText>
+        @* Clear all (D110): every model and everything kept, after a confirmation. *@
+        <MudButton Variant="Variant.Text"
+                   Size="Size.Small"
+                   Color="Color.Inherit"
+                   StartIcon="@Icons.Material.Filled.DeleteSweep"
+                   Disabled="@(!Scene.CanClearAll)"
+                   OnClick="ClearAllAsync"
+                   data-testid="clear-all">
+            Clear all
+        </MudButton>
+    </div>
     @if (Scene.Models.IsEmpty)
     {
         <MudText Typo="Typo.body2" Class="px-4 mud-text-disabled" data-testid="model-list-empty">No models imported.</MudText>
@@ -23,6 +35,18 @@
                    StartIcon="@Icons.Material.Filled.Delete"
                    data-testid="confirm-delete">
             Delete
+        </MudButton>
+    </YesButton>
+</MudMessageBox>
+
+<MudMessageBox @ref="_confirmClearAll" Title="Clear all" CancelText="Cancel">
+    <MessageContent>Remove every model, and everything kept for your next visit? This can't be undone.</MessageContent>
+    <YesButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   StartIcon="@Icons.Material.Filled.DeleteSweep"
+                   data-testid="confirm-clear-all">
+            Clear all
         </MudButton>
     </YesButton>
 </MudMessageBox>

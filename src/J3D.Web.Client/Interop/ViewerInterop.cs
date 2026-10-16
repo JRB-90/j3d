@@ -37,8 +37,37 @@ public sealed class ViewerInterop : IAsyncDisposable
     /// <summary>Imports the files picked in <paramref name="input"/>; the viewer sets its <c>accept</c> list.</summary>
     public ValueTask AttachFileInputAsync(ElementReference input) => _viewer.InvokeVoidAsync("attachFileInput", input);
 
-    /// <summary>Cancels an import, deletes a loaded model or dismisses a failed one; the viewer then reports it removed.</summary>
+    /// <summary>
+    /// Cancels an import, deletes a loaded model or dismisses a failed one, for good, with its kept files;
+    /// the viewer then reports it removed.
+    /// </summary>
     public ValueTask RemoveModelAsync(ModelId id) => _viewer.InvokeVoidAsync("removeModel", id.Value);
+
+    /// <summary>Deletes a model an undo can bring back: the viewer frees it, keeping its files and measurements (M8, D84).</summary>
+    public ValueTask DeleteModelAsync(ModelId id) => _viewer.InvokeVoidAsync("removeModel", id.Value, true);
+
+    /// <summary>What was kept when the page opened, once the viewer has put the stored camera back (D82, D111).</summary>
+    public ValueTask<StoredScene> RestoreSceneAsync() => _viewer.InvokeAsync<StoredScene>("restoreScene");
+
+    /// <summary>Imports models again from their kept files, under their ids, each with its hidden parts (D117).</summary>
+    public ValueTask RestoreModelsAsync(IEnumerable<StoredModel> models)
+    {
+        StoredModel[] array = [.. models];
+        return _viewer.InvokeVoidAsync("restoreModels", (object)array); // one argument, not one per model
+    }
+
+    /// <summary>Drops a deleted model's kept files and measurements: no undo can bring it back now.</summary>
+    public ValueTask ForgetModelAsync(ModelId id) => _viewer.InvokeVoidAsync("forgetModel", id.Value);
+
+    /// <summary>Removes every model and everything kept (D110).</summary>
+    public ValueTask ClearAllAsync() => _viewer.InvokeVoidAsync("clearAll");
+
+    /// <summary>The models the list shows, in order, for the viewer's manifest (D117).</summary>
+    public ValueTask SetModelOrderAsync(IEnumerable<ModelId> ids)
+    {
+        string[] array = [.. ids.Select(static id => id.Value)];
+        return _viewer.InvokeVoidAsync("setModelOrder", (object)array);
+    }
 
     /// <summary>Frames every model, keeping the view direction.</summary>
     public ValueTask FitAllAsync() => _viewer.InvokeVoidAsync("fitAll");
