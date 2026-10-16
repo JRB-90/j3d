@@ -391,13 +391,16 @@ export class Viewer {
     this.measureTool.forgetAll();
   }
 
-  /** Where the camera is, for keeping it (D82). */
+  /**
+   * Where the camera is, as drawn, for keeping it (D82). Not camera-controls' end values: its
+   * smoothing comes to rest a little short of them, so they'd put the view back slightly off.
+   */
   cameraSnapshot(): CameraSnapshot {
     return {
       projection: this.projectionMode,
-      position: this.controls.getPosition(new Vector3(), true).toArray(),
-      target: this.controls.getTarget(new Vector3(), true).toArray(),
-      focalOffset: this.controls.getFocalOffset(new Vector3(), true).toArray(),
+      position: this.controls.getPosition(new Vector3(), false).toArray(),
+      target: this.controls.getTarget(new Vector3(), false).toArray(),
+      focalOffset: this.controls.getFocalOffset(new Vector3(), false).toArray(),
       zoom: this.camera.zoom,
     };
   }
