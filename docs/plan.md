@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) in progress** (D118–D128), M10 (hardening) · **Last updated:** 2026-10-18
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), M10 (hardening) · **Last updated:** 2026-10-18
 
 ---
 
@@ -82,8 +82,8 @@ Also: zoom toward the cursor (D74). Deployment stays local-only (D75). **CAD fil
 
 **M9: export**
 
-- [ ] An **Export** menu in the toolbar saves the visible scene, or the selection when there is one, as GLB (colours and hierarchy) or STL (one merged mesh) (D83, D86).
-- [ ] A BREP model's item saves the whole model as imported, as STEP (assembly, names, colours) or BREP (D83, D86).
+- [x] An **Export** menu in the toolbar saves the visible scene, or the selection when there is one, as GLB (colours and hierarchy) or STL (one merged mesh) (D83, D86).
+- [x] A BREP model's item saves the whole model as imported, as STEP (assembly, names, colours) or BREP (D83, D86).
 
 **M10: hardening**
 
@@ -791,7 +791,7 @@ Branch `feature/m8-persistence`, from `main` after [JRB-90/j3d#9](https://github
 - **Manual checklist** (D92, built-in browser, pane visible, real mouse and keys) on `assembly.step`, `part.glb` and `curved-part.step`: imported, all three kept; the top plate hidden with `H`, perspective, a wheel zoom and a pan; after a reload the three came back under the same ids and in the same order, the plate still hidden, the projection and view the same (screenshots before and after identical), with no fit; a measurement from the curved part to the pin (21.932 mm), then Delete with its confirmation: the item went, its worker ended and the measurement was hidden; Ctrl+Z brought the curved part back third in the list with its measurement drawn and listed, the view unmoved; a second tab opened empty with the "open in another tab" snackbar and the store `otherTab`; Clear all asked first, then left no models, an empty private file system and Undo disabled, and a reload stayed empty with a fresh camera. No console or server errors.
 - **Found and fixed in the checklist:** the camera was kept as camera-controls' end values, which its smoothing stops a little short of, so a restored view sat about 0.03 units off; it's now kept as drawn. **Not reproduced:** twice, right after taking a measurement, a click on a model's Delete opened no dialog (no console error, no Blazor error); it opened every time after that, including after the same steps on a reloaded page.
 
-### M9 — Export (in progress)
+### M9 — Export ✅ ([JRB-90/j3d#11](https://github.com/JRB-90/j3d/pull/11), squash-merged as `835079d`)
 
 Branch `feature/m9-export`, from `main` after [JRB-90/j3d#10](https://github.com/JRB-90/j3d/pull/10) merged as `6acc434`. Decided at its start: D118–D128.
 
