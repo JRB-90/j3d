@@ -6,6 +6,7 @@
 //
 // Pipeline: importFile (STEP/IGES/BREP -> XCAF document) -> mesh (BRepMesh per unique part)
 //           -> getSceneJson (assembly tree + instances) + extractPrototype(i) (geometry per part/style).
+// Later, on request: measureEntity/measurePair (M7) and exportFile (M9: STEP or BREP of the document).
 //
 // Addresses are returned as unsigned int: with MAXIMUM_MEMORY=4GB they can exceed INT_MAX.
 
@@ -45,6 +46,7 @@
 #include <Quantity_ColorRGBA.hxx>
 #include <RWMesh_FaceIterator.hxx>
 #include <STEPCAFControl_Reader.hxx>
+#include <STEPCAFControl_Writer.hxx>
 #include <Standard_Failure.hxx>
 #include <Standard_OutOfMemory.hxx>
 #include <TCollection_AsciiString.hxx>
@@ -58,6 +60,7 @@
 #include <NCollection_List.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Compound.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -81,7 +84,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <istream>
+#include <memory>
 #include <new>
 #include <sstream>
 #include <stdexcept>
@@ -105,11 +110,13 @@ constexpr int StatusParseFailed = 1;
 constexpr int StatusEmpty = 2;
 constexpr int StatusOutOfMemory = 3;
 constexpr int StatusInternal = 4;
+constexpr int StatusCancelled = 5;
 
 constexpr int PhaseParsing = 1;
 constexpr int PhaseTransferring = 2;
 constexpr int PhaseMeshing = 3;
 constexpr int PhaseExtracting = 4;
+constexpr int PhaseWriting = 5;
 
 // Neutral grey for parts without a colour, in linear RGB (#B4B9C0 in sRGB).
 inline const Quantity_ColorRGBA DefaultColor(Quantity_Color(0.456, 0.485, 0.527, Quantity_TOC_RGB), 1.0f);
@@ -134,6 +141,18 @@ inline void reportProgress(int phase, double fraction, bool force = false) {
   (void)phase;
   (void)fraction;
   (void)force;
+#endif
+}
+
+// Asks the worker through `Module.j3dCancelled()` whether the export in progress should stop (M9,
+// D125). The worker reads a shared flag the page sets, since it can't take messages while OCCT runs.
+inline bool cancelRequested() {
+#if J3D_HAS_EMSCRIPTEN
+  // clang-format off
+  return EM_ASM_INT({ return Module['j3dCancelled'] && Module['j3dCancelled']() ? 1 : 0; }) != 0;
+  // clang-format on
+#else
+  return false;
 #endif
 }
 
@@ -797,13 +816,60 @@ public:
     });
   }
 
+  // -------------------------------------------------------------------------------------------
+  // Export (M9, decisions D83, D125, D126). The whole model as imported, written into an output
+  // buffer of 16 MB chunks that JS copies out and then releases, so a large file is never held twice
+  // in the WASM heap. `Module.j3dCancelled()` is polled while OCCT works, to stop an export.
+  // -------------------------------------------------------------------------------------------
+
+  /**
+   * Writes the model: format 0 STEP (AP214, OCCT's default, with the assembly, names and colours),
+   * 2 BREP (the free shapes at their locations, without J3D's triangulation). Returns a status code,
+   * StatusCancelled when asked to stop; the output then stays empty.
+   */
+  int exportFile(int format) {
+    releaseOutput();
+    const int status = guarded(
+        [&] {
+          if (document_.IsNull()) {
+            return fail(j3d::StatusInternal, "No model to export.");
+          }
+          switch (format) {
+            case j3d::FormatStep: return exportStep();
+            case j3d::FormatBrep: return exportBrep();
+            default: return fail(j3d::StatusInternal, "Unknown export format.");
+          }
+        },
+        "OCCT reported an error while writing the file.");
+    if (status != j3d::StatusOk) {
+      releaseOutput();
+    }
+    return status;
+  }
+
+  /** Bytes written by the last export. */
+  unsigned int getOutputLength() const { return static_cast<unsigned int>(output_->length()); }
+  int getOutputChunkCount() const { return output_->chunkCount(); }
+  unsigned int getOutputChunkPtr(int index) const {
+    return static_cast<unsigned int>(reinterpret_cast<std::uintptr_t>(output_->chunk(index)));
+  }
+  int getOutputChunkLength(int index) const { return static_cast<int>(output_->chunkLength(index)); }
+
+  void releaseOutput() { output_->clear(); }
+
 private:
   // Helpers are private nested classes on purpose: the libcascade bindgen binds every top-level
   // (and single-namespace) class in this file, but skips private nested types.
-  // OCCT progress indicator that forwards transfer progress to reportProgress.
+  // OCCT progress indicator that forwards transfer progress to reportProgress. A cancellable one
+  // (export) breaks off OCCT's work once the worker asks it to; the answer is kept.
   class ProgressIndicator : public Message_ProgressIndicator {
   public:
-    explicit ProgressIndicator(int phase) : phase_(phase) {}
+    explicit ProgressIndicator(int phase, bool cancellable = false) : phase_(phase), cancellable_(cancellable) {}
+
+    bool UserBreak() override {
+      cancelled_ = cancelled_ || (cancellable_ && j3d::cancelRequested());
+      return cancelled_;
+    }
 
   protected:
     void Show(const Message_ProgressScope&, const bool isForce) override {
@@ -812,6 +878,92 @@ private:
 
   private:
     int phase_;
+    bool cancellable_;
+    bool cancelled_ = false;
+  };
+
+  // Write-only std::streambuf over a list of malloc'd chunks: growing it never copies what's been
+  // written, and running out of memory shows as failed() rather than an exception inside the stream.
+  class OutputBuffer : public std::streambuf {
+  public:
+    OutputBuffer() = default;
+    OutputBuffer(const OutputBuffer&) = delete;
+    OutputBuffer& operator=(const OutputBuffer&) = delete;
+    ~OutputBuffer() override { clear(); }
+
+    void clear() {
+      for (char* chunk : chunks_) {
+        std::free(chunk);
+      }
+      chunks_.clear();
+      setp(nullptr, nullptr);
+      failed_ = false;
+    }
+
+    bool failed() const { return failed_; }
+    int chunkCount() const { return static_cast<int>(chunks_.size()); }
+    const char* chunk(int index) const {
+      return index >= 0 && index < chunkCount() ? chunks_[static_cast<std::size_t>(index)] : nullptr;
+    }
+    std::size_t chunkLength(int index) const {
+      if (index < 0 || index >= chunkCount()) {
+        return 0;
+      }
+      return index + 1 < chunkCount() ? ChunkSize : static_cast<std::size_t>(pptr() - pbase());
+    }
+    std::size_t length() const {
+      return chunks_.empty() ? 0 : (chunks_.size() - 1) * ChunkSize + static_cast<std::size_t>(pptr() - pbase());
+    }
+
+  protected:
+    int_type overflow(int_type c) override {
+      if (traits_type::eq_int_type(c, traits_type::eof())) {
+        return traits_type::not_eof(c);
+      }
+      if (pptr() == epptr() && !nextChunk()) {
+        return traits_type::eof();
+      }
+      *pptr() = traits_type::to_char_type(c);
+      pbump(1);
+      return c;
+    }
+
+    std::streamsize xsputn(const char* text, std::streamsize count) override {
+      std::streamsize written = 0;
+      while (written < count) {
+        if (pptr() == epptr() && !nextChunk()) {
+          break;
+        }
+        const std::streamsize part = std::min<std::streamsize>(count - written, epptr() - pptr());
+        std::memcpy(pptr(), text + written, static_cast<std::size_t>(part));
+        pbump(static_cast<int>(part));  // at most one chunk
+        written += part;
+      }
+      return written;
+    }
+
+  private:
+    static constexpr std::size_t ChunkSize = std::size_t{16} << 20;
+
+    bool nextChunk() {
+      char* chunk = static_cast<char*>(std::malloc(ChunkSize));
+      if (chunk == nullptr) {
+        failed_ = true;
+        return false;
+      }
+      try {
+        chunks_.push_back(chunk);
+      } catch (...) {
+        std::free(chunk);
+        failed_ = true;
+        return false;
+      }
+      setp(chunk, chunk + ChunkSize);
+      return true;
+    }
+
+    std::vector<char*> chunks_;
+    bool failed_ = false;
   };
 
   // Read-only, seekable std::streambuf over an existing buffer (zero copy).
@@ -887,7 +1039,7 @@ private:
   }
 
   template <typename Body>
-  int guarded(Body&& body) {
+  int guarded(Body&& body, const char* failureMessage = "OCCT reported an error while reading the file.") {
     try {
       lastError_.clear();
       return body();
@@ -897,8 +1049,7 @@ private:
       return fail(j3d::StatusOutOfMemory, "Out of memory.");
     } catch (const Standard_Failure& failure) {
       const char* message = failure.what();
-      return fail(j3d::StatusParseFailed,
-                  message != nullptr && *message != '\0' ? message : "OCCT reported an error while reading the file.");
+      return fail(j3d::StatusParseFailed, message != nullptr && *message != '\0' ? message : failureMessage);
     } catch (const std::exception& exception) {
       return fail(j3d::StatusInternal, exception.what());
     } catch (...) {
@@ -983,6 +1134,76 @@ private:
 
     const TDF_Label label = shapeTool_->AddShape(shape, false);
     TDataStd_Name::Set(label, TCollection_ExtendedString(fileName.c_str(), true));
+    return j3d::StatusOk;
+  }
+
+  int exportStep() {
+    j3d::reportProgress(j3d::PhaseTransferring, 0.0, true);
+    STEPCAFControl_Writer writer;
+    writer.SetColorMode(true);
+    writer.SetNameMode(true);
+    writer.SetLayerMode(false);
+    writer.SetPropsMode(false);
+
+    Handle(ProgressIndicator) progress = new ProgressIndicator(j3d::PhaseTransferring, true);
+    const bool transferred = writer.Transfer(document_, STEPControl_AsIs, nullptr, progress->Start());
+    if (progress->UserBreak()) {
+      return fail(j3d::StatusCancelled, "Export cancelled.");
+    }
+    if (!transferred) {
+      return fail(j3d::StatusParseFailed, "The model couldn't be translated to STEP.");
+    }
+
+    // OCCT's STEP writer reports no progress of its own.
+    j3d::reportProgress(j3d::PhaseWriting, -1.0, true);
+    std::ostream stream(output_.get());
+    const IFSelect_ReturnStatus written = writer.WriteStream(stream);
+    if (output_->failed()) {
+      return fail(j3d::StatusOutOfMemory, "Out of memory while writing the file.");
+    }
+    if (written != IFSelect_RetDone || !stream) {
+      return fail(j3d::StatusParseFailed, "The STEP file couldn't be written.");
+    }
+    j3d::reportProgress(j3d::PhaseWriting, 1.0, true);
+    return j3d::StatusOk;
+  }
+
+  int exportBrep() {
+    TDF_LabelSequence roots;
+    shapeTool_->GetFreeShapes(roots);
+    TopoDS_Shape shape;
+    if (roots.Length() == 1) {
+      shape = XCAFDoc_ShapeTool::GetShape(roots.First());
+    } else {
+      TopoDS_Compound compound;
+      BRep_Builder builder;
+      builder.MakeCompound(compound);
+      for (int i = 1; i <= roots.Length(); ++i) {
+        const TopoDS_Shape root = XCAFDoc_ShapeTool::GetShape(roots.Value(i));
+        if (!root.IsNull()) {
+          builder.Add(compound, root);
+        }
+      }
+      shape = compound;
+    }
+    if (shape.IsNull()) {
+      return fail(j3d::StatusEmpty, "The model contains no shapes.");
+    }
+
+    j3d::reportProgress(j3d::PhaseWriting, 0.0, true);
+    Handle(ProgressIndicator) progress = new ProgressIndicator(j3d::PhaseWriting, true);
+    std::ostream stream(output_.get());
+    BRepTools::Write(shape, stream, false, false, TopTools_FormatVersion_CURRENT, progress->Start());
+    if (progress->UserBreak()) {
+      return fail(j3d::StatusCancelled, "Export cancelled.");
+    }
+    if (output_->failed()) {
+      return fail(j3d::StatusOutOfMemory, "Out of memory while writing the file.");
+    }
+    if (!stream) {
+      return fail(j3d::StatusParseFailed, "The BREP file couldn't be written.");
+    }
+    j3d::reportProgress(j3d::PhaseWriting, 1.0, true);
     return j3d::StatusOk;
   }
 
@@ -1230,6 +1451,8 @@ private:
   mutable std::vector<Topology> topology_;
   std::string sceneJson_ = "{\"nodes\":[],\"instances\":[]}";
   std::string lastError_;
+  // Shared rather than owned so J3DModel stays copyable for the bindgen.
+  std::shared_ptr<OutputBuffer> output_ = std::make_shared<OutputBuffer>();
   double linearDeflection_ = 0.1;
   double angularDeflection_ = 0.35;
 };
