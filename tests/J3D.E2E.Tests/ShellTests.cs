@@ -18,10 +18,14 @@ public sealed class ShellTests(J3DAppFixture app) : PageTest, IClassFixture<J3DA
         Assert.True(await Page.EvaluateAsync<bool>("() => self.crossOriginIsolated"));
     }
 
-    /// <summary>D135: below about 1,100 px, Import, Export and Fit all keep only their icons, so the app bar stays one line.</summary>
+    /// <summary>
+    /// D135: below about 1,100 px, Import, Export and Fit all keep only their icons, so the app bar stays
+    /// one line. Since M11 also at 900 px, with the projection toggle's labels unclipped.
+    /// </summary>
     [Theory]
     [InlineData(1280, true)]
     [InlineData(1000, false)]
+    [InlineData(900, false)]
     public async Task The_app_bar_stays_on_one_line(int width, bool labelled)
     {
         await Page.SetViewportSizeAsync(width, 800);
@@ -35,5 +39,8 @@ public sealed class ShellTests(J3DAppFixture app) : PageTest, IClassFixture<J3DA
         Assert.Equal(labelled, labelSize != "0px");
         var bar = (await Page.Locator(".j3d-appbar").BoundingBoxAsync())!;
         Assert.True(bar.Height < 70, $"the app bar should be one row: {bar.Height} px");
+        var clipped = await Page.GetByTestId("projection").Locator(".mud-toggle-item").EvaluateAllAsync<string[]>(
+            "items => items.filter(item => item.scrollWidth > item.clientWidth).map(item => item.innerText)");
+        Assert.Empty(clipped);
     }
 }
