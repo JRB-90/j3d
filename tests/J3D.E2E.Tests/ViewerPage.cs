@@ -151,6 +151,18 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
         }
     }
 
+    /// <summary>
+    /// Clicks the toolbar's projection toggle and waits until the viewer has switched, then until the
+    /// camera rests. The click reaches the viewer through Blazor, and the camera is already at rest, so
+    /// waiting for rest alone could return before the switch: CI's Firefox lost that race (M11).
+    /// </summary>
+    protected async Task SetProjectionAsync(string projection)
+    {
+        await Page.GetByTestId("projection").GetByText(projection == "perspective" ? "Perspective" : "Orthographic").ClickAsync();
+        await Page.WaitForFunctionAsync("projection => window.__j3dTest.camera().projection === projection", projection);
+        await WaitForCameraRestAsync();
+    }
+
     protected Task<int> FramesAsync() => Page.EvaluateAsync<int>("() => window.__j3dTest.frames()");
 
     /// <summary>The last frame's scene draw calls and primitives, and what the renderer holds (viewer.ts, RenderStats).</summary>

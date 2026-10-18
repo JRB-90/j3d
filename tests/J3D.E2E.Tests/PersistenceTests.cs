@@ -21,7 +21,7 @@ public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
         var before = await WaitForImportsAsync(2);
         await Items.Nth(0).GetByTestId("model-eye").ClickAsync(); // hides box.brep
         await Expect(Items.Nth(0).GetByTestId("model-eye")).ToHaveAttributeAsync("data-visibility", "hidden");
-        await Page.GetByTestId("projection").GetByText("Perspective").ClickAsync();
+        await SetProjectionAsync("perspective");
         var centre = await ProjectAsync(0, 0, 30);
         await Page.Mouse.MoveAsync((float)centre.X + 40, (float)centre.Y);
         await Page.Mouse.WheelAsync(0, -200);
@@ -48,8 +48,7 @@ public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
         AssertClose(camera.Target, restored.Target);
 
         // The toolbar knows the projection: switching back to orthographic works.
-        await Page.GetByTestId("projection").GetByText("Orthographic").ClickAsync();
-        await WaitForCameraRestAsync();
+        await SetProjectionAsync("orthographic");
         Assert.Equal("orthographic", (await CameraAsync()).Projection);
         AssertNoConsoleErrors();
     }
