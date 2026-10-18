@@ -71,6 +71,12 @@ public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISn
         _ => "stl-ascii",
     };
 
+    /// <summary>
+    /// A menu item awaits its click handler before the menu closes, so the export runs on its own and
+    /// the menu closes at once.
+    /// </summary>
+    private void StartExport(MeshExportFormat format) => _ = InvokeAsync(() => ExportAsync(format));
+
     /// <summary>Writes the selection, or the visible scene, and the browser saves it; failures go to a snackbar (D125).</summary>
     private async Task ExportAsync(MeshExportFormat format)
     {
@@ -97,6 +103,7 @@ public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISn
         finally
         {
             _exporting = false;
+            StateHasChanged();
         }
     }
 

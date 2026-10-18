@@ -102,6 +102,9 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
 
     private Task RemoveAsync() => OnRemove.InvokeAsync(Model);
 
+    /// <summary>A menu item awaits its click handler before the menu closes, so the export runs on its own.</summary>
+    private void StartExport(BrepExportFormat format) => _ = InvokeAsync(() => ExportAsync(format));
+
     /// <summary>
     /// Saves the model as STEP or BREP: the item shows the export until it ends, the browser saves the
     /// file, and a failure goes to a snackbar (D125). A cancelled export, or a deleted model's, says nothing.

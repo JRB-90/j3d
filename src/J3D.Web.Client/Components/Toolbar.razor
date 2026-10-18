@@ -31,7 +31,7 @@
         <div class="j3d-menu-header" data-testid="export-scope">@ExportLabel</div>
         @foreach (var format in MeshFormats)
         {
-            <MudMenuItem Label="@format.DisplayName" OnClick="@(() => ExportAsync(format))" data-testid="@($"export-{FormatKey(format)}")" />
+            <MudMenuItem Label="@format.DisplayName" OnClick="@(() => StartExport(format))" data-testid="@($"export-{FormatKey(format)}")" />
         }
     </MudMenu>
 

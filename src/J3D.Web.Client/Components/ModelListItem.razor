@@ -40,7 +40,7 @@
                     @foreach (var format in BrepFormats)
                     {
                         <MudMenuItem Label="@format.DisplayName"
-                                     OnClick="@(() => ExportAsync(format))"
+                                     OnClick="@(() => StartExport(format))"
                                      data-testid="@($"export-{format.ToString().ToLowerInvariant()}")" />
                     }
                 </MudMenu>

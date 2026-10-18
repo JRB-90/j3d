@@ -117,6 +117,7 @@ export async function importGltf(
 
     if (ownExport) {
       joinRanges(gltf.scene);
+      offsetEdgedFaces(gltf.scene);
     }
 
     const root = new Group();
@@ -182,6 +183,20 @@ function joinRanges(scene: Object3D): void {
     mesh.parent = parent;
     group.parent = null;
   }
+}
+
+/** As the viewer draws BREP parts: faces pushed back a little, so the edges on them aren't half hidden. */
+function offsetEdgedFaces(scene: Object3D): void {
+  scene.traverse((object) => {
+    if (object.children.some(isJ3dEdges)) {
+      const material = (object as Partial<Mesh>).material;
+      for (const faces of Array.isArray(material) ? material : material ? [material] : []) {
+        faces.polygonOffset = true;
+        faces.polygonOffsetFactor = 1;
+        faces.polygonOffsetUnits = 1;
+      }
+    }
+  });
 }
 
 function readJson(data: ArrayBuffer): GltfJson {

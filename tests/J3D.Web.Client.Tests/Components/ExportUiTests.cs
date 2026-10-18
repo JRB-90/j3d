@@ -58,6 +58,7 @@ public sealed class ExportUiTests : BunitTestBase
         var invocation = Assert.Single(_viewer.Invocations, static i => i.Identifier == "exportMesh");
         Assert.Equal<object?>([MeshExportFormat.StlAscii, true], invocation.Arguments);
         cut.WaitForAssertion(() => Assert.Equal("true", cut.Find("[data-testid=export-menu]").GetAttribute("aria-busy")));
+        Assert.Empty(_popovers.FindAll(".mud-popover-open")); // the menu closes while the file is written
         Assert.True(ExportButton(cut).HasAttribute("disabled"));
 
         export.SetResult(new ExportOutcome("part.stl", Cancelled: false, Error: null));
@@ -103,6 +104,7 @@ public sealed class ExportUiTests : BunitTestBase
         var invocation = Assert.Single(_viewer.Invocations, static i => i.Identifier == "exportModel");
         Assert.Equal<object?>(["m1", BrepExportFormat.Step], invocation.Arguments);
         cut.WaitForAssertion(() => Assert.Equal("Exporting STEP…", Text(cut, "model-export-status")));
+        Assert.Empty(_popovers.FindAll(".mud-popover-open"));
         Assert.Contains("mud-progress-indeterminate", cut.Find("[data-testid=export-progress]").ClassName, StringComparison.Ordinal);
         Assert.True(cut.Find("[data-testid=export-model] button").HasAttribute("disabled"));
 
@@ -165,6 +167,7 @@ public sealed class ExportUiTests : BunitTestBase
     {
         ExportButton(cut).Click();
         _popovers.WaitForElement("[data-testid=export-scope]");
+        Assert.NotEmpty(_popovers.FindAll(".mud-popover-open"));
     }
 
     private List<string> MenuLabels() =>
