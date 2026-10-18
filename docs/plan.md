@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), M10 (hardening) · **Last updated:** 2026-10-18
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) in progress** (D129–D136) · **Last updated:** 2026-10-18
 
 ---
 
@@ -100,7 +100,7 @@ Users and auth, deployment (D75), sectioning, exploded views, mobile/tablet layo
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9) and 2026-10-18 (D129–D136 at the start of M10). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -232,6 +232,14 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D126 | STEP schema (M9) | **AP214**, OCCT's default | The most widely read; assembly, names and colours carry over. |
 | D127 | STL encoding (M9) | **Both**: STL (binary) and STL (ASCII) are separate menu items | Proposed: binary only. |
 | D128 | Export file names (M9) | **After the source**: STEP and BREP take the model's name with the new extension (`bracket.step`); GLB and STL take the model's name when everything exported comes from one model, else `scene` or `selection` | |
+| D129 | OIT scope (M10) | **The models' translucent surfaces**: BREP translucent ranges (batched and instanced) and mesh models' translucent materials (glTF `BLEND`, MTL opacity). The selection and hover tints and the measurement marks stay as they are, drawn on top | Proposed as recommended. The overlays are meant to sit over the parts, not blend among them. |
+| D130 | When OIT is on (M10) | **Always, with a fallback**: whenever the GPU has blendable float render targets (`EXT_color_buffer_float`, `EXT_float_blend`); otherwise today's sorted blending, without a message (R21) | Found at M10's start: Playwright's Chromium and WebKit on Windows both have them, with 8 draw buffers. |
+| D131 | CI on `ubuntu-26.04` (M10, D88) | **Pinned after a trial**: Firefox E2E runs dispatched on 26.04 beside 24.04 first (headed under Xvfb is the risk, R22), then both workflows pinned to `ubuntu-26.04` | Found at M10's start: the image is published and Playwright 1.63 has Ubuntu 26.04 builds; `ubuntu-latest` becomes 26.04 on 2026-10-19. |
+| D132 | Real Safari (M10, D116) | **A known gap**, as D42: no Mac. Playwright's WebKit results stand in, and the README says real Safari is untested | Replaces D116's manual Safari check. |
+| D133 | Picking criterion (M10, D89) | **Measured again once** on the large files with today's code: part picks and the Measure tool's entity picks | M6 measured 1.3 ms per pick; M7 and M9 have touched picking since. |
+| D134 | Intersecting translucency fixture (M10, D90) | **A new generated STEP** of translucent boxes crossing each other in different colours, for E2E pixel checks from angles where sorting fails | `translucent.step` only nests a core in a cover. |
+| D135 | Narrow app bar (M10) | **Icons below about 1,100 px**: Import, Export and Fit all drop their labels (keeping tooltips), so the bar stays on one line | Found in M9's checklist: "Fit all" wraps at about 970 px. |
+| D136 | README screenshot (M10) | **Refreshed** from the built-in browser: a selection, a measurement and the Export menu | The current one predates M6. |
 
 ---
 
@@ -809,7 +817,9 @@ Branch `feature/m9-export`, from `main` after [JRB-90/j3d#10](https://github.com
 - **Manual checklist** (D92, built-in browser, pane visible, real clicks; downloads caught in the page rather than saved) on `assembly.step`, `curved-part.step`, `part.glb`, `translucent.step` and `box.brep`: the Export menu titled for the scene; GLB of three models named `scene.glb`, marked `{ unit: mm, up: z }`, the two plates sharing one mesh, and imported back with the same tree and triangles; with `part.glb` hidden, the GLB left it out and, imported back with the originals hidden, drew the same colours, edges and placements; a STEP export held through the test hook showed "Exporting STEP…", a bar and Cancel in its item with the icon disabled, and Cancel ended it without a file or snackbar; the curved part's STEP and BREP (no triangulation in it) came back with 3,704 triangles and the same bounds; a box clicked in the view made the menu "Export the selection", and STL (binary) saved `box.stl` with its 12 triangles only; `translucent.step` through STEP kept its translucent cover over the green core. No console or server errors.
 - **Found and fixed in the checklist:** a menu item awaits its click handler before its menu closes, so both export menus stayed open for the whole export; the export now starts without being awaited (and bUnit checks the menus close). A J3D GLB's faces now get the viewer's polygon offset, so its edges don't z-fight. **Noticed:** at the built-in browser's ~970 px width the app bar is too narrow for Export, and "Fit all" wraps onto two lines; at 1,280 px it fits.
 
-### M10 — Hardening (planned)
+### M10 — Hardening (in progress)
+
+Branch `feature/m10-hardening`, from `main` after [JRB-90/j3d#11](https://github.com/JRB-90/j3d/pull/11) merged as `835079d`. Decided at its start: D129–D136.
 
 - Weighted blended order-independent transparency (D90, R10); CI moved to `ubuntu-26.04`, re-checking headed Firefox under Xvfb first (D88, R22); picking speed on the large files, with three-mesh-bvh if M6 didn't already need it (D89); Safari-specific fixes as WebKit finds them, and a manual check in Safari of keeping models across a reload, which Playwright's WebKit can't test (D116, R18); README, `docs/development.md` and `THIRD-PARTY-NOTICES.md` brought up to date for anything new.
 - **Exit:** every iteration 2 acceptance criterion in §1 is ticked.
