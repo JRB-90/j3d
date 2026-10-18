@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141) · **Last updated:** 2026-10-18
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). **Iteration 3 planned** (§1, D142–D159): M12–M16 · **Last updated:** 2026-10-18
 
 ---
 
@@ -96,11 +96,60 @@ Also: zoom toward the cursor (D74). Deployment stays local-only (D75). **CAD fil
 
 Users and auth, deployment (D75), sectioning, exploded views, mobile/tablet layout, exact (BREP) measurement of mesh models, exporting part of a BREP model as STEP or BREP, undoing selection or camera moves, persisting selection or measurements, editing geometry.
 
+### Iteration 3 (planned)
+
+Let a user **arrange** what they've imported, still entirely in the browser:
+
+1. **Select** at three levels: whole models, placed parts, and BREP faces, edges and vertices (D146).
+2. **Measure** from one reference: the first pick's own value drawn on it, then the reference against each later click, one result at a time (D147).
+3. **Move** objects by numbers (X, Y, Z, Rx, Ry, Rz in their local, parent or world frame) and with a triad in the scene, and show their origin frames (D148–D150).
+4. **Restructure** assemblies: move objects around the hierarchy; copy, paste and delete them from a context menu or the keyboard; and expand compound parts into one part per solid (D151, D152, D154).
+5. **Export** the edited assembly, or just the selection, as STEP or BREP (D145, D155).
+
+Edits change placements and structure, never shapes (D144). Each one can be undone, is kept across a refresh and is written into exports (D145). Planned from the owner's list after testing iteration 2 by hand (D142). **CAD files still never leave the user's machine.**
+
+#### Acceptance criteria
+
+**M12: selection modes, context menu and measurement**
+
+- [ ] A toolbar switch sets what a click selects: **Model** (the whole model), **Object** (a placed part, as in M6, with sub-assemblies from the tree) or **Feature** (a BREP face, edge or vertex, picked as Measure picks them, D107). Ctrl+click adds or removes in every mode; models and objects stay in step between the viewport and the tree; the panel lists a selected feature's values (D146). Mesh models have Model and Object (D153).
+- [ ] In the Measure tool the first click, or a feature already selected when the tool turns on, is the **reference**: its own value is drawn on it in 3D (an edge's length, a circle's diameter, a face's area) and listed in the panel. Each later click shows the reference against what it picked, replacing the previous result. Esc clears the measurement and turns the tool off (D147).
+- [ ] A right click that doesn't drag opens a **context menu** on a part in the viewport or a node in the tree, holding the commands that exist (Hide, Isolate, Show all, Fit all, Measure, Export); a right drag still rotates (D152).
+- [ ] A generator writes a licence-free **hierarchical assembly**, small and committed for the tests and large on demand, and a script fetches the real assembly chosen at M12's start (D156).
+
+**M13: origin frames and moving**
+
+- [ ] An **Origin frames** toggle draws the X, Y and Z axes (red, green, blue, a constant size on screen) at the origin of each selected part, sub-assembly or model (D150).
+- [ ] A **Move** tool shows a triad at the selected object's origin: its arrows and planes translate the object and its rings rotate it, with a key switching between the two (D149).
+- [ ] **Fields** for X, Y, Z (mm) and Rx, Ry, Rz (degrees, fixed angles) in a Local, Parent or World frame: Parent and World show and set the object's pose in that frame, and Local moves or rotates it by the values about its own axes. The fields follow the triad while it's dragged (D148).
+- [ ] Parts, sub-assemblies and whole models move, in BREP and mesh models alike (D153). Picking, measuring, Fit all and the GLB and STL exports all see the new placements. Each move can be undone, and moves are kept across a refresh (D145).
+
+**M14: assembly editing**
+
+- [ ] Dragging a tree node onto an assembly node, or **Cut** then **Paste** onto it, moves the node there within its model without moving it in 3D; **New assembly** groups the selection under a new node (D151).
+- [ ] **Copy** and **Paste** add the copied objects as new instances under the target assembly (or their original's parent), in the same place, and select them; **Delete** removes objects from their model. All of these are in the context menu, in the viewport and the tree, and on Ctrl+C, Ctrl+X, Ctrl+V and Delete (D152).
+- [ ] Every edit can be undone and is kept across a refresh, in BREP and mesh models (D145, D153).
+
+**M15: exporting edits, and Expand**
+
+- [ ] A BREP model's STEP and BREP exports write its **edited assembly**: placements, structure, copies and deletions, with names and colours (D145).
+- [ ] When the selection lies in one BREP model, the Export menu also saves it as **STEP or BREP**: the selected objects with their subtrees, under their assembly path from the root (D155).
+- [ ] **Expand** on a compound part, and **Expand all** on a model, turn each such part into a sub-assembly with one part per solid, keeping names and colours. Expanding can be undone, is kept and is exported like any other edit (D154).
+
+**M16: hardening**
+
+- [ ] On the large generated assembly and the real one (D156), selecting, moving and editing respond within D63's ~200 ms line, and restoring and exporting show their progress.
+- [ ] Every criterion above is covered by tests that pass in CI (unit, bUnit, Vitest with real OCCT, Playwright in Chromium and Firefox), and by the owner's manual pass in Chrome and Edge (D64).
+
+#### Out of scope for iteration 3
+
+Deployment (D75), exploded views, phone and tablet layouts, exact (BREP) measurement of mesh models, moving or copying objects between models, undoing selection or camera moves. **Dropped** (D143): users and auth, sectioning, keeping measurements or selections (a selection is kept by exporting it, D155), and editing geometry.
+
 ---
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9) and 2026-10-18 (D129–D136 at the start of M10, D137–D141 at the start of M11). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9) and 2026-10-18 (D129–D136 at the start of M10, D137–D141 at the start of M11, D142–D159 when planning iteration 3). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -117,9 +166,9 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D11 | Scene | **Many models + model list** with per-model delete | |
 | D12 | Persistence | **Session only** | **Amended by D82** for iteration 2: files and scene state kept in OPFS. |
 | D13 | Display | Shaded faces, BREP edge overlay, STEP/IGES colours, assembly tree | Needs XCAF symbols in the build. |
-| D14 | Tree interaction | **Display only**; delete is always whole-model | |
+| D14 | Tree interaction | **Display only**; delete is always whole-model | **Superseded by D144** (iteration 3): placements and structure become editable. |
 | D15 | UI library | **MudBlazor** (9.x), dark-only theme, system font stack | |
-| D16 | Mouse | **Left = pan, middle = pan, right = rotate, wheel = zoom**; touch supported | Custom mapping: not a Three.js, SolidWorks or Fusion preset. |
+| D16 | Mouse | **Left = pan, middle = pan, right = rotate, wheel = zoom**; touch supported | Custom mapping: not a Three.js, SolidWorks or Fusion preset. **Amended by D152:** a right click that doesn't drag opens a context menu. |
 | D17 | Rotation | **Turntable**, fixed up axis | |
 | D18 | Up axis | **Z-up** | glTF (Y-up by spec) is rotated on import. |
 | D19 | Camera extras | Auto-fit on import, Fit all (button + `F`), **ortho default** + toggle | No zoom-to-cursor. **Amended by D74:** zoom-to-cursor in iteration 2. |
@@ -180,16 +229,16 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D74 | Iteration 2 extras | **All four: zoom-to-cursor, persistence, export and undo** | Zoom-to-cursor amends D19 (camera-controls' `dollyToCursor`, off since M3). |
 | D75 | Deployment | **Stays local-only** (D25) | Deployment becomes its own iteration, after a legal review of the LGPL/Open CASCADE obligations (§7). The host prerenders on ASP.NET, so a static host would mean converting to standalone Blazor WebAssembly. |
 | D76 | Plan document | **This document is extended**: §1 gains iteration 2's goal and criteria, decisions continue at D73, milestones M6–M10 join §10, and §3–§9 are updated as things land | |
-| D77 | Selection | **Parts, multi-select**: a click selects one placed part (a tree leaf); Ctrl+click adds or removes; selecting a tree node selects every part under it; Esc or a click on empty space clears. Viewport and tree stay in sync, the tree expanding and scrolling to a part selected in 3D. Highlight: an accent tint plus accent edges | `BatchedMesh` and `InstancedMesh` raycasts already return the instance (`batchId`, `instanceId`), and each instance maps to its tree node through the scene's `instances`. |
+| D77 | Selection | **Parts, multi-select**: a click selects one placed part (a tree leaf); Ctrl+click adds or removes; selecting a tree node selects every part under it; Esc or a click on empty space clears. Viewport and tree stay in sync, the tree expanding and scrolling to a part selected in 3D. Highlight: an accent tint plus accent edges | `BatchedMesh` and `InstancedMesh` raycasts already return the instance (`batchId`, `instanceId`), and each instance maps to its tree node through the scene's `instances`. **Amended by D146:** Model and Feature selection beside parts (iteration 3). |
 | D78 | Visibility | **Eye toggles in the tree and the list, plus commands**: hiding an assembly hides its subtree; Hide, Isolate and Show all act on the selection from the toolbar and the keys H, I and Shift+H. Fit all frames visible parts only | `BatchedMesh.setVisibleAt` does the drawing side (§6.3, M5). |
 | D79 | Picking entities | **A Measure tool** (toolbar toggle, key M): while it's on, the face, edge or vertex under the pointer is pre-highlighted and clicks pick entities for measuring; while it's off, clicks select parts | |
-| D80 | Measurements | **One entity or a pair**. One: edge length; circle radius, diameter and centre; face area; plane normal; cylinder radius and axis; part volume and bounding box. Two: minimum distance with its closest points (OCCT's `BRepExtrema_DistShapeShape`), the angle between planes or lines, centre to centre of circles. Drawn as dimensions in 3D and listed in the results panel (D87), in millimetres | OCCT converts STEP and IGES lengths to millimetres on import. Free points picked on surfaces (point-to-point with snapping) weren't chosen for BREP models. |
+| D80 | Measurements | **One entity or a pair**. One: edge length; circle radius, diameter and centre; face area; plane normal; cylinder radius and axis; part volume and bounding box. Two: minimum distance with its closest points (OCCT's `BRepExtrema_DistShapeShape`), the angle between planes or lines, centre to centre of circles. Drawn as dimensions in 3D and listed in the results panel (D87), in millimetres | OCCT converts STEP and IGES lengths to millimetres on import. Free points picked on surfaces (point-to-point with snapping) weren't chosen for BREP models. **Amended by D147:** a single entity's value is drawn on it in 3D too. |
 | D81 | Mesh models | **Selection and visibility per node, plus approximate measurement**: glTF nodes, OBJ objects and an STL as one part select and hide like BREP parts; the Measure tool gives point-to-point distances snapping to vertices, and bounding boxes, marked as approximate | **Amends D10** ("won't get BREP features later"): they still get no exact measurement. |
-| D82 | Persistence | **Files and scene state in OPFS**, automatically: each imported file and its sidecars are copied into the origin private file system; after a reload the models are imported again in list order, and their visibility and the camera are restored. **Clear all** removes everything stored | **Amends D12** (session only). Selection and measurements aren't kept. A 200 MB STEP takes as long to come back as its first import (about 30 s). Caching the extracted meshes too wasn't chosen. |
+| D82 | Persistence | **Files and scene state in OPFS**, automatically: each imported file and its sidecars are copied into the origin private file system; after a reload the models are imported again in list order, and their visibility and the camera are restored. **Clear all** removes everything stored | **Amends D12** (session only). Selection and measurements aren't kept. A 200 MB STEP takes as long to come back as its first import (about 30 s). Caching the extracted meshes too wasn't chosen. **Amended by D145:** assembly edits are kept too (iteration 3). |
 | D83 | Export formats | **GLB, STL, STEP and BREP** | STEP through OCCT's `STEPCAFControl_Writer` (assembly, names, colours), BREP through `BRepTools::Write`: both add writer code to the WASM (a rebuild). GLB and STL use three's exporters. |
-| D84 | Undo | **Visibility, measurements and deleting a model**: Ctrl+Z / Ctrl+Y and toolbar buttons. Deleting still frees the model's memory at once; undoing it imports the model again from its kept file into the same place in the list. The confirmation (D29) stays. Selection and camera moves aren't undoable | |
+| D84 | Undo | **Visibility, measurements and deleting a model**: Ctrl+Z / Ctrl+Y and toolbar buttons. Deleting still frees the model's memory at once; undoing it imports the model again from its kept file into the same place in the list. The confirmation (D29) stays. Selection and camera moves aren't undoable | **Amended by D145 and D147** (iteration 3): edits join the history, and measurements leave it. |
 | D85 | Iteration 2 milestones | **Five, foundation first**: M6 selection and visibility, zoom-to-cursor, and the undo history (visibility first); M7 picking and measurement; M8 persistence and undoing a delete; M9 export; M10 hardening | Selection comes first because measurement builds on its picking. |
-| D86 | Export scope | **Meshes of what's visible, BREP models whole**: GLB and STL export the visible scene, or the selection when there is one (STL as one merged, uncoloured mesh); STEP and BREP export one whole BREP model as imported, from its list item. An Export menu in the toolbar, plus the item's menu | Exporting part of a BREP model would need the facade to build a new XCAF document from the chosen placements. |
+| D86 | Export scope | **Meshes of what's visible, BREP models whole**: GLB and STL export the visible scene, or the selection when there is one (STL as one merged, uncoloured mesh); STEP and BREP export one whole BREP model as imported, from its list item. An Export menu in the toolbar, plus the item's menu | Exporting part of a BREP model would need the facade to build a new XCAF document from the chosen placements. **Amended by D145 and D155** (iteration 3): STEP and BREP write the edited assembly, and a selection in one BREP model exports as STEP or BREP too. |
 | D87 | Results panel | **A floating panel at the viewport's bottom-left**: the selected part's name and path, or the measurement results with copy buttons; hidden when empty. Dimensions and their labels are drawn in 3D | The view cube is top-right and snackbars bottom-right. |
 | D88 | Iteration 1 carry-overs | **All four**: M5's not-done items early in M6 (the manual checklist in the built-in browser, the orbit frame rate with real animation frames, a CI dispatch with large fixtures); the move to `ubuntu-26.04` in M10 (D68); order-independent transparency (D90); three-mesh-bvh only if picking is measured over the ~200 ms line (D89) | |
 | D89 | Hover | **Parts pre-highlight on hover** with a faint accent tint, one raycast per animation frame at most. Measured on the 10,437-part file in M6; three-mesh-bvh if it crosses D63's ~200 ms line | `BatchedMesh.raycast` tests every instance's bounding sphere, then its triangles. |
@@ -204,14 +253,14 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D98 | Hidden and selected (M6) | **Hidden parts leave the selection**, however they were hidden, so the selection is always what's visible; undoing the hide doesn't select them again | |
 | D99 | Keys (M6) | **As `F`**: H, I, Shift+H, Esc, Ctrl+Z and Ctrl+Y work anywhere on the page except while focus is in a text input, where Ctrl+Z and Ctrl+Y stay the input's own | |
 | D100 | M5 leftovers (M6) | **First, before any M6 code** (D88): the built-in browser checklist and the orbit frame rate with real animation frames while the owner brings the Claude window forward, and a CI dispatch with `large_fixtures=200,curved-100` | |
-| D101 | Measure workflow (M7) | **Click A, click B, keep**: the first click picks an entity and shows its properties; the second picks another and shows the pair's results. The measurement is then kept, drawn in 3D and listed in the panel, and the next click starts a new one. Esc drops a half-done pick, Clear removes them all; adding and clearing are undoable (D84) | |
+| D101 | Measure workflow (M7) | **Click A, click B, keep**: the first click picks an entity and shows its properties; the second picks another and shows the pair's results. The measurement is then kept, drawn in 3D and listed in the panel, and the next click starts a new one. Esc drops a half-done pick, Clear removes them all; adding and clearing are undoable (D84) | **Superseded by D147** (iteration 3): one reference is measured against each later click, and nothing is kept. |
 | D102 | Pairs across models (M7) | **Exact, with the shape sent**: the second entity's face, edge or vertex is written as BREP text in its own worker and read into the first entity's worker with its world transform, measured there, then freed | Each model has its own worker and heap (§3), so the two shapes are never in one heap otherwise. |
 | D103 | Dimension labels (M7) | **HTML over the canvas**: dimension lines and points drawn in WebGL, the values as small HTML labels positioned over the canvas each frame | Crisp at any zoom, styled with the theme, readable by E2E and screen readers. |
 | D104 | Part properties (M7) | **With every pick**: a picked face, edge or vertex also lists its part's volume and bounding box in the panel, under the part's name | |
 | D105 | glTF units (M7) | **Converted to millimetres**: glTF measurements are its metres × 1000; the scene itself isn't rescaled | Settles assumption 13's open point. |
 | D106 | M7's WASM rebuild | **Measurement code only**; the STEP and BREP writers get their own rebuild in M9 (R19) | Each milestone's WASM change and size stay reviewable on their own. |
 | D107 | Pick priority (M7) | **Vertex, then edge, then face**: a vertex within 8 px wins, then an edge within 6 px, else the face under the pointer; the pre-highlight shows which before the click | |
-| D108 | Measurement lifetime (M7) | **Measurements follow their parts**: one on a hidden part is hidden with it (still listed, greyed); deleting a model removes its measurements, and M8's undo of the delete brings them back | |
+| D108 | Measurement lifetime (M7) | **Measurements follow their parts**: one on a hidden part is hidden with it (still listed, greyed); deleting a model removes its measurements, and M8's undo of the delete brings them back | **Superseded by D147** (iteration 3): measurements aren't kept. |
 | D109 | Several tabs (M8) | **The first tab owns the store**: it holds a Web Lock while it's open; another tab starts empty and session-only, with a snackbar saying its models won't be kept | Tabs writing one manifest would silently overwrite each other's models. |
 | D110 | Clear all (M8) | **In the Models list header, confirmed**: removes every model, stored file and measurement, and the undo history, at once; it can't be undone | D82's "removes everything stored", so nothing is kept for an undo. |
 | D111 | Camera on restore (M8) | **Restored at once**: the stored camera and projection are applied as the page opens, and D30's first-model auto-fit is skipped for a restored scene, so the models appear where the view was left | |
@@ -245,6 +294,24 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D139 | Firefox locally (M11, §8) | **Documented commands in Docker**: build and publish on Windows, then run the built E2E tests in Playwright's `mcr.microsoft.com/playwright/dotnet:v1.63.0-resolute` image (Ubuntu 26.04, as CI), headed under `xvfb-run` with test classes one at a time (D47, D51) | Proposed as recommended. The image's SDK (10.0.401) is below `global.json`'s 10.0.402, so it runs the Windows build rather than building. |
 | D140 | M8's Delete-dialog bug (M11) | **An opt-in stress test and a code read**: an E2E test gated by `J3D_STRESS` takes a measurement, then opens Delete and cancels, about 50 times, run locally in Chromium and Firefox. Fixed with a test if it reproduces, otherwise recorded as not reproduced | Proposed as recommended. Off in CI, so a rare race can't flake every PR. |
 | D141 | Large exports (M11) | **Measured on three files**: `large-200mb.step`, `curved-100mb.step` and a generated STEP of about 550 MB, close to the 4 GB ceiling, exported as STEP and BREP in Node (opt-in, `J3D_LARGE_FIXTURES`) and in the browser: time, peak heap, file size, Cancel, and a clean `OutOfMemory` | Proposed as recommended. Code changes only if something fails. |
+| D142 | Iteration 3 goal | **Arrange assemblies**: select at three levels, measure from one reference, move objects by numbers and with a triad, restructure assemblies, expand compound parts, and export the result or the selection | From the owner's list of 14 items after testing iteration 2 by hand (2026-10-18), settled in four question rounds. Every recommended option was taken except the fixtures' (D156: both). |
+| D143 | Dropped | **Users and auth, sectioning, keeping measurements, and editing geometry are dropped**, not deferred; keeping a selection is folded into exporting it (D155) | The owner's list. All were out of scope in iterations 1 and 2 (§1). |
+| D144 | What edits change | **Placements and structure, never shapes**: objects are moved, re-parented, copied, pasted, deleted, grouped and expanded; their faces, edges and solids stay as imported | **Supersedes D14** (a display-only tree, whole-model delete). Dropping geometry editing (D143) is read as the shapes staying read-only. |
+| D145 | Edits' lifecycle | **Undoable, kept and exported**: each edit is a step in the undo history (D84); edits are kept across a refresh with their model (D82); a BREP model's STEP and BREP exports write the edited assembly, and GLB and STL export the scene as shown | **Amends D82 and D86** ("as imported"). The facade has to edit or rebuild its XCAF document (a WASM rebuild, M15). Chosen over edits lost on a refresh, or kept on screen only. |
+| D146 | Selection modes | **A three-way switch: Model, Object, Feature.** Model selects whole models; Object selects a placed part as M6 does, with sub-assemblies from the tree; Feature selects BREP faces, edges and vertices (vertex, then edge, then face, D107), Ctrl adding and removing, with a selected feature's values in the panel. Measure always picks features | **Amends D77.** Chosen over Feature mode with face, edge and vertex filters, and over Object mode selecting the topmost component, with a double-click to go down a level. |
+| D147 | Measuring (iteration 3) | **One reference, one live result**: the first click, or a feature selected when Measure turns on, is the reference, its own value drawn on it in 3D (a length along an edge, Ø on a circle, an area on a face) and listed in the panel; each later click measures the reference against what it picked, replacing the previous result; Esc clears it and turns Measure off. Nothing is kept: no list, no Clear, and measurements leave the undo history | **Supersedes D101 and D108; amends D80 (a single entity is drawn too), D84 and assumption 12.** A single pick's values were already listed in the panel (D80) but not drawn, and every pair was kept, so measurements stacked. |
+| D148 | Placement fields | **X, Y, Z in millimetres and Rx, Ry, Rz in degrees, as fixed angles** (about the frame's fixed X, then Y, then Z: R = Rz · Ry · Rx), in a **Local, Parent or World** frame. Parent and World show the pose of the object's origin in that frame, and typing sets it; a pose in Local is always zero, so there the fields move or rotate the object by the values about its own axes. Applied on Enter, each an undoable step | Chosen over relative moves in every frame, and over a Local pose measured from the placement as imported. |
+| D149 | Triad | **A Move tool** (a toolbar toggle and key, like Measure) shows three's `TransformControls` at the selected object's origin: arrows and planes translate, rings rotate, a key switches, and it's oriented by the frame chosen for the fields, which follow the drag. One object (a part, sub-assembly or model) at a time; each drop is one undo step | `TransformControls` ships with three r186 (MIT), so there's no new dependency; it has local and world space, and snapping. Chosen over a triad on every selection, and over a custom one with arrows and rings together. |
+| D150 | Origin frames | **A toggle, off by default**, draws XYZ axes (red, green, blue, a constant size on screen) at the origin of each selected part, sub-assembly or model | The scene carries only each part's world matrix (`getSceneJson`, §6.1), so the facade has to report every node's placement (a WASM rebuild, M13). |
+| D151 | Moving in the hierarchy | **Tree drag, or Cut then Paste, keeping the world position**: a node dropped on an assembly node becomes its child, with its local placement worked out again so it doesn't move in 3D. Within one model. **New assembly** groups the selection under a new node | Chosen over keeping the local placement, and over moves between models (BREP shapes sent between workers, as D102 does for measuring). |
+| D152 | Copy, paste, delete and the context menu | **Instances in place**: Paste adds the copied objects as new instances sharing their geometry, under the target assembly or else their original's parent, in the same place, and selects them. Delete removes objects from their model without asking, since it can be undone; deleting a whole model still asks (D29). A right click that doesn't drag (4 px, as D77) opens a context menu in the viewport and the tree; Ctrl+C, Ctrl+X, Ctrl+V and Delete do the same, where D99's keys work | **Amends D16**: a right click opens the menu, and a right drag still rotates. Chosen over pasting with an offset, and over a menu in the viewport only. |
+| D153 | Mesh models (iteration 3) | **Edited too, apart from BREP-only features**: Model and Object selection, moving, the triad, origin frames, hierarchy moves, copy, paste and delete work on mesh models' nodes, GLB and STL export them, and they're kept. Feature selection and Expand are BREP only, and measuring a mesh stays approximate (D81) | Three's objects already carry their transforms. |
+| D154 | Expand | **OCCT's `XCAFDoc_Editor::Expand`** (DRAW's `XExpand`), as a command: **Expand** in a compound part's context menu, and **Expand all** in a model's item menu, turn each part whose shape is a compound (several solids, say) into a sub-assembly with one part per solid, keeping the names and colours the file gives them. An edit like any other (D145), offered only where there's something to split | The owner asked whether an Expand operation is possible: `XCAFDoc_Editor` is in OCCT 8.0.1, as the libcascade toolchain's symbol catalogue lists it. Chosen over an exploded view, expanding the whole tree, and expanding every compound part on import. |
+| D155 | Exporting part of a model | **The selection, with its structure**: when it lies in one BREP model, the Export menu also offers STEP and BREP of the selected objects with their subtrees, under their assembly path from the root (unselected siblings left out), named, coloured and placed as in the model | **Amends D86**, and replaces keeping a selection (D143). Selections across models stay GLB and STL. Chosen over top-level parts at their world placements, and over one STEP from several models. |
+| D156 | Iteration 3 fixtures | **A generator and a real assembly**: a licence-free generated STEP of a deep assembly (several levels, sub-assemblies both reused and unique, names, colours, compound parts for Expand), small and committed for the tests and large on demand (as D44, D62); and one real, publicly available assembly whose licence allows it, downloaded on demand into the git-ignored `large/` folder and never committed, proposed at M12's start for the owner's approval | The owner chose both over either alone. |
+| D157 | Iteration 3 milestones | **Five, foundation first**: M12 selection modes, the context menu, the new Measure and the fixtures; M13 origin frames and moving (a WASM rebuild); M14 assembly editing; M15 exporting edits and the selection, and Expand (a WASM rebuild); M16 hardening | Chosen over writing each milestone's edits into STEP as it goes, and over the editing milestones first. |
+| D158 | Iteration 3 process | **As iteration 2 (D92)**: each milestone starts with its own short question round, recorded here and committed first on its branch; then work straight through, stopping only for contradictions; the manual checklist in the built-in browser; a draft PR; the owner tests by hand and merges. This plan is M12's first commit (as D91) | |
+| D159 | Plan document | **Extended again** (as D76): §1 gains iteration 3's goal and criteria, decisions continue at D142, milestones M12–M16 join §10, and §3–§9 are updated as things land | |
 
 ---
 
@@ -877,6 +944,45 @@ Branch `feature/m11-loose-ends`, from `main` after [JRB-90/j3d#13](https://githu
 - **Tests:** viewer Vitest 175 (2 new, `occt-output.test.ts`); OCCT 27, with the opt-in large test now exporting too; client 163; host 7; E2E 73 with `StressTests` (opt-in) and the app bar check at 900 px. Locally: Chromium 71 passed, and Firefox in Docker 71 passed (3 min 56 s), the opt-in large-file and stress tests skipped in each.
 - **CI:** run 39141191534, dispatched on the branch with `large_fixtures=200,curved-100`, was green: E2E 73 in each browser, 72 passed (the stress test skipped). On the 4-core runner Firefox exported the 200 MB file as STEP (203 MB) in 23.7 s and BREP in 2.6 s, and `curved-100mb.step` in 9.2 and 2.1 s, each Cancel landing in 0.2 s; Chromium, whose test classes run in parallel, took 32.0 and 2.9 s, and 8.5 and 1.9 s, with Cancel in 0.1–0.3 s. The PR's run 39141177681 passed the build, unit tests and Chromium, but Firefox failed `The_wheel_zooms_towards_the_view_centre_in_both_projections` once ("the wheel dollies in": a wheel after switching to perspective didn't move the camera). It passed in the dispatched run of the same commit, and the PR's final run 39147026862 was green in both browsers, but it failed again in the close-out PR's run 39148311812, so it wasn't a one-off. **Cause:** a click on the projection toggle reaches the viewer through Blazor, and the camera is already at rest, so the test's wait for rest could return before the switch; it then read the "before" camera, or turned the wheel, while the view was still orthographic. CI's Firefox, the slowest runner, lost that race. **Fixed in the close-out PR** ([JRB-90/j3d#15](https://github.com/JRB-90/j3d/pull/15)): the five toggle clicks in `NavigationTests` and `PersistenceTests` go through `SetProjectionAsync`, which waits for the viewer's projection to change, then for the camera to rest.
 
+### Iteration 3 milestones (planned)
+
+Planned on 2026-10-18 (D142–D159, five milestones by D157). Each starts with its own short question round (D158), so a scope below can still change; what's decided then is recorded in §2 and here.
+
+### M12 — Selection modes, context menu and measurement
+
+- **Selection modes (D146):** a Model | Object | Feature switch in the toolbar, with keys. Feature selection reuses the Measure tool's entity picking (`ModelParts.entityAt`, D107), its highlights and the worker's `measureEntity` for the panel. No WASM change.
+- **Measure (D147):** the reference and one live result instead of kept pairs, with the reference's own value drawn on it (a dimension along an edge, a diameter on a circle, an area on a face); Esc ends the tool. `SceneState` drops the kept measurements, Clear and `MeasurementsStep`, and D108's lifetime rules go with them.
+- **Context menu (D152):** a right click within 4 px opens a menu at the pointer, from the viewport (on the part under it, which it selects first if it isn't selected) and from tree nodes, holding today's commands; M13–M15 add theirs.
+- **Fixtures (D156):** the hierarchical assembly generator (sizes as `fixtures:large`), a small committed assembly, and the download script for the real assembly the owner approves.
+- **Exit:** M12's criteria in §1, in E2E (Chromium locally, Firefox in Docker and CI) and bUnit.
+
+### M13 — Origin frames and moving
+
+- **Facade (a WASM rebuild):** every node's placement in the scene, so assemblies have frames and a placement can be expressed in its parent's frame (D148, D150).
+- **Viewer:** placements that change: batched ones through `setMatrixAt`, instanced ones in their instance matrices, and their merged edges (already in model space) rewritten in each placement's range (D94); mesh nodes through their `Object3D`s. The origin frames; the Move tool with `TransformControls`, camera-controls paused while a handle is dragged (R26); hover, picking, measuring, Fit all and the GLB and STL exports following the new placements.
+- **Blazor:** the Move tool and its key, the fields with their frame switch, the Origin frames toggle, moves as undo steps, and Move in the context menu.
+- **Store:** moves kept with their model and applied again after a refresh (D145).
+- **Exit:** M13's criteria in §1, with moving a large sub-assembly of the generated assembly timed (R23).
+
+### M14 — Assembly editing
+
+- **Blazor:** a tree that can change (`ModelTree` is built once, from the import); drag and drop onto assembly nodes (`MudTreeView` has none of its own, so this is checked at M14's start); Cut, Copy, Paste, Delete and New assembly in the context menu and on keys, each an undo step (D151, D152).
+- **Viewer:** placements added and removed: new instances in batches, which may have to grow past their capacity (R23), and in instanced meshes, with their edges and highlights; mesh nodes cloned and removed (D153).
+- **Store:** edits kept and applied again after a refresh; a model whose kept edits no longer apply loads as imported, with a warning (R25).
+- **Exit:** M14's criteria in §1.
+
+### M15 — Exporting edits, and Expand
+
+- **Facade (a WASM rebuild):** the edits applied to the model's XCAF document, or a new document built from J3D's tree, for STEP and BREP (D145); a document of the selection with its assembly path (D155); `XCAFDoc_Editor::Expand` on the chosen parts, with the new parts' meshes extracted and sent to the viewer (D154). The size change recorded in §6.1, as R19.
+- **Viewer and Blazor:** STEP and BREP in the Export menu for a selection in one BREP model; Expand and Expand all as edits.
+- **Exit:** M15's criteria in §1, with round trips (export, import again, compare the tree, placements, names and colours) in Vitest with real OCCT and in E2E, as M9's (R24).
+
+### M16 — Hardening
+
+- The large generated assembly and the real one through everything iteration 3 added: selecting in each mode, moving, editing, restoring a model with its edits, and exporting, each timed, and whatever crosses a line fixed (D63's method).
+- The README (controls, selection modes, the Move tool, editing, limits), `docs/development.md` and `THIRD-PARTY-NOTICES.md` (if anything new ships) brought up to date; a CI dispatch with large fixtures.
+- **Exit:** every iteration 3 criterion in §1 is ticked.
+
 ---
 
 ## 11. Risks and spikes
@@ -905,12 +1011,16 @@ Branch `feature/m11-loose-ends`, from `main` after [JRB-90/j3d#13](https://githu
 | R20 | **Undoing a delete takes as long as the import**: memory is freed at delete (D84), so a 200 MB STEP takes about 30 s to come back | Shown as an ordinary import, with progress and cancel; documented in the README. **As built (M8):** so does a reload, and the README says both. |
 | R21 | **Order-independent transparency** needs float render targets (WebGL2 `EXT_color_buffer_float`), touches every surface material (batched, instanced, mesh), and may be slow under CI's software renderers | Fall back to today's sorted blending where float targets are missing; measured in M10 (D90). **As built (M10):** the fallback is in (D130), but no browser J3D is tested in lacks the extensions, CI's software renderers included. A frame with translucent parts costs a second, depth-only draw of the opaque surfaces and a full-screen pass; one without draws as before. |
 | R22 | **`ubuntu-26.04` is unproven for headed Firefox under Xvfb** (D47, D51), which the Firefox E2E job relies on | Dispatch Firefox runs on 26.04 side by side before switching the pin (M10, D88). **Resolved in M10:** every job passed on 26.04 (run 39121436386), Firefox headed under Xvfb included, so both workflows are pinned to it (D131). |
+| R23 | **Editing large models**: moving a sub-assembly of thousands of parts rewrites as many batch matrices and their merged edges (§6.3), and pasted copies may grow batches past their capacity, which means rebuilding them | Timed on the large generated assembly in M13 and M14 against D63's ~200 ms line; edges rewritten only in the moved placements' ranges (D94); batches grown in steps. |
+| R24 | **Exports have to match the edited tree**: STEP's structure, placements, shared instances and colours are written from J3D's edits through XCAF, and a mismatch silently writes the wrong file | Round trips in Vitest with real OCCT and in E2E (M15), as M9's export tests: the tree, placements, colours and counts compared after importing the file again. |
+| R25 | **Kept edits have to find their nodes again**: they're recorded against node ids, which come from the facade's walk of the file, so they hold only while the file and the walk give the same tree (D117) | The same file always gives the same tree. A model whose kept edits don't apply loads as imported, with a warning in its item (M14). |
+| R26 | **Two drags on one canvas**: the triad's handles and camera-controls both take pointer drags, and a left drag pans (D16) | camera-controls paused while a handle is hovered or dragged (`TransformControls`' `dragging-changed`); E2E drags the handles with the real mouse (M13). |
 
 ---
 
 ## 12. Remaining assumptions
 
-All eight open questions from the first draft are answered (D28–D36). These smaller defaults follow from those answers (5–7 from M2, 8–14 from planning iteration 2) and are open to change:
+All eight open questions from the first draft are answered (D28–D36). These smaller defaults follow from those answers (5–7 from M2, 8–14 from planning iteration 2, 15–17 from planning iteration 3) and are open to change:
 
 1. **Cancel and dismiss don't confirm.** Only deleting a *loaded* model shows the confirmation dialog (D29). Cancelling an in-progress import and dismissing a failed entry are immediate, since there's nothing loaded to lose.
 2. **Home = isometric + fit all.** Clicking a view cube region keeps the current zoom (D31); the Home button also re-frames everything.
@@ -923,6 +1033,9 @@ All eight open questions from the first draft are answered (D28–D36). These sm
 9. **Isolate and Show all act on the whole scene.** Isolate hides every part outside the selection, in every model; Show all shows every part of every model.
 10. **Hidden means out of the way.** Hidden parts can't be picked or measured, and Fit all and the GLB/STL export leave them out.
 11. **The undo history lives in the tab.** It holds the last 50 steps, isn't stored, and starts empty after a refresh, even though the models come back (D82); the files of models deleted before the refresh are dropped then.
-12. **Measurements stay until cleared**, from the panel or with Esc in the Measure tool, and aren't stored across a refresh.
+12. **Measurements stay until cleared**, from the panel or with Esc in the Measure tool, and aren't stored across a refresh. **Changed by D147** (iteration 3): a measurement lasts until the next click, or Esc.
 13. **Lengths in millimetres to 3 decimals, angles in degrees to 2**; mesh measurements are prefixed "≈". STL and OBJ carry no units, so their values are taken as millimetres too (the CAD export convention, as with Z-up in §6.2). glTF is in metres by its specification, so its measurements are converted to millimetres, though the scene itself still isn't rescaled (D105). Exports are all in millimetres (D118), and J3D's own GLB says so (D123).
 14. **Zoom-to-cursor is for the wheel and pinch only.** Fit all, Home and the view cube still frame the scene about its centre.
+15. **Rotations turn about the object's origin**, typed or dragged, along the chosen frame's axes (D148, D149).
+16. **Deleting objects doesn't ask**, since it can be undone; deleting a whole model still does (D29, D152).
+17. **Edits act on the selection**, which never holds hidden parts (D98); an assembly's hidden parts move, copy and delete with it.
