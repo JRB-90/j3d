@@ -4,6 +4,7 @@ using J3D.Web.Client.Models;
 using J3D.Web.Client.State;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.JSInterop;
 using MudBlazor;
 
 namespace J3D.Web.Client.Components;
@@ -14,10 +15,13 @@ namespace J3D.Web.Client.Components;
 /// and its tree, collapsed until asked for and loaded a level at a time (D53); if it failed, why.
 /// Since M6 the model and each tree node have an eye (open, closed or half, D96), clicking a node
 /// selects its parts (Ctrl+click adds or removes, D77), and a part picked in 3D opens the tree down to
-/// it and scrolls it into view.
+/// it and scrolls it into view. Since M9 a BREP model's download icon saves it as STEP or BREP, with
+/// the export's progress and Cancel in the item (D125).
 /// </summary>
-public sealed partial class ModelListItem(SceneState scene, ViewerSession session) : IDisposable
+public sealed partial class ModelListItem(SceneState scene, ViewerSession session, ISnackbar snackbar) : IDisposable
 {
+    private static readonly BrepExportFormat[] BrepFormats = [BrepExportFormat.Step, BrepExportFormat.Brep];
+
     /// <summary>
     /// Nodes shown per level before a "Show more" row. MudTreeView renders every node it's given:
     /// a level of about 1,400 blocked the page for 0.6 s (so a 10,000-part level for several), while
@@ -73,6 +77,10 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         _ => "Starting…",
     };
 
+    private static string ExportText(ModelExport export) => export.Fraction is { } fraction
+        ? $"Exporting {export.Format.DisplayName} · {Math.Floor(fraction * 100).ToString(CultureInfo.InvariantCulture)}%"
+        : $"Exporting {export.Format.DisplayName}…";
+
     private static string StatsText(ModelLoadedInfo info) => string.Join(
         " · ",
         DisplayFormat.Bytes(info.MemoryBytes),
@@ -93,6 +101,40 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     public void Dispose() => scene.RevealRequested -= OnRevealRequested;
 
     private Task RemoveAsync() => OnRemove.InvokeAsync(Model);
+
+    /// <summary>
+    /// Saves the model as STEP or BREP: the item shows the export until it ends, the browser saves the
+    /// file, and a failure goes to a snackbar (D125). A cancelled export, or a deleted model's, says nothing.
+    /// </summary>
+    private async Task ExportAsync(BrepExportFormat format)
+    {
+        if (Model.Export is not null)
+        {
+            return;
+        }
+
+        var id = Model.Id;
+        var fileName = Model.Summary.FileName;
+        scene.SetExport(id, format);
+        try
+        {
+            var outcome = await session.ExportModelAsync(id, format);
+            if (outcome?.Error is { } error)
+            {
+                snackbar.Add($"Couldn't export {fileName} as {format.DisplayName}: {error}", Severity.Error, static options => options.VisibleStateDuration = 10_000);
+            }
+        }
+        catch (JSException exception)
+        {
+            snackbar.Add($"Couldn't export {fileName} as {format.DisplayName}: {exception.Message}", Severity.Error, static options => options.VisibleStateDuration = 10_000);
+        }
+        finally
+        {
+            scene.SetExport(id, null);
+        }
+    }
+
+    private Task CancelExportAsync() => session.CancelExportAsync(Model.Id);
 
     private void ToggleModelVisibility() => scene.ToggleModelVisibility(Model.Id);
 

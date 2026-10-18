@@ -1,9 +1,11 @@
+import { afterPaint, saveFile } from './download';
 import { fileInputAccept, kindOf } from './formats';
 import { filesFromDataTransfer, filesFromInput } from './import/batch-files';
 import { ModelManager } from './import/model-manager';
+import type { BrepExportFormat } from './import/protocol';
 import { createRunners } from './import/runners';
 import type { BatchFile } from './import/sidecars';
-import type { ModelId } from './import/types';
+import { ExportCancelledError, type ModelId } from './import/types';
 import type { DotNetObjectReference } from './interop';
 import { forwardModelEvents } from './model-events';
 import { ModelStore } from './store/model-store';
@@ -11,12 +13,23 @@ import type { StoredModel, StoredScene } from './store/types';
 import { createTestHookControls, installTestHook, isTestHookEnabled } from './test-hook';
 import type { Projection } from './view/camera-math';
 import { installDropTarget } from './view/drop-target';
+import { baseName } from './view/export-scene';
+import type { MeshExportFormat } from './view/mesh-export';
 import { Viewer } from './view/viewer';
 
 export { detectFormat, fileInputAccept, kindOf, supportedExtensions } from './formats';
 export type { ModelFormat, ModelKind } from './formats';
 export type { Projection } from './view/camera-math';
 export type { StoredModel, StoredScene } from './store/types';
+export type { BrepExportFormat } from './import/protocol';
+export type { MeshExportFormat } from './view/mesh-export';
+
+/** How an export ended (M9): the file saved, cancelled, or why it failed. Mirrors J3D.Web.Client/Interop/ExportOutcome.cs. */
+export interface ExportOutcome {
+  fileName?: string;
+  cancelled?: boolean;
+  error?: string;
+}
 
 /** Mirrors J3D.Web.Client/Interop/ViewerCapabilities.cs. */
 export interface ViewerCapabilities {
@@ -54,6 +67,12 @@ export interface ViewerHandle {
   setMeasureMode(active: boolean): void;
   /** Shows exactly these kept measurements (D108). */
   setMeasurements(shown: string[]): void;
+  /** Saves the visible scene, or the selection, as GLB or STL: a download (M9, D119, D120). */
+  exportMesh(format: MeshExportFormat, selection: boolean): Promise<ExportOutcome>;
+  /** Saves a BREP model as imported, as STEP or BREP, reporting progress to .NET's `OnExportProgress` (D83, D125). */
+  exportModel(id: string, format: BrepExportFormat): Promise<ExportOutcome>;
+  /** Stops a model's STEP or BREP export, whose `exportModel` then ends cancelled. */
+  cancelExport(id: string): void;
   dispose(): void;
 }
 
@@ -131,6 +150,8 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     },
   });
   const unsubscribeDotnet = forwardModelEvents(models, dotnet);
+  // STEP and BREP exports in progress, by model (M9).
+  const exports = new Map<ModelId, AbortController>();
   const flushStore = () => store.flush();
   window.addEventListener('pagehide', flushStore);
 
@@ -227,7 +248,57 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     setMeasurements(shown) {
       view?.setMeasurements(shown);
     },
+    async exportMesh(format, selection) {
+      if (!view) {
+        return { error: "This browser can't show models, so there's nothing to export." };
+      }
+      try {
+        await afterPaint();
+        const { fileName, bytes } = await view.exportMesh(format, selection);
+        saveFile(bytes, fileName);
+        return { fileName };
+      } catch (error) {
+        console.error('J3D: the export failed.', error);
+        return { error: messageOf(error) };
+      }
+    },
+    async exportModel(id, format) {
+      const model = models.models.find(({ summary }) => summary.id === id)?.model;
+      const exporter = model?.content.kind === 'brep' ? model.content.exporter : undefined;
+      if (!model || !exporter) {
+        return { error: "The model isn't loaded." };
+      }
+      exports.get(id)?.abort();
+      const controller = new AbortController();
+      exports.set(id, controller);
+      try {
+        if (testControls?.holdExports()) {
+          await new Promise((resolve) => controller.signal.addEventListener('abort', resolve, { once: true }));
+        }
+        const bytes = await exporter.export(format, {
+          signal: controller.signal,
+          onProgress: (fraction) => call(dotnet, 'OnExportProgress', id, fraction),
+        });
+        const fileName = `${baseName(model.summary.fileName)}.${format}`;
+        saveFile(bytes, fileName);
+        return { fileName };
+      } catch (error) {
+        if (error instanceof ExportCancelledError) {
+          return { cancelled: true };
+        }
+        console.error(`J3D: exporting ${model.summary.fileName} failed.`, error);
+        return { error: messageOf(error) };
+      } finally {
+        if (exports.get(id) === controller) {
+          exports.delete(id);
+        }
+      }
+    },
+    cancelExport(id) {
+      exports.get(id)?.abort();
+    },
     dispose() {
+      exports.forEach((controller) => controller.abort());
       removeTestHook?.();
       removeDropTarget();
       for (const detach of [...inputs.values()]) {
@@ -253,6 +324,10 @@ export async function copyText(text: string): Promise<void> {
 /** Scrolls an element into view if it isn't, e.g. a tree node a 3D pick revealed (D96). */
 export function scrollIntoView(selector: string): void {
   document.querySelector(selector)?.scrollIntoView({ block: 'nearest' });
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function call(dotnet: DotNetObjectReference, method: string, ...args: unknown[]): void {

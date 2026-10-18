@@ -25,6 +25,26 @@
                            OnClick="ToggleModelVisibility"
                            data-visibility="@Model.Visibility().ToString().ToLowerInvariant()"
                            data-testid="model-eye" />
+            @* A BREP model saves itself as imported (M9, D83, D119). *@
+            @if (Model.Summary.Kind == ModelKind.Brep)
+            {
+                <MudMenu Icon="@Icons.Material.Outlined.FileDownload"
+                         Size="Size.Small"
+                         Dense="true"
+                         Disabled="@(Model.Export is not null)"
+                         AnchorOrigin="Origin.BottomRight"
+                         TransformOrigin="Origin.TopRight"
+                         AriaLabel="@($"Export {Model.Summary.FileName}")"
+                         title="Export"
+                         data-testid="export-model">
+                    @foreach (var format in BrepFormats)
+                    {
+                        <MudMenuItem Label="@format.DisplayName"
+                                     OnClick="@(() => ExportAsync(format))"
+                                     data-testid="@($"export-{format.ToString().ToLowerInvariant()}")" />
+                    }
+                </MudMenu>
+            }
             <MudIconButton Icon="@Icons.Material.Outlined.Delete"
                            Size="Size.Small"
                            title="Delete"
@@ -80,6 +100,27 @@
                     </MudTooltip>
                 }
             </div>
+            @if (Model.Export is { } export)
+            {
+                <div class="j3d-model-detail" data-testid="model-export">
+                    <span class="j3d-model-export-text" data-testid="model-export-status">@ExportText(export)</span>
+                    <MudButton Variant="Variant.Text"
+                               Size="Size.Small"
+                               Color="Color.Primary"
+                               OnClick="CancelExportAsync"
+                               aria-label="@($"Cancel exporting {Model.Summary.FileName}")"
+                               data-testid="cancel-export">
+                        Cancel
+                    </MudButton>
+                </div>
+                <MudProgressLinear Color="Color.Primary"
+                                   Size="Size.Small"
+                                   Rounded="true"
+                                   Value="@((export.Fraction ?? 0) * 100)"
+                                   Indeterminate="@(export.Fraction is null)"
+                                   Class="j3d-model-progress"
+                                   data-testid="export-progress" />
+            }
             @if (Model.NotKept is { } notKept)
             {
                 <div class="j3d-model-detail j3d-model-not-kept" data-testid="model-not-kept">Not kept: @notKept</div>

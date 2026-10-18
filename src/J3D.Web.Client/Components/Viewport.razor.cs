@@ -144,6 +144,10 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     [JSInvokable]
     public void OnMeasureFailed(string message) => snackbar.Add($"Couldn't measure that: {message}", Severity.Warning);
 
+    /// <summary>How far a model's STEP or BREP export is (D125): a fraction, or null while OCCT writes a STEP file.</summary>
+    [JSInvokable]
+    public void OnExportProgress(ModelId id, double? fraction) => scene.ReportExportProgress(id, fraction);
+
     /// <summary>A loaded model's files couldn't be kept for the next visit (D115); it stays loaded.</summary>
     [JSInvokable]
     public void OnModelNotKept(ModelId id, bool full)

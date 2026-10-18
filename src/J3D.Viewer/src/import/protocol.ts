@@ -20,7 +20,22 @@ export interface FailedMessage {
 }
 
 /** Main thread → model worker (one per BREP model; it keeps the model alive until terminated). */
-export type ModelWorkerRequest = ImportRequestMessage | MeasureRequest;
+export type ModelWorkerRequest = ImportRequestMessage | MeasureRequest | ExportRequest;
+
+/** What a BREP model can be saved as (M9, D83). */
+export type BrepExportFormat = 'step' | 'brep';
+
+/**
+ * Saving the whole model (M9, D83, D125). It's answered in turn with the queries. `cancel`, when the
+ * page is cross-origin isolated, is a shared Int32 flag the page sets to 1 to stop OCCT mid-export,
+ * since the worker can't take a message while OCCT runs.
+ */
+export interface ExportRequest {
+  type: 'export';
+  id: number;
+  format: BrepExportFormat;
+  cancel?: SharedArrayBuffer;
+}
 
 /**
  * A measurement query to a loaded model's worker (M7, D80, D102). Each carries an id its answer
@@ -49,6 +64,10 @@ export type ModelWorkerResponse =
   | { type: 'held' }
   | { type: 'measured'; id: number; result: unknown }
   | { type: 'measureFailed'; id: number; message: string }
+  /** Export progress: a fraction, or null while OCCT writes the STEP file (it can't tell how far it is). */
+  | { type: 'exportProgress'; id: number; fraction: number | null }
+  | { type: 'exported'; id: number; bytes: ArrayBuffer }
+  | { type: 'exportFailed'; id: number; cancelled: boolean; message: string }
   | {
       type: 'loaded';
       scene: ImportedScene;

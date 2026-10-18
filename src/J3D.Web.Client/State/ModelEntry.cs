@@ -19,6 +19,9 @@ public enum PartVisibility
     Mixed,
 }
 
+/// <summary>A STEP or BREP export of a loaded model in progress (D125): the format, and how far it is (0–1), or null when OCCT can't tell.</summary>
+public sealed record ModelExport(BrepExportFormat Format, double? Fraction);
+
 /// <summary>
 /// One model in the list. Transitions are pure: each returns the entry it leads to, or this entry
 /// when it doesn't apply (docs/plan.md §6.4).
@@ -63,6 +66,9 @@ public sealed record ModelEntry(ModelSummary Summary)
     /// <summary>Imported again from its kept files, after a reload or an undone delete (M8).</summary>
     public bool IsRestored { get; private init; }
 
+    /// <summary>The STEP or BREP export in progress (M9, D125), or null. A model coming back from a delete has none.</summary>
+    public ModelExport? Export { get; private init; }
+
     public ModelId Id => Summary.Id;
 
     /// <summary>Queued or importing: removing it cancels the import.</summary>
@@ -87,6 +93,10 @@ public sealed record ModelEntry(ModelSummary Summary)
             Hidden = Hidden.IsEmpty ? Hidden : Hidden.Where(tree.IsPart),
         };
     }
+
+    /// <summary>An export started, moved on or ended (null). Only a loaded model exports.</summary>
+    public ModelEntry WithExport(ModelExport? export) =>
+        export == Export || (export is not null && Status != ModelStatus.Loaded) ? this : this with { Export = export };
 
     /// <summary>The model's files couldn't be kept: <paramref name="reason"/> says why (D115).</summary>
     public ModelEntry AsNotKept(string reason) => NotKept == reason ? this : this with { NotKept = reason };

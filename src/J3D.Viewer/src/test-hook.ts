@@ -45,6 +45,8 @@ export interface TestHook {
   readonly input: HTMLInputElement;
   /** Hold OCCT imports after instantiation until they are cancelled. */
   holdImports: boolean;
+  /** Hold STEP and BREP exports, before their worker starts, until they are cancelled (M9). */
+  holdExports: boolean;
   models(): TestModel[];
   remove(id: string): boolean;
   liveWorkers(): number;
@@ -100,6 +102,8 @@ export interface TestHookControls {
   holdImports(): boolean;
   /** Called by the OCCT runner when a held import is waiting. */
   onHeld(fileName: string): void;
+  /** Read by each STEP or BREP export. */
+  holdExports(): boolean;
 }
 
 declare global {
@@ -113,6 +117,7 @@ export function createTestHookControls(): TestHookControls & { hook?: TestHook }
   const controls: TestHookControls & { hook?: TestHook } = {
     holdImports: () => controls.hook?.holdImports ?? false,
     onHeld: (fileName) => controls.hook?.events.push({ type: 'held', fileName }),
+    holdExports: () => controls.hook?.holdExports ?? false,
   };
   return controls;
 }
@@ -146,6 +151,7 @@ export function installTestHook(
     events,
     input,
     holdImports: false,
+    holdExports: false,
     models: () => manager.models.map(toTestModel),
     remove: (id) => manager.remove(id),
     liveWorkers: () => liveWorkers.count,

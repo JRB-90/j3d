@@ -28,6 +28,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import type { BrepMeasurer, LoadedModel, ModelId, TreeNode, Vector3Tuple } from '../import/types';
 import type { CameraSnapshot } from '../store/types';
 import { buildBrepObject } from './brep-object';
+import { buildExportScene, exportFileName, type ExportSource } from './export-scene';
 import {
   clippingPlanes,
   fitBox,
@@ -47,6 +48,7 @@ import {
 import { MaterialCache } from './materials';
 import { MeasureTool, type MeasureModel } from './measure';
 import type { MeasureInfo } from './measure-format';
+import type { MeshExportFormat } from './mesh-export';
 import { HighlightMaterials, MeshParts, type Highlight, type HighlightKind, type ModelParts, type ScreenSpace } from './parts';
 import { ViewCube } from './view-cube';
 import { HomeRegion, regionView, type ViewRegion } from './view-regions';
@@ -127,6 +129,9 @@ interface SceneModel {
   selected: number[];
   selection?: Highlight | undefined;
   tree: readonly TreeNode[];
+  /** Its file name and geometry, for exports (M9). */
+  name: string;
+  content: ExportSource['content'];
   /** BREP models' measurement channel (M7). */
   measure?: BrepMeasurer | undefined;
   prototypes?: MeasureModel['prototypes'];
@@ -336,6 +341,8 @@ export class Viewer {
         hidden: new Set(),
         selected: [],
         tree: model.tree,
+        name: model.summary.fileName,
+        content: { kind: 'brep', scene: model.content.scene },
         measure: model.content.measure,
         prototypes: model.content.scene.prototypes,
         unitScale: 1,
@@ -344,8 +351,19 @@ export class Viewer {
     } else {
       model.content.root.updateMatrixWorld(true);
       const parts = new MeshParts(model.content.nodes, model.tree);
-      // glTF is in metres by its specification; STL and OBJ are taken as millimetres (D105, assumption 13).
-      entry = { object: model.content.root, bounds, parts, hidden: new Set(), selected: [], tree: model.tree, unitScale: model.summary.format === 'gltf' ? 1000 : 1 };
+      entry = {
+        object: model.content.root,
+        bounds,
+        parts,
+        hidden: new Set(),
+        selected: [],
+        tree: model.tree,
+        name: model.summary.fileName,
+        content: { kind: 'mesh', nodes: model.content.nodes, sceneRoot: model.summary.format === 'gltf' },
+        // glTF is in metres by its specification, unless it's J3D's own (D123); STL and OBJ are taken as
+        // millimetres (D105, assumption 13).
+        unitScale: model.content.unitScale ?? 1,
+      };
     }
     this.models.set(model.summary.id, entry);
     this.scene.add(entry.object);
@@ -416,6 +434,33 @@ export class Viewer {
     }
     this.controls.update(0);
     this.requestRender();
+  }
+
+  /**
+   * The visible scene, or only the selection, as a GLB or STL file (M9, D83, D119), in millimetres
+   * and Z-up (D118, D122), named after its model when it all comes from one (D128). Rejects when
+   * there's nothing to save.
+   */
+  async exportMesh(format: MeshExportFormat, selection: boolean): Promise<{ fileName: string; bytes: Uint8Array<ArrayBuffer> }> {
+    const sources: ExportSource[] = [...this.models.values()].map(({ name, tree, content, hidden, selected, unitScale }) => ({
+      name,
+      tree,
+      content,
+      hidden,
+      selected,
+      unitScale,
+    }));
+    const built = buildExportScene(sources, selection, format === 'glb' ? 'gltf' : 'stl');
+    try {
+      if (built.models.length === 0) {
+        throw new Error(selection ? 'Nothing is selected.' : 'There are no visible parts to export.');
+      }
+      const { writeMeshFile } = await import('./mesh-export');
+      const bytes = await writeMeshFile(built.scene, format, this.renderer);
+      return { fileName: exportFileName(built.models, selection, format === 'glb' ? 'glb' : 'stl'), bytes };
+    } finally {
+      built.dispose();
+    }
   }
 
   /** Frames every visible part without changing the view direction (button and `F` key; D78). */

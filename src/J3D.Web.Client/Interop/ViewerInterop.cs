@@ -89,6 +89,20 @@ public sealed class ViewerInterop : IAsyncDisposable
         return _viewer.InvokeVoidAsync("setMeasurements", (object)ids); // one argument, not one per id
     }
 
+    /// <summary>Saves the visible scene, or only the selection, as GLB or STL: a browser download (M9, D119, D120).</summary>
+    public ValueTask<ExportOutcome> ExportMeshAsync(MeshExportFormat format, bool selection) =>
+        _viewer.InvokeAsync<ExportOutcome>("exportMesh", format, selection);
+
+    /// <summary>
+    /// Saves a BREP model as imported, as STEP or BREP (D83). Its progress arrives through
+    /// <c>OnExportProgress</c> until it ends (D125).
+    /// </summary>
+    public ValueTask<ExportOutcome> ExportModelAsync(ModelId id, BrepExportFormat format) =>
+        _viewer.InvokeAsync<ExportOutcome>("exportModel", id.Value, format);
+
+    /// <summary>Stops a model's STEP or BREP export, which then ends cancelled.</summary>
+    public ValueTask CancelExportAsync(ModelId id) => _viewer.InvokeVoidAsync("cancelExport", id.Value);
+
     /// <summary>Copies text to the clipboard: a measurement's value (D87).</summary>
     public ValueTask CopyTextAsync(string text) => _module.InvokeVoidAsync("copyText", text);
 

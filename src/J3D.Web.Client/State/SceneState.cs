@@ -73,6 +73,10 @@ public sealed class SceneState
     public bool CanIsolate => HasSelection && Models.Any(model =>
         model.Tree is { } tree && tree.Parts.Any(part => !model.Hidden.Contains(part) && !model.Selected.Contains(part)));
 
+    /// <summary>The toolbar's Export menu has something to save: a selection, or a visible part (M9).</summary>
+    public bool CanExport => HasSelection || Models.Any(model =>
+        model.Tree is { } tree && tree.Parts.Any(part => !model.Hidden.Contains(part)));
+
     public ModelEntry? Find(ModelId id) => Models.Find(model => model.Id == id);
 
     /// <summary>A model was queued. It goes to the end of the list.</summary>
@@ -134,6 +138,14 @@ public sealed class SceneState
         Set([], always: true);
         ClearAllRequested?.Invoke();
     }
+
+    /// <summary>A model's STEP or BREP export started (its format, no progress yet), or ended (null) (D125).</summary>
+    public void SetExport(ModelId id, BrepExportFormat? format) =>
+        Update(id, model => model.WithExport(format is { } started ? new ModelExport(started, null) : null));
+
+    /// <summary>How far a model's export is: a fraction, or null while OCCT can't tell.</summary>
+    public void ReportExportProgress(ModelId id, double? fraction) =>
+        Update(id, model => model.Export is { } export ? model.WithExport(export with { Fraction = fraction }) : model);
 
     /// <summary>The viewer couldn't keep a model's files for the next visit (D115).</summary>
     public void MarkNotKept(ModelId id, bool full) =>
