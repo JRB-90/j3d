@@ -20,7 +20,8 @@ public sealed class ShellTests(J3DAppFixture app) : PageTest, IClassFixture<J3DA
 
     /// <summary>
     /// D135: below about 1,100 px, Import, Export and Fit all keep only their icons, so the app bar stays
-    /// one line. Since M11 also at 900 px, with the projection toggle's labels unclipped.
+    /// one line. Since M11 also at 900 px, with the projection toggle's labels unclipped; since M12 nothing
+    /// in the bar is clipped and the toolbar ends before the About button.
     /// </summary>
     [Theory]
     [InlineData(1280, true)]
@@ -39,8 +40,18 @@ public sealed class ShellTests(J3DAppFixture app) : PageTest, IClassFixture<J3DA
         Assert.Equal(labelled, labelSize != "0px");
         var bar = (await Page.Locator(".j3d-appbar").BoundingBoxAsync())!;
         Assert.True(bar.Height < 70, $"the app bar should be one row: {bar.Height} px");
-        var clipped = await Page.GetByTestId("projection").Locator(".mud-toggle-item").EvaluateAllAsync<string[]>(
-            "items => items.filter(item => item.scrollWidth > item.clientWidth).map(item => item.innerText)");
+        var clipped = await Page.Locator(".j3d-appbar .mud-toggle-item, .j3d-appbar button, .j3d-appbar label").EvaluateAllAsync<string[]>(
+            "items => items.filter(item => item.scrollWidth > item.clientWidth + 1).map(item => item.dataset.testid || item.getAttribute('aria-label') || item.innerText)");
         Assert.Empty(clipped);
+
+        // The toolbar ends before the About button (M12: at 900 px Redo had slid under it).
+        var toolbarEnd = await Page.Locator(".j3d-toolbar > *").EvaluateAllAsync<double>("items => Math.max(...items.map(item => item.getBoundingClientRect().right))");
+        var about = (await Page.GetByTestId("about-button").BoundingBoxAsync())!;
+        Assert.True(toolbarEnd <= about.X, $"the toolbar should end before About: {toolbarEnd} > {about.X}");
+
+        // The viewport fills the rest of the window: in M12 the context menu's inline anchor pushed the page
+        // down a line, clipping the viewport's bottom and moving its centre off a whole pixel.
+        var viewport = (await Page.GetByTestId("viewport").BoundingBoxAsync())!;
+        Assert.Equal(800, viewport.Y + viewport.Height);
     }
 }

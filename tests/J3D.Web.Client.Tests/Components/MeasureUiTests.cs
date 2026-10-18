@@ -3,11 +3,15 @@ using J3D.Web.Client.Interop;
 using J3D.Web.Client.Models;
 using J3D.Web.Client.State;
 using Microsoft.Extensions.DependencyInjection;
+using MudBlazor;
 using static J3D.Web.Client.Tests.TestModels;
 
 namespace J3D.Web.Client.Tests.Components;
 
-/// <summary>The Measure tool's UI (M7, D79, D87, D101): the toolbar toggle, the panel and the Viewport's relays.</summary>
+/// <summary>
+/// The Measure tool's UI and selection modes (M12, D146, D147, D162–D164): the toolbar's toggles, the
+/// panel, the context menu and the Viewport's relays.
+/// </summary>
 public sealed class MeasureUiTests : BunitTestBase
 {
     private static readonly ModelId Id = new("m1");
@@ -39,53 +43,73 @@ public sealed class MeasureUiTests : BunitTestBase
     }
 
     [Fact]
-    public async Task The_panel_hints_shows_the_pending_pick_and_lists_kept_measurements()
+    public async Task The_toolbar_switches_the_selection_mode()
+    {
+        await StartViewerAsync();
+        var cut = Render<Toolbar>();
+        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=selection-mode] [disabled]")));
+
+        cut.Find("[data-testid=mode-model]").Click();
+        Assert.Equal(SelectMode.Models, Scene.Mode);
+        cut.Find("[data-testid=mode-feature]").Click();
+        Assert.Equal(SelectMode.Features, Scene.Mode);
+    }
+
+    [Fact]
+    public async Task The_panel_shows_the_reference_then_the_result_with_a_hint()
     {
         var cut = Render<SelectionPanel>();
         Assert.Empty(cut.FindAll("[data-testid=selection-panel]"));
 
         await Act(() => Scene.ToggleMeasureMode());
-        Assert.Equal("Pick a face, edge or vertex.", cut.Find("[data-testid=measure-hint]").TextContent);
+        Assert.StartsWith("Pick a face, edge or vertex", cut.Find("[data-testid=measure-hint]").TextContent, StringComparison.Ordinal);
 
-        await Act(() => Scene.SetPendingMeasure(Measure("", "Face (plane) of Plate (top)", ("Area", "2500.000 mm²"))));
-        Assert.Contains("Face (plane) of Plate (top)", cut.Find("[data-testid=measure-pending]").TextContent, StringComparison.Ordinal);
-        Assert.Equal("2500.000 mm²", cut.Find("[data-testid=measure-pending] [data-testid=measure-value]").TextContent);
-        Assert.StartsWith("Pick a second", cut.Find("[data-testid=measure-hint]").TextContent, StringComparison.Ordinal);
+        await Act(() => Scene.SetMeasureReference(Measure("reference", "Edge (circle) of Pin", ("Diameter", "8.000 mm"))));
+        Assert.Contains("Edge (circle) of Pin", cut.Find("[data-testid=measure-reference]").TextContent, StringComparison.Ordinal);
+        Assert.Equal("8.000 mm", cut.Find("[data-testid=measure-reference] [data-testid=measure-value]").TextContent);
+        Assert.StartsWith("Pick another", cut.Find("[data-testid=measure-hint]").TextContent, StringComparison.Ordinal);
 
-        await Act(() =>
-        {
-            Scene.SetPendingMeasure(null);
-            Scene.AddMeasurement(Measure("m1", "Distance 30.000 mm", ("Distance", "30.000 mm")));
-            Scene.AddMeasurement(Measure("m2", "Angle 90.00°", ("Angle (planes)", "90.00°")));
-        });
-        var titles = cut.FindAll("[data-testid=measurement-title]").Select(static t => t.TextContent.Trim()).ToList();
-        Assert.Equal(["Angle 90.00°", "Distance 30.000 mm"], titles); // newest first
-        // Only the newest is open, so the panel stays small; the toggle opens another.
-        Assert.Equal(["90.00°"], cut.FindAll("[data-testid=measurement] [data-testid=measure-value]").Select(static v => v.TextContent));
-        cut.FindAll("[data-testid=measurement-toggle]")[1].Click();
-        Assert.Equal(["90.00°", "30.000 mm"], cut.FindAll("[data-testid=measurement] [data-testid=measure-value]").Select(static v => v.TextContent));
+        await Act(() => Scene.SetMeasureResult(Measure("result", "Distance 30.000 mm", ("Distance", "30.000 mm"))));
+        await Act(() => Scene.SetMeasureResult(Measure("result", "Distance 35.000 mm", ("Distance", "35.000 mm"))));
+        Assert.Equal("35.000 mm", cut.Find("[data-testid=measure-result] [data-testid=measure-value]").TextContent);
+        Assert.Single(cut.FindAll("[data-testid=measure-result]"));
+
+        await Act(() => Scene.Escape());
+        Assert.Empty(cut.FindAll("[data-testid=selection-panel]"));
     }
 
     [Fact]
-    public async Task Hidden_parts_grey_their_measurements_and_the_buttons_remove_and_clear()
+    public async Task The_panel_lists_features_newest_first_with_their_totals()
     {
         var cut = Render<SelectionPanel>();
         await Act(() =>
         {
-            Scene.AddMeasurement(Measure("m1", "Distance 30.000 mm", ("Distance", "30.000 mm")));
-            Scene.AddMeasurement(Measure("m2", "Distance 5.000 mm", ("Distance", "5.000 mm")));
+            Scene.SetSelectionMode(SelectMode.Features);
+            Scene.SetFeatures(new FeatureSelection(
+                [Measure("f1", "Edge (line) of Plate (top)", ("Length", "50.000 mm")), Measure("f2", "Edge (line) of Pin", ("Length", "40.000 mm"))],
+                [new MeasureRow("Total length (2 edges)", "90.000 mm")]));
         });
 
-        await Act(() => Scene.ToggleNodeVisibility(Id, 1));
-        Assert.All(cut.FindAll("[data-testid=measurement]"), card => Assert.Equal("false", card.GetAttribute("data-shown")));
-        Assert.Contains("(hidden)", cut.Find("[data-testid=measurement-title]").TextContent, StringComparison.Ordinal);
+        Assert.Equal(["Edge (line) of Pin", "Edge (line) of Plate (top)"], cut.FindAll("[data-testid=feature-title]").Select(static t => t.TextContent));
+        // Only the newest is open, so the panel stays small.
+        Assert.Equal(["40.000 mm"], cut.FindAll("[data-testid=feature] [data-testid=measure-value]").Select(static v => v.TextContent));
+        cut.FindAll("[data-testid=feature-toggle]")[1].Click();
+        Assert.Equal(["40.000 mm", "50.000 mm"], cut.FindAll("[data-testid=feature] [data-testid=measure-value]").Select(static v => v.TextContent));
+        Assert.Equal("90.000 mm", cut.Find("[data-testid=feature-totals] [data-testid=measure-value]").TextContent);
+    }
 
-        cut.Find("[data-testid=measurement-remove]").Click(); // the newest
-        Assert.Equal(["m1"], Scene.Measurements.Select(static m => m.Id));
+    [Fact]
+    public async Task The_panel_names_a_selected_model_in_model_mode()
+    {
+        var cut = Render<SelectionPanel>();
+        await Act(() =>
+        {
+            Scene.SetSelectionMode(SelectMode.Models);
+            Scene.Pick(Id, 1, additive: false);
+        });
 
-        cut.Find("[data-testid=measure-clear]").Click();
-        Assert.Empty(Scene.Measurements);
-        Assert.Empty(cut.FindAll("[data-testid=selection-panel]"));
+        Assert.Equal("bracket.step", cut.Find("[data-testid=selection-title]").TextContent);
+        Assert.Equal("Whole model · 3 parts", cut.Find("[data-testid=selection-detail]").TextContent);
     }
 
     [Fact]
@@ -94,34 +118,75 @@ public sealed class MeasureUiTests : BunitTestBase
         await StartViewerAsync();
         JSInterop.SetupModule(ViewerInterop.ModulePath).SetupVoid("copyText", static _ => true).SetVoidResult();
         var cut = Render<SelectionPanel>();
-        await Act(() => Scene.AddMeasurement(Measure("m1", "Distance 30.000 mm", ("Distance", "30.000 mm"))));
+        await Act(() =>
+        {
+            Scene.ToggleMeasureMode();
+            Scene.SetMeasureReference(Measure("reference", "Face (plane) of Plate (top)", ("Area", "2500.000 mm²")));
+        });
 
         cut.Find("[data-testid=measure-copy]").Click();
 
         var copy = JSInterop.Invocations.Single(static i => i.Identifier == "copyText");
-        Assert.Equal("30.000 mm", Assert.Single(copy.Arguments));
+        Assert.Equal("2500.000 mm²", Assert.Single(copy.Arguments));
     }
 
     [Fact]
-    public async Task The_viewport_relays_measurements_and_applies_the_mode_and_what_is_shown()
+    public async Task The_context_menu_offers_the_selections_or_the_scenes_commands()
+    {
+        await StartViewerAsync();
+        var popovers = Render<MudPopoverProvider>();
+        Render<ContextMenu>();
+
+        await Act(() => Scene.OpenContextMenu(Id, 3, 100, 100, canMeasure: true));
+        popovers.WaitForAssertion(() => Assert.NotEmpty(popovers.FindAll("[data-testid=context-hide]")));
+        Assert.NotEmpty(popovers.FindAll("[data-testid=context-measure]"));
+        Assert.Empty(popovers.FindAll("[data-testid=context-show-all]"));
+        popovers.Find("[data-testid=context-hide]").Click();
+        Assert.Equal([3], Scene.Find(Id)!.Hidden.Order());
+
+        await Act(() => Scene.OpenContextMenu(null, -1, 100, 100, canMeasure: false));
+        popovers.WaitForAssertion(() => Assert.NotEmpty(popovers.FindAll("[data-testid=context-show-all]")));
+        Assert.Empty(popovers.FindAll("[data-testid=context-measure]"));
+        popovers.Find("[data-testid=context-show-all]").Click();
+        Assert.True(Scene.Find(Id)!.Hidden.IsEmpty);
+    }
+
+    [Fact]
+    public async Task The_viewport_relays_the_tool_the_mode_features_and_right_clicks()
     {
         JSInterop.Mode = JSRuntimeMode.Strict;
         _viewer.SetupVoid("setPartState", static _ => true).SetVoidResult();
         _viewer.SetupVoid("setMeasureMode", static _ => true).SetVoidResult();
-        _viewer.SetupVoid("setMeasurements", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("setSelectionMode", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("clearFeatures").SetVoidResult();
         _viewer.SetupVoid("setModelOrder", static _ => true).SetVoidResult();
         _viewer.SetupVoid("dispose").SetVoidResult();
+        var menus = new List<ContextMenuTarget>();
+        Scene.ContextMenuRequested += menus.Add;
         var cut = Render<Viewport>();
 
         await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("measure"));
-        await cut.InvokeAsync(() => cut.Instance.OnMeasurePending(Measure("", "Vertex of Pin", ("Point", "(0.000, 0.000, 0.000)"))));
-        Assert.Equal("Vertex of Pin", Scene.PendingMeasure?.Title);
-        await cut.InvokeAsync(() => cut.Instance.OnMeasured(Measure("m1", "Distance 30.000 mm", ("Distance", "30.000 mm"))));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("measure"));
+        await cut.InvokeAsync(() => cut.Instance.OnMeasureReference(Measure("reference", "Vertex of Pin", ("Point", "(0.000, 0.000, 0.000)"))));
+        await cut.InvokeAsync(() => cut.Instance.OnMeasureResult(Measure("result", "Distance 30.000 mm", ("Distance", "30.000 mm"))));
+        Assert.Equal(["Vertex of Pin", "Distance 30.000 mm"], [Scene.MeasureReference?.Title, Scene.MeasureResult?.Title]);
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("clearSelection")); // Esc ends the measurement
+        await cut.InvokeAsync(() => Scene.MeasureFromHere());
 
-        Assert.Equal([true, false], _viewer.Invocations.Where(static i => i.Identifier == "setMeasureMode").Select(static i => (bool)i.Arguments[0]!));
-        var shown = _viewer.Invocations.Where(static i => i.Identifier == "setMeasurements").Select(static i => string.Join(',', (string[])i.Arguments[0]!));
-        Assert.Equal(["m1"], shown);
+        var measureModes = _viewer.Invocations.Where(static i => i.Identifier == "setMeasureMode").Select(static i => ((bool)i.Arguments[0]!, (bool)i.Arguments[1]!));
+        Assert.Equal([(true, false), (false, false), (true, true)], measureModes);
+
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("selectFeatures"));
+        await cut.InvokeAsync(() => cut.Instance.OnFeaturesSelected(new FeatureSelection([Measure("f1", "Face of Pin", ("Area", "1.000 mm²"))], [])));
+        Assert.Single(Scene.Features.Features);
+        await cut.InvokeAsync(() => Scene.SetMeasureMode(false));
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("clearSelection"));
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("selectModels"));
+        Assert.Equal([SelectMode.Features, SelectMode.Models], _viewer.Invocations.Where(static i => i.Identifier == "setSelectionMode").Select(static i => (SelectMode)i.Arguments[0]!));
+        Assert.Single(_viewer.Invocations, static i => i.Identifier == "clearFeatures");
+
+        await cut.InvokeAsync(() => cut.Instance.OnContextMenu(Id.Value, 4, 12, 34, canMeasure: true));
+        Assert.Equal([new ContextMenuTarget(12, 34, true, true)], menus);
+        Assert.Equal([1, 3, 4], Scene.Find(Id)!.Selected.Order()); // Model mode: the whole bracket
     }
 
     private Task Act(Action action) => Renderer.Dispatcher.InvokeAsync(action);

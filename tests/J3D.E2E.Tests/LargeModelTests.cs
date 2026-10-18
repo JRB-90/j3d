@@ -163,19 +163,34 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 
     /// <summary>
     /// Cancels a STEP export two seconds in, then exports STEP and BREP, as a line for the test output.
-    /// The model must still be loaded afterwards, whatever happened.
+    /// The model must still be loaded afterwards, whatever happened. A small file's export (M12's
+    /// plant-10000) can end before the Cancel.
     /// </summary>
     private async Task<string> ExportAsync()
     {
         var item = Page.GetByTestId("model-item");
+        var running = item.GetByTestId("model-export");
         await StartLongTaskLogAsync();
         await StartExportAsync("step");
-        await Expect(item.GetByTestId("model-export")).ToHaveCountAsync(1);
+        await WaitForExportToShowAsync(running);
         await Page.WaitForTimeoutAsync(2_000);
         var cancelling = Stopwatch.StartNew();
-        await item.GetByTestId("cancel-export").ClickAsync();
-        await Expect(item.GetByTestId("model-export")).ToHaveCountAsync(0, new() { Timeout = 10 * 60_000 });
-        var cancelled = $"STEP cancelled {cancelling.Elapsed.TotalSeconds:F1} s after asking (longest task {Longest(await TakeLongTasksAsync())})";
+        var clicked = true;
+        try
+        {
+            await item.GetByTestId("cancel-export").ClickAsync(new() { Timeout = 5_000 });
+        }
+        catch (TimeoutException)
+        {
+            // Only because the export has already ended.
+            Assert.Equal(0, await running.CountAsync());
+            clicked = false;
+        }
+
+        await Expect(running).ToHaveCountAsync(0, new() { Timeout = 10 * 60_000 });
+        var cancelled = clicked
+            ? $"STEP cancelled {cancelling.Elapsed.TotalSeconds:F1} s after asking (longest task {Longest(await TakeLongTasksAsync())})"
+            : $"STEP ended within 2 s, before the Cancel (longest task {Longest(await TakeLongTasksAsync())})";
 
         var step = await DownloadAsync("step");
         var brep = await DownloadAsync("brep");
@@ -195,21 +210,21 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
             var stopwatch = Stopwatch.StartNew();
             await StartExportAsync(format);
             var export = Page.GetByTestId("model-item").GetByTestId("model-export");
-            await Expect(export).ToHaveCountAsync(1);
+            var shown = await WaitForExportToShowAsync(export);
             await Expect(export).ToHaveCountAsync(0, new() { Timeout = 30 * 60_000 });
-            var elapsed = stopwatch.Elapsed.TotalSeconds;
+            var elapsed = shown ? $"in {stopwatch.Elapsed.TotalSeconds:F1} s" : "before its progress showed";
             var tasks = Longest(await TakeLongTasksAsync());
 
             // The browser reports the download a moment after the page has saved it.
             if (await Task.WhenAny(downloaded.Task, Task.Delay(10_000)) == downloaded.Task)
             {
                 var file = new FileInfo(await downloaded.Task.Result.PathAsync());
-                return $"{format.ToUpperInvariant()} of {file.Length / (1 << 20)} MB in {elapsed:F1} s (longest task {tasks})";
+                return $"{format.ToUpperInvariant()} of {file.Length / (1 << 20)} MB {elapsed} (longest task {tasks})";
             }
 
             var error = Page.Locator(".mud-snackbar").Filter(new() { HasText = "Couldn't export" });
             await Expect(error).ToContainTextAsync("Out of memory");
-            return $"{format.ToUpperInvariant()} failed after {elapsed:F1} s (longest task {tasks}): {await error.First.InnerTextAsync()}";
+            return $"{format.ToUpperInvariant()} failed {elapsed} (longest task {tasks}): {await error.First.InnerTextAsync()}";
         }
         finally
         {
@@ -221,6 +236,24 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
     {
         await Page.GetByTestId("model-item").GetByTestId("export-model").Locator("button").ClickAsync();
         await Page.GetByTestId($"export-{format}").ClickAsync();
+    }
+
+    /// <summary>
+    /// Waits for an export's progress to show in the item. A small model's export (M12's plant-10000)
+    /// can end before it does, so a row that never shows isn't a failure: the file, or the failure's
+    /// snackbar, is still expected.
+    /// </summary>
+    private async Task<bool> WaitForExportToShowAsync(ILocator export)
+    {
+        try
+        {
+            await Expect(export).ToHaveCountAsync(1, new() { Timeout = 5_000 });
+            return true;
+        }
+        catch (PlaywrightException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Right-drags the camera round, a move per frame, and returns the frames drawn per second.</summary>

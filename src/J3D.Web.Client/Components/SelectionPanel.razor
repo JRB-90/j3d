@@ -1,82 +1,92 @@
 @if (IsVisible)
 {
     <div class="j3d-selection-panel" role="status" aria-live="polite" data-testid="selection-panel">
-        @if (Summary is { } summary)
-        {
-            <div class="j3d-selection-title" title="@summary.Title" data-testid="selection-title">@summary.Title</div>
-            <div class="j3d-selection-detail" title="@summary.Detail" data-testid="selection-detail">@summary.Detail</div>
-        }
-
-        @if (Scene.MeasureMode || !Scene.Measurements.IsEmpty)
+        @if (Scene.MeasureMode)
         {
             <div class="j3d-measure" data-testid="measure-panel">
-                @if (Scene.MeasureMode)
+                @if (Scene.MeasureReference is { } reference)
                 {
-                    @if (Scene.PendingMeasure is { } pending)
-                    {
-                        <div class="j3d-measure-card j3d-measure-card--pending" data-testid="measure-pending">
-                            <div class="j3d-measure-card-title">@pending.Title</div>
-                            @Rows(pending)
+                    var referenceOpen = Scene.MeasureResult is null || _referenceOpen;
+                    <div class="j3d-measure-card j3d-measure-card--reference" data-testid="measure-reference">
+                        <div class="j3d-measure-card-header">
+                            @if (Scene.MeasureResult is not null)
+                            {
+                                <MudIconButton Icon="@(referenceOpen ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
+                                               Size="Size.Small"
+                                               aria-label="@(referenceOpen ? "Collapse" : "Expand")"
+                                               aria-expanded="@(referenceOpen ? "true" : "false")"
+                                               OnClick="@(() => _referenceOpen = !_referenceOpen)"
+                                               data-testid="measure-reference-toggle" />
+                            }
+                            <span class="j3d-measure-card-title" title="@reference.Title">@reference.Title</span>
                         </div>
-                        <div class="j3d-measure-hint" data-testid="measure-hint">Pick a second face, edge or vertex, or Esc.</div>
-                    }
-                    else
-                    {
-                        <div class="j3d-measure-hint" data-testid="measure-hint">Pick a face, edge or vertex.</div>
-                    }
+                        @if (referenceOpen)
+                        {
+                            @Rows(reference)
+                        }
+                    </div>
                 }
 
-                @foreach (var measurement in Scene.Measurements.Reverse())
+                @if (Scene.MeasureResult is { } result)
                 {
-                    var expanded = _expanded.Contains(measurement.Id);
-                    var shown = Scene.IsShown(measurement);
-                    <div class="@($"j3d-measure-card{(shown ? "" : " j3d-measure-card--hidden")}")"
-                         data-testid="measurement"
-                         data-measure-id="@measurement.Id"
-                         data-shown="@(shown ? "true" : "false")">
+                    <div class="j3d-measure-card" data-testid="measure-result">
+                        <div class="j3d-measure-card-title" title="@result.Title">@result.Title</div>
+                        @Rows(result)
+                    </div>
+                }
+
+                <div class="j3d-measure-hint" data-testid="measure-hint">
+                    @(Scene.MeasureReference is null
+                        ? "Pick a face, edge or vertex to measure from."
+                        : "Pick another to measure against it. Esc stops measuring.")
+                </div>
+            </div>
+        }
+        else if (Scene.Mode == SelectMode.Features)
+        {
+            <div class="j3d-measure" data-testid="feature-panel">
+                @foreach (var feature in Scene.Features.Features.Reverse())
+                {
+                    var expanded = _expanded.Contains(feature.Id);
+                    <div class="j3d-measure-card" data-testid="feature" data-feature-id="@feature.Id">
                         <div class="j3d-measure-card-header">
                             <MudIconButton Icon="@(expanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
                                            Size="Size.Small"
                                            aria-label="@(expanded ? "Collapse" : "Expand")"
                                            aria-expanded="@(expanded ? "true" : "false")"
-                                           OnClick="@(() => Toggle(measurement.Id))"
-                                           data-testid="measurement-toggle" />
-                            <span class="j3d-measure-card-title" title="@measurement.Title" data-testid="measurement-title">
-                                @measurement.Title@(shown ? "" : " (hidden)")
-                            </span>
-                            <MudIconButton Icon="@Icons.Material.Filled.Close"
-                                           Size="Size.Small"
-                                           aria-label="@($"Remove {measurement.Title}")"
-                                           OnClick="@(() => Scene.RemoveMeasurement(measurement.Id))"
-                                           data-testid="measurement-remove" />
+                                           OnClick="@(() => Toggle(feature.Id))"
+                                           data-testid="feature-toggle" />
+                            <span class="j3d-measure-card-title" title="@feature.Title" data-testid="feature-title">@feature.Title</span>
                         </div>
                         @if (expanded)
                         {
-                            @Rows(measurement)
+                            @Rows(feature)
                         }
                     </div>
                 }
 
-                @if (!Scene.Measurements.IsEmpty)
+                @if (Scene.Features.Totals.Count > 0)
                 {
-                    <MudButton Size="Size.Small"
-                               Variant="Variant.Text"
-                               StartIcon="@Icons.Material.Filled.ClearAll"
-                               OnClick="Scene.ClearMeasurements"
-                               Class="j3d-measure-clear"
-                               data-testid="measure-clear">
-                        Clear measurements
-                    </MudButton>
+                    <div class="j3d-measure-card" data-testid="feature-totals">
+                        @Rows(Scene.Features.Totals)
+                    </div>
                 }
             </div>
+        }
+        else if (Summary is { } summary)
+        {
+            <div class="j3d-selection-title" title="@summary.Title" data-testid="selection-title">@summary.Title</div>
+            <div class="j3d-selection-detail" title="@summary.Detail" data-testid="selection-detail">@summary.Detail</div>
         }
     </div>
 }
 
 @code {
-    private RenderFragment Rows(MeasureInfo info) =>
+    private RenderFragment Rows(MeasureInfo info) => Rows(info.Rows);
+
+    private RenderFragment Rows(IReadOnlyList<MeasureRow> rows) =>
         @<dl class="j3d-measure-rows">
-            @foreach (var row in info.Rows)
+            @foreach (var row in rows)
             {
                 <div class="j3d-measure-row" data-testid="measure-row">
                     <dt>@row.Name</dt>

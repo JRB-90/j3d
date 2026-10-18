@@ -74,6 +74,12 @@
     border-radius: 4px;
 }
 
+/* Model mode (D146): a model selected whole. */
+.j3d-model--selected {
+    background: rgba(79, 157, 255, 0.10);
+    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+}
+
 .j3d-model ::deep .j3d-tree-node--selected > .mud-treeview-item-content {
     background: rgba(79, 157, 255, 0.16);
     color: var(--mud-palette-primary);

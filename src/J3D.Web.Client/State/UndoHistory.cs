@@ -1,11 +1,10 @@
 using System.Collections.Immutable;
-using J3D.Web.Client.Interop;
 using J3D.Web.Client.Models;
 
 namespace J3D.Web.Client.State;
 
-/// <summary>What undo works on: the models (with their parts) and the kept measurements (M7).</summary>
-public sealed record SceneContent(ImmutableList<ModelEntry> Models, ImmutableList<MeasureInfo> Measurements);
+/// <summary>What undo works on: the models, with their parts. Measurements left it in M12 (D147).</summary>
+public sealed record SceneContent(ImmutableList<ModelEntry> Models);
 
 /// <summary>
 /// One undoable change to the scene (decision D84). Steps are pure: each maps the scene to how it was
@@ -44,45 +43,21 @@ public sealed record VisibilityStep(ImmutableDictionary<ModelId, (PartSet Before
 }
 
 /// <summary>
-/// Adding, removing or clearing measurements (M7, D84, D101): the kept measurements before and after.
-/// A removed model takes its measurements out of both.
+/// Deleting a model (M8, D84): the model as it was and where it was in the list. Undoing it lists the
+/// model again, queued to be imported from its kept files under the same id (D117); redoing it
+/// deletes the model again, whatever its state.
 /// </summary>
-public sealed record MeasurementsStep(ImmutableList<MeasureInfo> Before, ImmutableList<MeasureInfo> After) : ISceneStep
-{
-    public SceneContent Undo(SceneContent scene) => scene with { Measurements = Before };
-
-    public SceneContent Redo(SceneContent scene) => scene with { Measurements = After };
-
-    public ISceneStep? Without(ModelId id)
-    {
-        var before = Before.RemoveAll(measurement => measurement.Touches(id));
-        var after = After.RemoveAll(measurement => measurement.Touches(id));
-        return before.SequenceEqual(after) ? null : new MeasurementsStep(before, after);
-    }
-}
-
-/// <summary>
-/// Deleting a model (M8, D84): the model as it was, where it was in the list, and the measurements
-/// that went with it (D108). Undoing it lists the model again, queued to be imported from its kept
-/// files under the same id (D117); redoing it deletes the model again, whatever its state.
-/// </summary>
-public sealed record DeleteStep(ModelEntry Model, int Index, ImmutableList<MeasureInfo> Measurements) : ISceneStep
+public sealed record DeleteStep(ModelEntry Model, int Index) : ISceneStep
 {
     public ModelId Id => Model.Id;
 
     public SceneContent Undo(SceneContent scene) => scene.Models.Any(model => model.Id == Id)
         ? scene
-        : new SceneContent(
-            scene.Models.Insert(Math.Min(Index, scene.Models.Count), ModelEntry.Restoring(Model)),
-            scene.Measurements.AddRange(Measurements.Where(measurement => !scene.Measurements.Any(kept => kept.Id == measurement.Id))));
+        : new SceneContent(scene.Models.Insert(Math.Min(Index, scene.Models.Count), ModelEntry.Restoring(Model)));
 
-    public SceneContent Redo(SceneContent scene) => new(
-        scene.Models.RemoveAll(model => model.Id == Id),
-        scene.Measurements.RemoveAll(measurement => measurement.Touches(Id)));
+    public SceneContent Redo(SceneContent scene) => new(scene.Models.RemoveAll(model => model.Id == Id));
 
-    /// <summary>Another model gone for good takes the measurements it shared with this one.</summary>
-    public ISceneStep? Without(ModelId id) =>
-        id == Id ? null : this with { Measurements = Measurements.RemoveAll(measurement => measurement.Touches(id)) };
+    public ISceneStep? Without(ModelId id) => id == Id ? null : this;
 }
 
 /// <summary>

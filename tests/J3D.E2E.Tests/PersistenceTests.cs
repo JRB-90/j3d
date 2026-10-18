@@ -54,7 +54,7 @@ public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
     }
 
     [Fact]
-    public async Task Undoing_a_delete_imports_the_model_again_in_its_place_with_its_measurement()
+    public async Task Undoing_a_delete_imports_the_model_again_in_its_place()
     {
         await RequireStoreAsync();
         // The box (top at z = 30) stands inside coloured-part.step's 40 × 30 × 20 block (top at z = 20).
@@ -65,21 +65,18 @@ public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.Keyboard.PressAsync("m");
         await ClickWorldAsync(5, 10, 30);
         await ClickWorldAsync(35, 25, 20);
-        await Expect(Page.GetByTestId("measure-label")).ToHaveTextAsync("10.000 mm · 0.00°");
+        await Expect(Page.Locator("[data-testid=measure-label][data-role=result]")).ToHaveTextAsync("10.000 mm · 0.00°");
 
         await Items.Nth(0).GetByTestId("delete-model").ClickAsync();
         await Page.Locator(".mud-dialog").GetByTestId("confirm-delete").ClickAsync();
         await Expect(Items.GetByTestId("model-name")).ToHaveTextAsync(["coloured-part.step"]);
-        await Expect(Page.GetByTestId("measurement")).ToHaveCountAsync(0);
-        await Expect(Page.GetByTestId("measure-label")).ToBeHiddenAsync();
+        await Expect(Page.GetByTestId("measure-label")).ToHaveCountAsync(0); // the measurement went with it (D147)
 
         await Page.Keyboard.PressAsync("Control+z");
         await Expect(Items.GetByTestId("model-name")).ToHaveTextAsync(["box.brep", "coloured-part.step"]);
         await Expect(Page.Locator("[data-testid=model-item][data-status=loaded]")).ToHaveCountAsync(2, new() { Timeout = 60_000 });
         Assert.Equal(before.Select(static m => m.Id).Order(), (await ModelsAsync()).Select(static m => m.Id).Order());
-        await Expect(Page.GetByTestId("measurement")).ToHaveCountAsync(1);
-        await Expect(Page.GetByTestId("measure-label")).ToHaveTextAsync("10.000 mm · 0.00°");
-        await Expect(Page.GetByTestId("measure-label")).ToBeVisibleAsync();
+        await Expect(Page.GetByTestId("measure-label")).ToHaveCountAsync(0); // and doesn't come back: nothing is kept
 
         // Redone, the delete holds across a reload: only the other model comes back.
         await Page.Keyboard.PressAsync("Control+y");

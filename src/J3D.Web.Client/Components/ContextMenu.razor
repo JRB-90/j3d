@@ -1,0 +1,45 @@
+@* The context menu (M12, D164): opened by a right click that didn't drag, at the pointer. *@
+<MudMenu @ref="_menu"
+         PositionAtCursor="true"
+         Dense="true"
+         Class="j3d-context-menu"
+         AriaLabel="Context menu"
+         data-testid="context-menu">
+    <ActivatorContent />
+    <ChildContent>
+        @if (_target is { } target)
+        {
+            @if (target.OnTarget)
+            {
+                <MudMenuItem Label="Hide" Icon="@Icons.Material.Filled.VisibilityOff" OnClick="Scene.HideSelection" data-testid="context-hide" />
+                <MudMenuItem Label="Isolate" Icon="@Icons.Material.Filled.FilterCenterFocus" Disabled="@(!Scene.CanIsolate)" OnClick="Scene.IsolateSelection" data-testid="context-isolate" />
+            }
+
+            @if (target.CanMeasure)
+            {
+                <MudMenuItem Label="Measure from here" Icon="@Icons.Material.Filled.Straighten" OnClick="Scene.MeasureFromHere" data-testid="context-measure" />
+            }
+
+            @if (target.OnTarget)
+            {
+                <MudMenu Label="Export the selection" StartIcon="@Icons.Material.Filled.FileDownload" Dense="true" data-testid="context-export">
+                    @foreach (var format in Toolbar.MeshFormats)
+                    {
+                        <MudMenuItem Label="@format.DisplayName" OnClick="@(() => Scene.RequestExport(format, true))" data-testid="@($"context-export-{Toolbar.FormatKey(format)}")" />
+                    }
+                </MudMenu>
+            }
+            else
+            {
+                <MudMenuItem Label="Show all" Icon="@Icons.Material.Filled.Visibility" Disabled="@(!Scene.HasHidden)" OnClick="Scene.ShowAll" data-testid="context-show-all" />
+                <MudMenuItem Label="Fit all" Icon="@Icons.Material.Filled.FitScreen" OnClick="FitAllAsync" data-testid="context-fit-all" />
+                <MudMenu Label="Export the scene" StartIcon="@Icons.Material.Filled.FileDownload" Dense="true" Disabled="@(!Scene.CanExport)" data-testid="context-export">
+                    @foreach (var format in Toolbar.MeshFormats)
+                    {
+                        <MudMenuItem Label="@format.DisplayName" OnClick="@(() => Scene.RequestExport(format, false))" data-testid="@($"context-export-{Toolbar.FormatKey(format)}")" />
+                    }
+                </MudMenu>
+            }
+        }
+    </ChildContent>
+</MudMenu>

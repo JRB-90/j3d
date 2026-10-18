@@ -16,7 +16,8 @@ namespace J3D.Web.Client.Components;
 /// Since M6 the model and each tree node have an eye (open, closed or half, D96), clicking a node
 /// selects its parts (Ctrl+click adds or removes, D77), and a part picked in 3D opens the tree down to
 /// it and scrolls it into view. Since M9 a BREP model's download icon saves it as STEP or BREP, with
-/// the export's progress and Cancel in the item (D125).
+/// the export's progress and Cancel in the item (D125). Since M12 a right click on a node opens the
+/// context menu (D164), and in Model mode a selected model's item is highlighted (D146).
 /// </summary>
 public sealed partial class ModelListItem(SceneState scene, ViewerSession session, ISnackbar snackbar) : IDisposable
 {
@@ -62,6 +63,11 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     private SceneState Scene => scene;
 
     private string StatusName => Model.Status.ToString().ToLowerInvariant();
+
+    /// <summary>Model mode: this model is selected whole (D146).</summary>
+    private bool ModelSelected => scene.Mode == SelectMode.Models && SceneState.IsModelSelected(Model);
+
+    private string ItemClass => $"j3d-model j3d-model--{StatusName}{(ModelSelected ? " j3d-model--selected" : "")}";
 
     private string KindLabel => Model.Summary.Kind == ModelKind.Brep ? "BREP" : "mesh";
 
@@ -142,6 +148,8 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     private void ToggleModelVisibility() => scene.ToggleModelVisibility(Model.Id);
 
     private void SelectNode(int node, MouseEventArgs args) => scene.SelectNode(Model.Id, node, args.CtrlKey || args.MetaKey);
+
+    private void OpenNodeMenu(int node, MouseEventArgs args) => scene.OpenNodeContextMenu(Model.Id, node, args.ClientX, args.ClientY);
 
     private string NodeKey(int node) => $"{Model.Id.Value}:{node.ToString(CultureInfo.InvariantCulture)}";
 

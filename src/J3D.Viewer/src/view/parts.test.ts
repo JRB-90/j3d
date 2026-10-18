@@ -199,6 +199,12 @@ describe('keyCommand (D99)', () => {
     expect(keyCommand('z', false, true)).toBe('undo');
     expect(keyCommand('z', true, true)).toBe('redo');
     expect(keyCommand('y', false, true)).toBe('redo');
+    expect(keyCommand('m', false, false)).toBe('measure');
+    // The selection modes (D162).
+    expect(keyCommand('1', false, false)).toBe('selectModels');
+    expect(keyCommand('2', false, false)).toBe('selectObjects');
+    expect(keyCommand('3', false, false)).toBe('selectFeatures');
+    expect(keyCommand('1', false, true)).toBeUndefined();
   });
 
   it('ignores everything else, including the letters with Ctrl', () => {

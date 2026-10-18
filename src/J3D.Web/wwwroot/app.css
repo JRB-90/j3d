@@ -23,6 +23,14 @@ body {
     flex-direction: column;
 }
 
+/* The context menu (M12) opens at the pointer; its anchor is an inline MudMenu ahead of the layout, which
+   would push the page down by a line (and clip the viewport's bottom), so it's taken out of the flow. */
+.j3d-context-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+}
+
 .j3d-appbar .j3d-toolbar {
     display: flex;
     align-items: center;
@@ -33,6 +41,11 @@ body {
     .j3d-appbar .j3d-toolbar .j3d-projection {
         margin-left: 12px;
         /* Keeps its labels whole in a narrow window: at 900 px it shrank and clipped "Orthographic" (M11). */
+        flex-shrink: 0;
+    }
+
+    /* Nor does the selection mode switch (M12): shrunk, its icons were cut to 8 px at 966 px. */
+    .j3d-appbar .j3d-toolbar .j3d-selection-mode {
         flex-shrink: 0;
     }
 
@@ -53,6 +66,28 @@ body {
 
     .j3d-appbar .j3d-toolbar .j3d-collapsible .mud-button-icon-start {
         margin: 0;
+    }
+
+    /* Since M12's mode switch, the bar needs every button 40 px wide (MudButton's minimum is 64) and
+       tighter gaps to fit at 900 px; before, Redo already sat under the About button there. */
+    .j3d-appbar .j3d-toolbar {
+        margin-left: 12px;
+    }
+
+    .j3d-appbar .j3d-toolbar .j3d-collapsible.mud-button-root,
+    .j3d-appbar .j3d-toolbar .j3d-collapsible .mud-button-root {
+        min-width: 0;
+        width: 40px;
+        padding: 8px;
+    }
+
+    .j3d-appbar .j3d-toolbar .mud-icon-button {
+        padding: 8px;
+    }
+
+    .j3d-appbar .j3d-toolbar .j3d-projection,
+    .j3d-appbar .j3d-toolbar .j3d-toolbar-group {
+        margin-left: 6px;
     }
 }
 
