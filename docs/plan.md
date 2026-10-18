@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136) · **Last updated:** 2026-10-18
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) in progress** (D137–D141) · **Last updated:** 2026-10-18
 
 ---
 
@@ -100,7 +100,7 @@ Users and auth, deployment (D75), sectioning, exploded views, mobile/tablet layo
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9) and 2026-10-18 (D129–D136 at the start of M10). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9) and 2026-10-18 (D129–D136 at the start of M10, D137–D141 at the start of M11). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -240,6 +240,11 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D134 | Intersecting translucency fixture (M10, D90) | **A new generated STEP** of translucent boxes crossing each other in different colours, for E2E pixel checks from angles where sorting fails | `translucent.step` only nests a core in a cover. |
 | D135 | Narrow app bar (M10) | **Icons below about 1,100 px**: Import, Export and Fit all drop their labels (keeping tooltips), so the bar stays on one line | Found in M9's checklist: "Fit all" wraps at about 970 px. |
 | D136 | README screenshot (M10) | **Refreshed** from the built-in browser: a selection, a measurement and the Export menu | The current one predates M6. |
+| D137 | Safari (M11, D22) | **Not supported**: J3D targets current desktop Chrome, Edge and Firefox, and the README says Safari isn't supported | The owner's decision: no Mac, and no intent to support it. Supersedes D22's Safari, D42, D116 and D132, and amends D64. |
+| D138 | WebKit in testing (M11) | **Removed**: CI's E2E matrix is Chromium and Firefox, and local runs use Chromium (and Firefox in Docker, D139). The WebKit fallbacks already in the code stay | Proposed as recommended. It was only Safari's stand-in. Saves a 6-minute E2E job a run; the wall time is set by Chromium's job. |
+| D139 | Firefox locally (M11, §8) | **Documented commands in Docker**: build and publish on Windows, then run the built E2E tests in Playwright's `mcr.microsoft.com/playwright/dotnet:v1.63.0-resolute` image (Ubuntu 26.04, as CI), headed under `xvfb-run` with test classes one at a time (D47, D51) | Proposed as recommended. The image's SDK (10.0.401) is below `global.json`'s 10.0.402, so it runs the Windows build rather than building. |
+| D140 | M8's Delete-dialog bug (M11) | **An opt-in stress test and a code read**: an E2E test gated by `J3D_STRESS` takes a measurement, then opens Delete and cancels, about 50 times, run locally in Chromium and Firefox. Fixed with a test if it reproduces, otherwise recorded as not reproduced | Proposed as recommended. Off in CI, so a rare race can't flake every PR. |
+| D141 | Large exports (M11) | **Measured on three files**: `large-200mb.step`, `curved-100mb.step` and a generated STEP of about 550 MB, close to the 4 GB ceiling, exported as STEP and BREP in Node (opt-in, `J3D_LARGE_FIXTURES`) and in the browser: time, peak heap, file size, Cancel, and a clean `OutOfMemory` | Proposed as recommended. Code changes only if something fails. |
 
 ---
 
@@ -835,6 +840,17 @@ Branch `feature/m10-hardening`, from `main` after [JRB-90/j3d#11](https://github
 - **Tests:** viewer Vitest 173 (2 new, `oit.test.ts`); OCCT 27 (1 new: the bars' import); client 163; host 7; E2E 71 with `TransparencyTests` (2) and the app bar check (2). Locally: Chromium 70 passed (the opt-in large-file test skipped), WebKit 66 passed (the four `PersistenceTests` and the large-file test skipped, D116).
 - **Manual checks** (built-in browser, pane visible): the crossing bars with OIT and with it off (blue drawn over the others), `translucent.step` beside `assembly.step` with the top plate selected, the app bar at the pane's 966 px width (one line of icons, the projection toggle no longer clipped) and at 1,280 px, and the picking times above. No console or server errors. The owner's own pass in Chrome and Edge (D64) came before the merge.
 - **CI:** the PR's run 39123298348 on `ubuntu-26.04` was green: client 163 and host 7; E2E 71 in each browser, with Chromium and Firefox passing 70 (the opt-in large-file test skipped) and WebKit 66 (the four `PersistenceTests` too, D116). `TransparencyTests` passed in all three, so CI's Linux browsers, Firefox's Mesa renderer included, draw with OIT rather than the fallback.
+
+### M11 — Loose ends (this branch)
+
+Branch `feature/m11-loose-ends`, from `main` after [JRB-90/j3d#13](https://github.com/JRB-90/j3d/pull/13) merged as `5e89483`. Decided at its start: D137–D141.
+
+- **Safari dropped (D137, D138):** the README, §1 and the decisions and risks it touches say Safari isn't supported, and Playwright's WebKit leaves CI's E2E matrix and the local runs.
+- **Firefox locally (D139):** the E2E suite's Firefox job in Playwright's Linux Docker image, documented in `docs/development.md`.
+- **M8's Delete-dialog bug (D140):** an opt-in stress test, and a code read of how the Measure tool's clicks and focus meet `ModelList`'s message box.
+- **Large exports (D141):** STEP and BREP of the large files in Node and in the browser, recorded in §6.1 and the README's Limits.
+- **Narrow windows:** the list and panels checked at about 900 px in the manual checklist; phone and tablet layouts stay out of scope.
+- **Exit:** all of the above, with the tests passing in CI in Chromium and Firefox.
 
 ---
 
