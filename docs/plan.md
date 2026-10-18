@@ -149,7 +149,7 @@ Deployment (D75), exploded views, phone and tablet layouts, exact (BREP) measure
 
 ## 2. Decision log
 
-Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9) and 2026-10-18 (D129–D136 at the start of M10, D137–D141 at the start of M11, D142–D159 when planning iteration 3). Remaining assumptions are listed in §12.
+Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D36 in the follow-up round) and 2026-10-14 (D39–D45 at the start of M2, D46–D50 at the start of M3, D51 after M3 merged, D52–D59 at the start of M4, D60 during M4, D61–D72 at the start of M5) and 2026-10-15 (D73–D92 when planning iteration 2, D93–D100 at the start of M6, D101–D108 at the start of M7) and 2026-10-16 (D109–D117 at the start of M8, D118–D128 at the start of M9) and 2026-10-18 (D129–D136 at the start of M10, D137–D141 at the start of M11, D142–D159 when planning iteration 3, D160–D164 at the start of M12). Remaining assumptions are listed in §12.
 
 | # | Topic | Decision | Notes |
 |---|---|---|---|
@@ -312,6 +312,11 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D157 | Iteration 3 milestones | **Five, foundation first**: M12 selection modes, the context menu, the new Measure and the fixtures; M13 origin frames and moving (a WASM rebuild); M14 assembly editing; M15 exporting edits and the selection, and Expand (a WASM rebuild); M16 hardening | Chosen over writing each milestone's edits into STEP as it goes, and over the editing milestones first. |
 | D158 | Iteration 3 process | **As iteration 2 (D92)**: each milestone starts with its own short question round, recorded here and committed first on its branch; then work straight through, stopping only for contradictions; the manual checklist in the built-in browser; a draft PR; the owner tests by hand and merges. This plan is M12's first commit (as D91) | |
 | D159 | Plan document | **Extended again** (as D76): §1 gains iteration 3's goal and criteria, decisions continue at D142, milestones M12–M16 join §10, and §3–§9 are updated as things land | |
+| D160 | Real assembly (M12, D156) | **The SO-101 robot arm**: `STEP/SO101/SO101 Assembly.step` (20 MB) from TheRobotStudio/SO-ARM100, Apache-2.0, pinned to commit `d04fa97`, downloaded on demand into `tests/fixtures/large/` and never committed; its tree is checked once it's downloaded | Proposed as recommended. Bigger published machines were either not one full-assembly STEP (Voron's repos hold single parts) or GPL; the generator covers size (D161). |
+| D161 | Generated assembly (M12, D156) | **A "plant", written by OCCT in Node** as `generate-fixtures.mjs` writes its fixtures (the full prebuilt libcascade): lines › stations › robots › arms › links, with fasteners reused hundreds of times as instances, unique and shared sub-assemblies, names, colours and a few compound parts for Expand; a small one committed, larger ones by size on demand, as `fixtures:large` | Proposed with the M12 questions; no objection. |
+| D162 | Mode switching (M12, D146) | **Keys 1, 2 and 3** (Model, Object, Feature), beside the toolbar switch, where D99's keys work. The selection is converted: Object to Model selects the models holding the selected parts, Model to Object selects all their parts, and switching to or from Feature clears it | Proposed as recommended. Chosen over clearing on every switch and over one key cycling the modes. |
+| D163 | Several features (M12, D146) | **Each one, plus totals**: a collapsible block per selected feature, as a single pick shows today, the newest open, plus totals where they add up (the selected edges' summed length, the selected faces' summed area) | Proposed as recommended. |
+| D164 | Context menu (M12, D152) | **Target-aware**: on a part or a tree node it selects the target if it isn't already selected, then offers its commands (Hide, Isolate, Measure from here, Export the selection); on empty space, Show all, Fit all and Export the scene. Desktop only: touch gets no menu | Proposed as recommended. Chosen over one menu everywhere with commands disabled, and over a long press on touch. |
 
 ---
 
@@ -950,10 +955,12 @@ Planned on 2026-10-18 (D142–D159, five milestones by D157). Each starts with i
 
 ### M12 — Selection modes, context menu and measurement
 
-- **Selection modes (D146):** a Model | Object | Feature switch in the toolbar, with keys. Feature selection reuses the Measure tool's entity picking (`ModelParts.entityAt`, D107), its highlights and the worker's `measureEntity` for the panel. No WASM change.
+Branch `feature/m12-selection-modes`, from `main` at `5a1fd8f`, with the iteration 3 plan as its first commit (D158). Decided at its start: D160–D164.
+
+- **Selection modes (D146):** a Model | Object | Feature switch in the toolbar, with the keys 1, 2 and 3 (D162), and the panel's blocks and totals for several features (D163). Feature selection reuses the Measure tool's entity picking (`ModelParts.entityAt`, D107), its highlights and the worker's `measureEntity` for the panel. No WASM change.
 - **Measure (D147):** the reference and one live result instead of kept pairs, with the reference's own value drawn on it (a dimension along an edge, a diameter on a circle, an area on a face); Esc ends the tool. `SceneState` drops the kept measurements, Clear and `MeasurementsStep`, and D108's lifetime rules go with them.
 - **Context menu (D152):** a right click within 4 px opens a menu at the pointer, from the viewport (on the part under it, which it selects first if it isn't selected) and from tree nodes, holding today's commands; M13–M15 add theirs.
-- **Fixtures (D156):** the hierarchical assembly generator (sizes as `fixtures:large`), a small committed assembly, and the download script for the real assembly the owner approves.
+- **Fixtures (D156):** the hierarchical assembly generator (sizes as `fixtures:large`), a small committed assembly, and the download script for the SO-101 arm (D160, D161).
 - **Exit:** M12's criteria in §1, in E2E (Chromium locally, Firefox in Docker and CI) and bUnit.
 
 ### M13 — Origin frames and moving
