@@ -6,6 +6,7 @@ import { ExportFormat, ExportStatus, ImportFormat, OcctExportError, OcctModel, t
 import createOcct, { type InitOpenCascadeOptions } from '@j3d/occt/single';
 import { sceneTransferables, summariseBrepScene } from '../brep-summary';
 import { toImportError } from '../errors';
+import { occtOutput } from '../occt-output';
 import { throttleProgress } from '../progress';
 import type {
   BrepExportFormat,
@@ -38,6 +39,10 @@ const exportFormats: Readonly<Record<BrepExportFormat, ExportFormat>> = {
 // Kept alive, with its BREP, for measuring (M7) and saving (M9).
 let model: OcctModel | undefined;
 
+// OCCT's own messages (e.g. STEP syntax errors) help diagnose failures but aren't app errors. An
+// export's are muted: they're transfer statistics, a few lines for every shape (M11).
+const output = occtOutput((text) => console.debug('[OCCT]', text));
+
 scope.onmessage = ({ data }) => {
   if (data.type === 'import') {
     void runImport(data);
@@ -56,16 +61,19 @@ function exportModel(request: ExportRequest): void {
   const flag = request.cancel ? new Int32Array(request.cancel) : undefined;
   const isCancelled = () => flag !== undefined && Atomics.load(flag, 0) !== 0;
   try {
-    if (!model) {
+    const loaded = model;
+    if (!loaded) {
       throw new Error('The model is not loaded.');
     }
     if (isCancelled()) {
       throw new OcctExportError(ExportStatus.Cancelled, 'Export cancelled.');
     }
-    const bytes = model.exportFile(exportFormats[request.format], {
-      onProgress: (_, fraction) => scope.postMessage({ type: 'exportProgress', id: request.id, fraction: fraction < 0 ? null : fraction }),
-      isCancelled,
-    });
+    const bytes = output.muted(() =>
+      loaded.exportFile(exportFormats[request.format], {
+        onProgress: (_, fraction) => scope.postMessage({ type: 'exportProgress', id: request.id, fraction: fraction < 0 ? null : fraction }),
+        isCancelled,
+      }),
+    );
     scope.postMessage({ type: 'exported', id: request.id, bytes: bytes.buffer }, [bytes.buffer]);
   } catch (error) {
     scope.postMessage({
@@ -132,8 +140,7 @@ function instantiate(compiled: WebAssembly.Module): Promise<OcctModule> {
         WebAssembly.instantiate(compiled, imports).then((instance) => receiveInstance(instance, compiled), reject);
         return {};
       },
-      // OCCT's own messages (e.g. STEP syntax errors) help diagnose failures but aren't app errors.
-      print: (text) => console.debug('[OCCT]', text),
+      print: output.print,
       printErr: (text) => console.warn('[OCCT]', text),
     };
     createOcct(options).then((instance) => resolve(instance as unknown as OcctModule), reject);
