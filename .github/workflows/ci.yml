@@ -19,6 +19,11 @@ on:
         type: choice
         default: all
         options: [all, chromium, firefox, webkit]
+      runner:
+        description: Runner image for the build and E2E jobs (D131 tries ubuntu-26.04 before pinning it)
+        type: choice
+        default: ubuntu-24.04
+        options: [ubuntu-24.04, ubuntu-26.04]
       threads_benchmark:
         description: "S4 only: files under tests/fixtures to import with both OCCT builds, space-separated (large/large-<MB>mb.step and large/curved-<MB>mb.step are generated)"
         required: false
@@ -44,7 +49,7 @@ jobs:
     if: inputs.threads_benchmark == ''
     # Pinned (D68): ubuntu-latest moves to 26.04 from 2026-10-19, and headed Firefox under Xvfb
     # (D47, D51) is known to work on 24.04. Moving on is a deliberate change.
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -97,7 +102,7 @@ jobs:
   e2e:
     name: E2E (${{ matrix.browser }})
     needs: build-test
-    runs-on: ubuntu-24.04
+    runs-on: ${{ inputs.runner || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
       matrix:
