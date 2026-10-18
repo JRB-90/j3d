@@ -86,8 +86,7 @@ public sealed class NavigationTests(J3DAppFixture app) : ViewerPageTest(app)
         Assert.True(zoomed.VisibleHeight < before.VisibleHeight * 0.9, "the wheel zooms in");
         AssertVector(before.Target, zoomed.Target);
 
-        await Page.GetByTestId("projection").GetByText("Perspective").ClickAsync();
-        await WaitForCameraRestAsync();
+        await SetProjectionAsync("perspective");
         var perspective = await CameraAsync();
         await WheelAsync(-300);
         var dollied = await CameraAsync();
@@ -213,16 +212,14 @@ public sealed class NavigationTests(J3DAppFixture app) : ViewerPageTest(app)
         var orthographic = await ImportAndRestAsync();
         Assert.Equal("orthographic", orthographic.Projection);
 
-        await Page.GetByTestId("projection").GetByText("Perspective").ClickAsync();
-        await WaitForCameraRestAsync();
+        await SetProjectionAsync("perspective");
         var perspective = await CameraAsync();
         Assert.Equal("perspective", perspective.Projection);
         Assert.Equal(orthographic.VisibleHeight, perspective.VisibleHeight, 6);
         AssertVector(orthographic.Target, perspective.Target);
         AssertAngle(orthographic.Azimuth, perspective.Azimuth);
 
-        await Page.GetByTestId("projection").GetByText("Orthographic").ClickAsync();
-        await WaitForCameraRestAsync();
+        await SetProjectionAsync("orthographic");
         var back = await CameraAsync();
         Assert.Equal("orthographic", back.Projection);
         Assert.Equal(orthographic.VisibleHeight, back.VisibleHeight, 6);
