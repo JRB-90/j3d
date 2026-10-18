@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 planned (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) in progress** (D129–D136) · **Last updated:** 2026-10-18
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136) · **Last updated:** 2026-10-18
 
 ---
 
@@ -43,7 +43,7 @@ Reviewed in M5 (D64). Each criterion is covered by the E2E suite (in Chromium, F
 
 Persistence (models are lost on refresh), users and auth, deployment, picking/selection, highlighting from the tree, part visibility, measurement, sectioning, exploded views, export, mobile/tablet layout, zoom-to-cursor, undo.
 
-### Iteration 2 (planned)
+### Iteration 2 (complete)
 
 Let a user **inspect** what they've imported, still entirely in the browser:
 
@@ -87,10 +87,10 @@ Also: zoom toward the cursor (D74). Deployment stays local-only (D75). **CAD fil
 
 **M10: hardening**
 
-- [ ] Overlapping and intersecting translucent parts draw without sorting artefacts: weighted blended order-independent transparency (D90, R10).
-- [ ] Hover and click picking stay below D63's ~200 ms line on the 10,437-part file (D89).
-- [ ] CI runs on `ubuntu-26.04`, all three browsers included (D88).
-- [ ] Every criterion above is covered by tests that pass in CI (unit, bUnit, Vitest with real OCCT, Playwright ×3), as in iteration 1, and by the owner's manual pass in Chrome and Edge (D64).
+- [x] Overlapping and intersecting translucent parts draw without sorting artefacts: weighted blended order-independent transparency (D90, R10).
+- [x] Hover and click picking stay below D63's ~200 ms line on the 10,437-part file (D89).
+- [x] CI runs on `ubuntu-26.04`, all three browsers included (D88).
+- [x] Every criterion above is covered by tests that pass in CI (unit, bUnit, Vitest with real OCCT, Playwright ×3), as in iteration 1, and by the owner's manual pass in Chrome and Edge (D64).
 
 #### Out of scope for iteration 2
 
@@ -722,7 +722,7 @@ Measured in the built-in browser (Chrome 152) on the development machine's integ
 
 **Exit met:** every iteration 1 acceptance criterion in §1 is ticked, as amended by D64. Iteration 1 is complete.
 
-### Iteration 2 milestones (planned)
+### Iteration 2 milestones (complete)
 
 Planned on 2026-10-15 (D73–D92, five milestones by D85). Each starts with its own short question round (D92), so a scope below can still change; what's decided then is recorded in §2 and here.
 
@@ -818,7 +818,7 @@ Branch `feature/m9-export`, from `main` after [JRB-90/j3d#10](https://github.com
 - **Manual checklist** (D92, built-in browser, pane visible, real clicks; downloads caught in the page rather than saved) on `assembly.step`, `curved-part.step`, `part.glb`, `translucent.step` and `box.brep`: the Export menu titled for the scene; GLB of three models named `scene.glb`, marked `{ unit: mm, up: z }`, the two plates sharing one mesh, and imported back with the same tree and triangles; with `part.glb` hidden, the GLB left it out and, imported back with the originals hidden, drew the same colours, edges and placements; a STEP export held through the test hook showed "Exporting STEP…", a bar and Cancel in its item with the icon disabled, and Cancel ended it without a file or snackbar; the curved part's STEP and BREP (no triangulation in it) came back with 3,704 triangles and the same bounds; a box clicked in the view made the menu "Export the selection", and STL (binary) saved `box.stl` with its 12 triangles only; `translucent.step` through STEP kept its translucent cover over the green core. No console or server errors.
 - **Found and fixed in the checklist:** a menu item awaits its click handler before its menu closes, so both export menus stayed open for the whole export; the export now starts without being awaited (and bUnit checks the menus close). A J3D GLB's faces now get the viewer's polygon offset, so its edges don't z-fight. **Noticed:** at the built-in browser's ~970 px width the app bar is too narrow for Export, and "Fit all" wraps onto two lines; at 1,280 px it fits.
 
-### M10 — Hardening (in progress)
+### M10 — Hardening ✅ ([JRB-90/j3d#12](https://github.com/JRB-90/j3d/pull/12), squash-merged as `b335f75`)
 
 Branch `feature/m10-hardening`, from `main` after [JRB-90/j3d#11](https://github.com/JRB-90/j3d/pull/11) merged as `835079d`. Decided at its start: D129–D136.
 
@@ -833,7 +833,8 @@ Branch `feature/m10-hardening`, from `main` after [JRB-90/j3d#11](https://github
 - **Picking (D89, D133), measured again on today's code:** in headless Chromium (`LargeModelTests`, SwiftShader), a part pick takes 1.4 ms (longest 2.0) on the 10,437-part file and 0.1 ms (1.3) on `curved-100mb.step`, as in M6; in the built-in browser on the GPU, part picks 2.3 ms and the Measure tool's entity picks 1.9 ms on the 10,437-part file, and 0.4 and 0.3 ms on the curved one (longest 1.4 ms), all far below the ~200 ms line, so three-mesh-bvh still isn't needed.
 - **App bar (D135):** icons only below 1,100 px (§6.4). **README (D136):** a new screenshot (the pin selected, a 35 mm measurement, the Export menu), taken with Playwright's Chromium; translucency and CI docs updated. **Safari (D132):** a known gap, as before.
 - **Tests:** viewer Vitest 173 (2 new, `oit.test.ts`); OCCT 27 (1 new: the bars' import); client 163; host 7; E2E 71 with `TransparencyTests` (2) and the app bar check (2). Locally: Chromium 70 passed (the opt-in large-file test skipped), WebKit 66 passed (the four `PersistenceTests` and the large-file test skipped, D116).
-- **Manual checks** (built-in browser, pane visible): the crossing bars with OIT and with it off (blue drawn over the others), `translucent.step` beside `assembly.step` with the top plate selected, the app bar at the pane's 966 px width (one line of icons, the projection toggle no longer clipped) and at 1,280 px, and the picking times above. No console or server errors. The owner's own pass in Chrome and Edge (D64) remains for the last criterion.
+- **Manual checks** (built-in browser, pane visible): the crossing bars with OIT and with it off (blue drawn over the others), `translucent.step` beside `assembly.step` with the top plate selected, the app bar at the pane's 966 px width (one line of icons, the projection toggle no longer clipped) and at 1,280 px, and the picking times above. No console or server errors. The owner's own pass in Chrome and Edge (D64) came before the merge.
+- **CI:** the PR's run 39123298348 on `ubuntu-26.04` was green: client 163 and host 7; E2E 71 in each browser, with Chromium and Firefox passing 70 (the opt-in large-file test skipped) and WebKit 66 (the four `PersistenceTests` too, D116). `TransparencyTests` passed in all three, so CI's Linux browsers, Firefox's Mesa renderer included, draw with OIT rather than the fallback.
 
 ---
 
