@@ -5,8 +5,7 @@ namespace J3D.E2E.Tests;
 /// <summary>
 /// M8: models kept in the browser's private file system across reloads (decisions D82, D84,
 /// D109–D117), through the real toolbar, list, dialogs and keys. Each test has a fresh browser
-/// context, so a fresh store. Where the browser gives the page no private file system (Playwright's
-/// WebKit on Windows), the tests are skipped (D116, R18).
+/// context, so a fresh store.
 /// </summary>
 public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
 {
@@ -133,16 +132,10 @@ public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
         await second.CloseAsync();
     }
 
-    /// <summary>
-    /// The store must have opened as this tab's. WebKit without a private file system skips the test
-    /// (D116); any other browser fails it.
-    /// </summary>
+    /// <summary>The store must have opened as this tab's.</summary>
     private async Task RequireStoreAsync()
     {
         var status = await Page.EvaluateAsync<string>("async () => { await window.__j3dTest.storeIdle(); return window.__j3dTest.store().status; }");
-        Assert.SkipWhen(
-            status == "unavailable" && Environment.GetEnvironmentVariable("BROWSER") == "webkit",
-            "This WebKit gives the page no origin private file system (R18, D116).");
         Assert.Equal("kept", status);
     }
 

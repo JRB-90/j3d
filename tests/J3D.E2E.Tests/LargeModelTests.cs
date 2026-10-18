@@ -9,7 +9,9 @@ namespace J3D.E2E.Tests;
 /// OutOfMemory, in each browser. Since M5 a loaded model is also measured for the tuning decisions
 /// (D63, D71): the longest main-thread task while it's added and fitted, its draw calls and buffer
 /// bytes, what one frame costs, the frame rate while orbiting, and opening its tree's first level.
-/// Since M6 (D89) also how long a pick takes, and selecting, hiding and showing every part. Long tasks are only reported by Chromium. On demand only:
+/// Since M6 (D89) also how long a pick takes, and selecting, hiding and showing every part. Since M11
+/// (D141) a STEP export is cancelled part-way, then the model is exported as STEP and BREP through its
+/// item's menu, each either downloaded or failed with out of memory. Long tasks are only reported by Chromium. On demand only:
 /// <c>npm run fixtures:large -- 200 curved-100</c>, then run with
 /// <c>J3D_LARGE_FIXTURES=200,curved-100</c>; add <c>HEADED=1</c> to measure on the real GPU.
 /// </summary>
@@ -43,7 +45,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
             TestContext.Current.TestOutputHelper?.WriteLine(
                 $"{BrowserName} {fixture}: {model.Status} in {elapsed.TotalSeconds:F1} s, " +
                 (model.Status == "loaded"
-                    ? $"{model.Stats!.Prototypes} parts, {model.Stats.Triangles} triangles, WASM heap {model.MemoryBytes / (1 << 20)} MB; {await MeasureAsync(model.Id)}"
+                    ? $"{model.Stats!.Prototypes} parts, {model.Stats.Triangles} triangles, WASM heap {model.MemoryBytes / (1 << 20)} MB; {await MeasureAsync(model.Id)}; {await ExportAsync()}"
                     : $"{model.Error}"));
 
             if (model.Status == "failed")
@@ -148,6 +150,68 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 
         return $"a pick {picks[picks.Length / 2]:F1} ms (longest {picks[^1]:F1}); selecting the first tree node's {count} parts {select:F0} ms " +
             $"(longest task {Longest(selecting)}); hiding every part {hide:F0} ms, showing them {show:F0} ms (longest task {Longest(hiding)})";
+    }
+
+    /// <summary>
+    /// Cancels a STEP export two seconds in, then exports STEP and BREP, as a line for the test output.
+    /// The model must still be loaded afterwards, whatever happened.
+    /// </summary>
+    private async Task<string> ExportAsync()
+    {
+        var item = Page.GetByTestId("model-item");
+        await StartLongTaskLogAsync();
+        await StartExportAsync("step");
+        await Expect(item.GetByTestId("model-export")).ToHaveCountAsync(1);
+        await Page.WaitForTimeoutAsync(2_000);
+        var cancelling = Stopwatch.StartNew();
+        await item.GetByTestId("cancel-export").ClickAsync();
+        await Expect(item.GetByTestId("model-export")).ToHaveCountAsync(0, new() { Timeout = 10 * 60_000 });
+        var cancelled = $"STEP cancelled {cancelling.Elapsed.TotalSeconds:F1} s after asking (longest task {Longest(await TakeLongTasksAsync())})";
+
+        var step = await DownloadAsync("step");
+        var brep = await DownloadAsync("brep");
+        await Expect(item).ToHaveAttributeAsync("data-status", "loaded");
+        return $"{cancelled}; {step}; {brep}";
+    }
+
+    /// <summary>Exports the model and waits until the export ends, with its file's size or its failure.</summary>
+    private async Task<string> DownloadAsync(string format)
+    {
+        var downloaded = new TaskCompletionSource<IDownload>();
+        void OnDownload(object? sender, IDownload download) => downloaded.TrySetResult(download);
+        Page.Download += OnDownload;
+        try
+        {
+            await StartLongTaskLogAsync();
+            var stopwatch = Stopwatch.StartNew();
+            await StartExportAsync(format);
+            var export = Page.GetByTestId("model-item").GetByTestId("model-export");
+            await Expect(export).ToHaveCountAsync(1);
+            await Expect(export).ToHaveCountAsync(0, new() { Timeout = 30 * 60_000 });
+            var elapsed = stopwatch.Elapsed.TotalSeconds;
+            var tasks = Longest(await TakeLongTasksAsync());
+
+            // The browser reports the download a moment after the page has saved it.
+            if (await Task.WhenAny(downloaded.Task, Task.Delay(10_000)) == downloaded.Task)
+            {
+                var file = new FileInfo(await downloaded.Task.Result.PathAsync());
+                return $"{format.ToUpperInvariant()} of {file.Length / (1 << 20)} MB in {elapsed:F1} s (longest task {tasks})";
+            }
+
+            var error = Page.Locator(".mud-snackbar").Filter(new() { HasText = "Couldn't export" });
+            await Expect(error).ToContainTextAsync("Out of memory");
+            return $"{format.ToUpperInvariant()} failed after {elapsed:F1} s (longest task {tasks}): {await error.First.InnerTextAsync()}";
+        }
+        finally
+        {
+            Page.Download -= OnDownload;
+        }
+    }
+
+    private async Task StartExportAsync(string format)
+    {
+        await Page.GetByTestId("model-item").GetByTestId("export-model").Locator("button").ClickAsync();
+        await Page.GetByTestId($"export-{format}").ClickAsync();
     }
 
     /// <summary>Right-drags the camera round, a move per frame, and returns the frames drawn per second.</summary>

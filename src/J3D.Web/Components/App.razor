@@ -9,6 +9,8 @@
     <meta name="color-scheme" content="dark" />
     <base href="/" />
     <title>J3D</title>
+    @* No icon yet. An empty one stops browsers asking for /favicon.ico, which isn't there (headed Chromium logs the 404). *@
+    <link rel="icon" href="data:," />
     @if (Environment.IsDevelopment())
     {
         @* Turns on the viewer's window.__j3dTest hook, which the Playwright tests drive (docs/plan.md §6.3). *@

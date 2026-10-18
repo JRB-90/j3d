@@ -32,6 +32,8 @@ body {
 
     .j3d-appbar .j3d-toolbar .j3d-projection {
         margin-left: 12px;
+        /* Keeps its labels whole in a narrow window: at 900 px it shrank and clipped "Orthographic" (M11). */
+        flex-shrink: 0;
     }
 
     .j3d-appbar .j3d-toolbar .j3d-toolbar-group {
