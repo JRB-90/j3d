@@ -13,11 +13,21 @@ namespace J3D.E2E.Tests;
 /// (D141) a STEP export is cancelled part-way, then the model is exported as STEP and BREP through its
 /// item's menu, each either downloaded or failed with out of memory. Long tasks are only reported by Chromium. On demand only:
 /// <c>npm run fixtures:large -- 200 curved-100</c>, then run with
-/// <c>J3D_LARGE_FIXTURES=200,curved-100</c>; add <c>HEADED=1</c> to measure on the real GPU.
+/// <c>J3D_LARGE_FIXTURES=200,curved-100</c>; add <c>HEADED=1</c> to measure on the real GPU. Since M12
+/// also the generated plant (<c>plant-10000</c>, D161) and the real SO-101 arm (<c>so101</c>, D160).
 /// </summary>
 public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 {
     private static readonly string? Names = Environment.GetEnvironmentVariable("J3D_LARGE_FIXTURES");
+
+    /// <summary>
+    /// As scripts/generate-large-step.mjs names them: 200 is block copies, curved-100 curved parts,
+    /// plant-10000 a hierarchical assembly and so101 the downloaded arm.
+    /// </summary>
+    private static string FixtureOf(string name) =>
+        name.StartsWith("curved-", StringComparison.Ordinal) ? $"large/{name}mb.step"
+        : name.StartsWith("plant-", StringComparison.Ordinal) || name == "so101" ? $"large/{name}.step"
+        : $"large/large-{name}mb.step";
 
     [Fact]
     public async Task Large_step_loads_or_fails_with_OutOfMemory()
@@ -26,8 +36,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 
         foreach (var name in Names!.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
-            // As scripts/generate-large-step.mjs names them: 200 is block copies, curved-100 curved parts.
-            var fixture = name.StartsWith("curved-", StringComparison.Ordinal) ? $"large/{name}mb.step" : $"large/large-{name}mb.step";
+            var fixture = FixtureOf(name);
             Assert.True(File.Exists(Fixtures.PathOf(fixture)), $"Run npm run fixtures:large -- {name} first.");
 
             await StartLongTaskLogAsync();

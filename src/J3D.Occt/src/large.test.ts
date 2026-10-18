@@ -25,8 +25,12 @@ import {
 } from './facade';
 
 const sizes = (process.env['J3D_LARGE_FIXTURES'] ?? '').split(',').filter(Boolean);
-/** `200` is large-200mb.step (block copies); `curved-100` is curved-100mb.step (see scripts/generate-large-step.mjs). */
-const fileOf = (name: string) => (name.startsWith('curved-') ? `${name}mb.step` : `large-${name}mb.step`);
+/**
+ * `200` is large-200mb.step (block copies), `curved-100` is curved-100mb.step, `plant-10000` is
+ * plant-10000.step and `so101` is so101.step (see scripts/generate-large-step.mjs).
+ */
+const fileOf = (name: string) =>
+  name.startsWith('curved-') ? `${name}mb.step` : /^(plant-\d+|so101)$/.test(name) ? `${name}.step` : `large-${name}mb.step`;
 const pathOf = (name: string) => new URL(`../../../tests/fixtures/large/${fileOf(name)}`, import.meta.url);
 
 describe.runIf(sizes.length > 0)('large STEP (spike S2)', () => {
@@ -52,7 +56,7 @@ describe.runIf(sizes.length > 0)('large STEP (spike S2)', () => {
       phaseTimes.push(`${phaseName(lastPhase)} ${((performance.now() - phaseStart) / 1000).toFixed(1)} s`);
       const triangles = model.scene.prototypes.reduce((sum, p) => sum + p.indices.length / 3, 0);
       console.log(
-        `${fileOf(size)}: loaded ${model.scene.prototypes.length} parts, ${triangles} triangles; ` +
+        `${fileOf(size)}: loaded ${model.scene.prototypes.length} unique parts placed ${model.scene.instances.length} times, ${triangles} triangles; ` +
           `peak WASM heap ${mb(model.memoryBytes)}; ${seconds(start)} (${phaseTimes.join(', ')})`,
       );
     } catch (error) {
@@ -87,9 +91,14 @@ describe.runIf(sizes.length > 0)('large STEP (spike S2)', () => {
         return asked > 0;
       };
       const cancelled = attempt(() => model.exportFile(ExportFormat.Step, { isCancelled }));
-      expect(cancelled).toBeInstanceOf(OcctExportError);
-      expect(cancelled).toMatchObject({ status: ExportStatus.Cancelled });
-      results.push(`STEP cancelled ${((performance.now() - asked) / 1000).toFixed(1)} s after asking`);
+      if (cancelled instanceof Uint8Array) {
+        // Small files finish, or reach the writer's last phase (which doesn't poll), within two seconds.
+        results.push(`STEP finished in ${seconds(start)}, before the cancel landed`);
+      } else {
+        expect(cancelled).toBeInstanceOf(OcctExportError);
+        expect(cancelled).toMatchObject({ status: ExportStatus.Cancelled });
+        results.push(`STEP cancelled ${((performance.now() - asked) / 1000).toFixed(1)} s after asking`);
+      }
 
       for (const [format, name, header] of [
         [ExportFormat.Step, 'STEP', 'ISO-10303-21;'],

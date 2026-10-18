@@ -1,8 +1,8 @@
 // Regenerates the OCCT test fixtures in tests/fixtures/ (STEP, IGES, BREP).
 //
-// Uses the full prebuilt libcascade build, which includes OCCT's writers; J3D's own trimmed build
-// only reads. libcascade is deliberately not a project dependency (~140 MB), so install it
-// transiently first:
+// Uses the full prebuilt libcascade build, which includes OCCT's writers (see xcaf.mjs); J3D's own
+// trimmed build only reads. libcascade is deliberately not a project dependency (~140 MB), so
+// install it transiently first:
 //
 //   npm install --no-save libcascade@3.1.0
 //   node src/J3D.Occt/scripts/generate-fixtures.mjs                      # every fixture
@@ -13,32 +13,14 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { buildPlant } from './plant.mjs';
+import { loadOcct } from './xcaf.mjs';
 
-const { default: oc } = await import('libcascade');
+const occt = await loadOcct();
+const { oc, progress, text, rgba, surf, box, axis, cylinder, cylinderAt, translation, newDocument, readVirtualFile } = occt;
 
 const outDir = fileURLToPath(new URL('../../../tests/fixtures/', import.meta.url));
 mkdirSync(outDir, { recursive: true });
-
-const progress = () => new oc.Message_ProgressRange();
-const text = (value) => new oc.TCollection_ExtendedString(value, true);
-const rgba = (r, g, b, a = 1) => new oc.Quantity_ColorRGBA(r, g, b, a);
-const surf = oc.XCAFDoc_ColorType.XCAFDoc_ColorSurf;
-
-function box(dx, dy, dz) {
-  return new oc.BRepPrimAPI_MakeBox(dx, dy, dz).Shape();
-}
-
-function cylinder(radius, height) {
-  return new oc.BRepPrimAPI_MakeCylinder(radius, height).Shape();
-}
-
-function cylinderAt(x, y, z, radius, height) {
-  return new oc.BRepPrimAPI_MakeCylinder(axis(x, y, z), radius, height).Shape();
-}
-
-function axis(x, y, z) {
-  return new oc.gp_Ax2(new oc.gp_Pnt(x, y, z), new oc.gp_Dir(0, 0, 1));
-}
 
 function wire(curve) {
   return new oc.BRepBuilderAPI_MakeWire(new oc.BRepBuilderAPI_MakeEdge(curve).Edge()).Wire();
@@ -83,49 +65,12 @@ function pointsOn(edge) {
   return [0, 0.5, 1].map((t) => curve.Value(first + t * (last - first)));
 }
 
-function translation(x, y, z) {
-  const trsf = new oc.gp_Trsf();
-  trsf.SetTranslation(new oc.gp_Vec(x, y, z));
-  return new oc.TopLoc_Location(trsf);
-}
-
-function newDocument() {
-  // The out-parameter envelope's key differs between libcascade's d.ts ("theDoc") and runtime
-  // ("aDoc"), so pick the document out by shape.
-  const envelope = oc.XCAFApp_Application.GetApplication().NewDocument(text('MDTV-XCAF'));
-  const doc = Object.values(envelope).find((value) => typeof value?.Main === 'function');
-  const shapes = oc.XCAFDoc_DocumentTool.ShapeTool(doc.Main());
-  const colors = oc.XCAFDoc_DocumentTool.ColorTool(doc.Main());
-  return { doc, shapes, colors };
-}
-
-function readVirtualFile(path) {
-  const bytes = oc.FS.readFile(path, { encoding: 'binary' });
-  oc.FS.unlink(path);
-  return bytes;
-}
-
 function writeStep(doc, fileName) {
-  const writer = new oc.STEPCAFControl_Writer();
-  writer.SetColorMode(true);
-  writer.SetNameMode(true);
-  // Perform = Transfer + Write in single-file mode. (Transfer's "multi" argument switches OCCT to
-  // multi-file STEP with external references whenever it is non-null, even when empty.)
-  const path = `/tmp/${fileName}`;
-  if (!writer.Perform(doc, path, progress())) {
-    throw new Error(`STEP export failed for ${fileName}`);
-  }
-  save(fileName, readVirtualFile(path));
+  save(fileName, occt.stepBytes(doc, fileName));
 }
 
 function writeIges(doc, fileName) {
-  const writer = new oc.IGESCAFControl_Writer();
-  if (!writer.Transfer(doc, progress())) {
-    throw new Error(`IGES transfer failed for ${fileName}`);
-  }
-  const path = `/tmp/${fileName}`;
-  writer.Write(path, false);
-  save(fileName, readVirtualFile(path));
+  save(fileName, occt.igesBytes(doc, fileName));
 }
 
 function save(fileName, bytes) {
@@ -261,6 +206,12 @@ if (wanted('curved-part.step')) {
   oc.TDataStd_Name.Set(label, text('Curved part'));
   colors.SetColor(label, rgba(0.85, 0.45, 0.1), surf);
   writeStep(doc, 'curved-part.step');
+}
+
+// plant.step — a small "plant" (D161): 2 lines of 3 stations, 7 levels deep, assemblies reused as
+// instances, compound parts for Expand. Larger ones: npm run fixtures:large -- plant-10000.
+if (wanted('plant.step')) {
+  save('plant.step', buildPlant(occt, { lines: 2, stations: 3 }));
 }
 
 // invalid.step — header only, no data section: must fail with ParseFailed.

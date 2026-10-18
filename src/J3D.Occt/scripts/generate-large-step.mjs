@@ -6,7 +6,12 @@
 //   npm run fixtures:large -- --curved 25 100      # curved-25mb.step, curved-100mb.step
 //   npm run fixtures:large -- 200 curved-100       # large-200mb.step, curved-100mb.step
 //
-// The same names (200, curved-100) go in J3D_LARGE_FIXTURES for the large-model tests.
+//   npm run fixtures:large -- plant-10000                # plant-10000.step: a hierarchical assembly
+//   npm run fixtures:large -- so101                      # so101.step: the real SO-101 arm, downloaded
+//
+// The same names (200, curved-100, plant-10000, so101) go in J3D_LARGE_FIXTURES for the large-model
+// tests. Plants are written by OCCT (plant.mjs, which needs libcascade installed; see xcaf.mjs), with
+// about as many parts as named; so101 is fetched at a pinned commit (so101.mjs).
 //
 // Each file repeats a template part written by OCCT (so known to be valid) as separate top-level
 // parts: entity ids are renumbered and 3D points offset onto a grid, so every copy is distinct
@@ -15,7 +20,7 @@
 // parse and almost free to mesh; curved files use curved-part.step, whose filleted, lofted and
 // drilled faces make meshing cost something (D62).
 
-import { createWriteStream, mkdirSync, readFileSync } from 'node:fs';
+import { createWriteStream, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 
@@ -82,15 +87,38 @@ async function generate(template, megabytes) {
   console.log(`${path}: ${copies} parts, ${(out.bytesWritten / 1e6).toFixed(1)} MB`);
 }
 
+/** A plant with at least `parts` parts, in lines of ten stations (D161). */
+async function generatePlant(parts) {
+  const [{ buildPlant, partsPerLine }, { loadOcct }] = await Promise.all([import('./plant.mjs'), import('./xcaf.mjs')]);
+  const stations = 10;
+  const lines = Math.max(1, Math.ceil(parts / partsPerLine(stations)));
+  const path = `${fixtures}large/plant-${parts}.step`;
+  mkdirSync(`${fixtures}large`, { recursive: true });
+  const bytes = buildPlant(await loadOcct(), { lines, stations });
+  writeFileSync(path, bytes);
+  console.log(`${path}: ${lines * partsPerLine(stations)} parts, ${(bytes.length / 1e6).toFixed(1)} MB`);
+}
+
 const args = process.argv.slice(2);
 const curved = args.includes('--curved');
 const files = args.filter((arg) => arg !== '--curved');
 const loaded = new Map();
 for (const file of files.length > 0 ? files : ['200']) {
+  if (file === 'so101') {
+    mkdirSync(`${fixtures}large`, { recursive: true });
+    const { downloadSo101 } = await import('./so101.mjs');
+    await downloadSo101(`${fixtures}large/so101.step`);
+    continue;
+  }
+  const plant = /^plant-(\d+)$/.exec(file);
+  if (plant) {
+    await generatePlant(Number(plant[1]));
+    continue;
+  }
   const [, prefix, size] = /^(curved-)?(.*)$/.exec(file);
   const megabytes = Number(size);
   if (!(megabytes > 0)) {
-    throw new Error(`Not a size in MB, or curved-<MB>: ${file}`);
+    throw new Error(`Not a size in MB, curved-<MB>, plant-<parts> or so101: ${file}`);
   }
   const kind = prefix || curved ? templates.curved : templates.block;
   if (!loaded.has(kind)) {

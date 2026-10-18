@@ -107,6 +107,21 @@ describe('STEP', () => {
     expect(instance.matrix.slice(12, 15)).toEqual([0, 0, 35]); // column-major translation
   });
 
+  it('imports the generated plant: deep, with assemblies reused as instances (D161)', async () => {
+    const scene = await load('plant.step', ImportFormat.Step);
+
+    // 2 lines of 3 stations: 24 parts a station and a frame a line, from 12 part shapes.
+    expect(scene.instances).toHaveLength(146);
+    expect(scene.prototypes).toHaveLength(12);
+    scene.prototypes.forEach(expectWellFormed);
+    const depth = (node: number): number => (node < 0 ? 0 : 1 + depth(scene.nodes[node]!.parent));
+    const gripper = scene.nodes.findIndex((node) => node.name === 'Gripper' && node.prototype >= 0);
+    // Plant › Line › Station › Robot › Arm › Wrist › Gripper
+    expect(depth(gripper)).toBe(7);
+    expect(scene.nodes.filter((node) => node.name === 'Station 3')).toHaveLength(2);
+    expect(scene.nodes.filter((node) => node.name === 'Gripper' && node.prototype >= 0)).toHaveLength(6);
+  });
+
   it('separates translucent faces and keeps their alpha', async () => {
     const scene = await load('translucent.step', ImportFormat.Step);
 
