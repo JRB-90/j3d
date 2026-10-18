@@ -9,7 +9,8 @@ are in [plan.md](plan.md); this page is the practical side.
 - **Node.js 22+** (npm workspaces drive the TypeScript viewer and the OCCT package).
 - **Git LFS** (`git lfs install` before cloning): the OCCT WebAssembly binaries in `src/J3D.Occt/dist/` are stored in LFS.
 - **PowerShell** (`pwsh`), only to run Playwright's browser installer for the E2E tests.
-- *Optional:* **Docker**, only to rebuild the OCCT WebAssembly locally. CI normally does it.
+- *Optional:* **Docker**, only to rebuild the OCCT WebAssembly locally (CI normally does it) or to run the Firefox E2E
+  tests in Linux.
 
 ## Layout
 
@@ -21,7 +22,7 @@ are in [plan.md](plan.md); this page is the practical side.
 | `src/J3D.Occt` | The custom OCCT WebAssembly build (libcascade toolchain), its C++ facade and typed wrapper ([README](../src/J3D.Occt/README.md)) |
 | `tests/J3D.Web.Client.Tests` | xUnit v3 + bUnit: components, state, interop JSON, the third-party notices |
 | `tests/J3D.Web.Tests` | xUnit v3 + WebApplicationFactory: the host's headers and MIME types |
-| `tests/J3D.E2E.Tests` | xUnit v3 + Playwright: the real app in Chromium, Firefox and WebKit |
+| `tests/J3D.E2E.Tests` | xUnit v3 + Playwright: the real app in Chromium and Firefox |
 | `tests/fixtures` | Generated, licence-free CAD and mesh files shared by every test ([README](../tests/fixtures/README.md)) |
 
 ## Build and run
@@ -68,13 +69,13 @@ client), so a clean build is part of passing.
 Install Playwright's browsers once, after a build:
 
 ```bash
-pwsh tests/J3D.E2E.Tests/bin/Debug/net10.0/playwright.ps1 install chromium firefox webkit
+pwsh tests/J3D.E2E.Tests/bin/Debug/net10.0/playwright.ps1 install chromium firefox
 ```
 
-Then choose the browser with `BROWSER` (`chromium`, `firefox` or `webkit`) and, if you like, filter by class:
+Then choose the browser with `BROWSER` (`chromium` or `firefox`) and, if you like, filter by class:
 
 ```bash
-BROWSER=webkit dotnet test --project tests/J3D.E2E.Tests --filter-class "*ModelListTests"
+BROWSER=chromium dotnet test --project tests/J3D.E2E.Tests --filter-class "*ModelListTests"
 ```
 
 - By default the tests host the app in process on a random port. Set **`J3D_E2E_APP`** to a published app's folder to
@@ -92,7 +93,37 @@ BROWSER=webkit dotnet test --project tests/J3D.E2E.Tests --filter-class "*ModelL
 
 - `HEADED=1` shows the browser. Firefox in CI runs headed under `xvfb-run` and one test class at a time (decision D51).
 - A failed pixel check saves the screenshots it sampled under the test output's `screenshots/` folder.
-- Playwright's Firefox doesn't start on some Windows builds ("side-by-side configuration is incorrect"); CI covers it.
+- `J3D_STRESS=50` runs the opt-in `StressTests` for that many rounds: a measurement, then a model's Delete, which must
+  open its dialog every time (decision D140).
+- Safari isn't supported, so Playwright's WebKit isn't tested (D137, D138).
+
+### Firefox in Docker
+
+Playwright's Firefox doesn't start on some Windows builds ("side-by-side configuration is incorrect"). Its E2E job can
+run as CI runs it instead: in Playwright's Linux image (Ubuntu 26.04, with Firefox, Xvfb and the .NET 10 runtime),
+headed on a virtual display and a test class at a time, against a build and a published app made on the host (D139).
+With Docker running, from the repository root:
+
+```bash
+dotnet build tests/J3D.E2E.Tests -c Release
+```
+
+```bash
+dotnet publish src/J3D.Web -c Release -o artifacts/e2e-app
+```
+
+```bash
+docker run --rm --init --ipc=host -v "${PWD}:/j3d" -w /j3d -e BROWSER=firefox -e HEADED=1 -e J3D_E2E_APP=/j3d/artifacts/e2e-app mcr.microsoft.com/playwright/dotnet:v1.63.0-resolute xvfb-run --auto-servernum dotnet tests/J3D.E2E.Tests/bin/Release/net10.0/J3D.E2E.Tests.dll -parallelMode none
+```
+
+- The `docker run` line works in PowerShell and in Linux and macOS shells; in Git Bash put `MSYS_NO_PATHCONV=1` in
+  front of it.
+- It runs the test executable itself, so the options are xUnit's own: `-class "*ExportTests"` picks a class,
+  `-showLiveOutput` shows the tests' reports, and `-e J3D_LARGE_FIXTURES=200` or `-e J3D_STRESS=50` (before the image
+  name) turns on the opt-in tests.
+- The image's tag must match the `Microsoft.Playwright` version in `Directory.Packages.props`, since the image carries
+  that version's browsers. Its SDK is older than `global.json` asks for, so it doesn't build anything; instead a
+  Windows build of the tests also carries Playwright's Linux driver (`PlaywrightPlatform` in the test project).
 
 ### Large models
 

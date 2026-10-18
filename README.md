@@ -102,14 +102,14 @@ and so do models coming back from your last visit or an undo.
 
 ## Browsers
 
-J3D needs **WebGL 2** and a **cross-origin-isolated** page (the host sends the `Cross-Origin-Opener-Policy` and
-`Cross-Origin-Embedder-Policy` headers for this).
+J3D runs in current desktop **Chrome, Edge and Firefox**. It needs **WebGL 2** and a **cross-origin-isolated** page
+(the host sends the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers for this).
 
 | Browser | Tested |
 |---|---|
 | Chrome, Edge | Every change in CI (Playwright Chromium), and by hand on Windows |
 | Firefox | Every change in CI (Playwright Firefox) |
-| Safari | Every change in CI with Playwright's **WebKit** only. Real Safari hasn't been tried (no Mac). |
+| Safari | Not supported, and not tested |
 
 Only the current version of each browser is tested.
 

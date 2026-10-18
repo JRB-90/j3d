@@ -2,13 +2,15 @@
 
   <!--
     Browser end-to-end tests. Install browsers once after building:
-      pwsh tests/J3D.E2E.Tests/bin/Debug/net10.0/playwright.ps1 install chromium firefox webkit
-    Choose the browser with the BROWSER environment variable (chromium | firefox | webkit).
+      pwsh tests/J3D.E2E.Tests/bin/Debug/net10.0/playwright.ps1 install chromium firefox
+    Choose the browser with the BROWSER environment variable (chromium | firefox).
   -->
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
+    <!-- A Windows build also carries Playwright's Linux driver, so the same build runs Firefox in Docker (D139). -->
+    <PlaywrightPlatform Condition="$([MSBuild]::IsOSPlatform('Windows'))">win;linux-x64</PlaywrightPlatform>
   </PropertyGroup>
 
   <ItemGroup>

@@ -18,7 +18,7 @@ on:
         description: Browser to run E2E in
         type: choice
         default: all
-        options: [all, chromium, firefox, webkit]
+        options: [all, chromium, firefox]
       threads_benchmark:
         description: "S4 only: files under tests/fixtures to import with both OCCT builds, space-separated (large/large-<MB>mb.step and large/curved-<MB>mb.step are generated)"
         required: false
@@ -101,7 +101,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        browser: ${{ fromJSON((inputs.browser == '' || inputs.browser == 'all') && '["chromium","firefox","webkit"]' || format('["{0}"]', inputs.browser)) }}
+        browser: ${{ fromJSON((inputs.browser == '' || inputs.browser == 'all') && '["chromium","firefox"]' || format('["{0}"]', inputs.browser)) }}
     steps:
       - uses: actions/checkout@v7
 
