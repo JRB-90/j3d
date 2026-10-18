@@ -49,6 +49,7 @@ import { MaterialCache } from './materials';
 import { MeasureTool, type MeasureModel } from './measure';
 import type { MeasureInfo } from './measure-format';
 import type { MeshExportFormat } from './mesh-export';
+import { OrderIndependentTransparency, sceneMaterials, type SceneMaterials } from './oit';
 import { HighlightMaterials, MeshParts, type Highlight, type HighlightKind, type ModelParts, type ScreenSpace } from './parts';
 import { ViewCube } from './view-cube';
 import { HomeRegion, regionView, type ViewRegion } from './view-regions';
@@ -182,6 +183,12 @@ export class Viewer {
   private readonly measureTool: MeasureTool;
   /** The view last drawn, to report camera changes. */
   private drawnView = '';
+  /** Weighted blended OIT where the GPU supports it (D90, D130), and whether the last frame used it. */
+  private readonly oit: OrderIndependentTransparency | undefined;
+  private oitEnabled = true;
+  private oitUsed = false;
+  /** The models' materials, sorted again when a model comes or goes. */
+  private sortedMaterials: SceneMaterials | undefined;
 
   constructor(
     private readonly host: HTMLElement,
@@ -196,6 +203,7 @@ export class Viewer {
     renderer.autoClear = false; // the view cube is drawn over the scene in the same frame
     renderer.toneMapping = NeutralToneMapping;
     this.renderer = renderer;
+    this.oit = OrderIndependentTransparency.isSupported(renderer) ? new OrderIndependentTransparency(renderer) : undefined;
     const canvas = renderer.domElement;
     canvas.dataset['testid'] = 'viewer-canvas';
     host.prepend(canvas);
@@ -283,6 +291,20 @@ export class Viewer {
     return this.projectionMode;
   }
 
+  /**
+   * How the last frame drew translucent surfaces: order-independently (D90), sorted (nothing
+   * translucent, or turned off), or sorted because the GPU can't (D130).
+   */
+  get transparency(): 'oit' | 'sorted' | 'unsupported' {
+    return !this.oit ? 'unsupported' : this.oitUsed ? 'oit' : 'sorted';
+  }
+
+  /** Turns order-independent transparency off and on again, for tests that compare the two (D130). */
+  setOrderIndependentTransparency(enabled: boolean): void {
+    this.oitEnabled = enabled;
+    this.requestRender();
+  }
+
   /** Frames drawn so far, for tests of on-demand rendering. */
   get frameCount(): number {
     return this.frames;
@@ -367,6 +389,7 @@ export class Viewer {
     }
     this.models.set(model.summary.id, entry);
     this.scene.add(entry.object);
+    this.sortedMaterials = undefined;
     if (model.restored?.hidden.length) {
       this.setPartState(model.summary.id, model.restored.hidden, []);
     }
@@ -394,6 +417,7 @@ export class Viewer {
       this.setHovered(undefined);
     }
     entry.object.removeFromParent();
+    this.sortedMaterials = undefined;
     entry.dispose?.();
     this.updateSceneBounds();
     this.requestRender();
@@ -792,6 +816,7 @@ export class Viewer {
     for (const id of [...this.models.keys()]) {
       this.remove(id);
     }
+    this.oit?.dispose();
     this.measureTool.dispose();
     this.labels.remove();
     this.materials.dispose();
@@ -838,6 +863,14 @@ export class Viewer {
       two: orthographic ? ACTION.TOUCH_ZOOM_TRUCK : ACTION.TOUCH_DOLLY_TRUCK,
       three: ACTION.TOUCH_TRUCK,
     });
+  }
+
+  private sceneMaterials(): SceneMaterials {
+    if (!this.sortedMaterials) {
+      this.sortedMaterials = sceneMaterials([...this.models.values()].map(({ object }) => object));
+      this.oit?.prune(this.sortedMaterials);
+    }
+    return this.sortedMaterials;
   }
 
   private updateSceneBounds(): void {
@@ -901,10 +934,17 @@ export class Viewer {
 
     this.renderer.setViewport(0, 0, this.width, this.height);
     this.renderer.clear();
-    this.renderer.render(this.scene, camera);
-    // Read before the view cube draws: the renderer's counts reset on every render call.
-    const { calls, triangles, lines } = this.renderer.info.render;
-    this.lastFrame = { drawCalls: calls, triangles, lines };
+    const materials = this.oit && this.oitEnabled ? this.sceneMaterials() : undefined;
+    this.oitUsed = materials !== undefined && materials.translucent.size > 0;
+    if (this.oitUsed) {
+      const models = [...this.models.values()].map(({ object }) => object);
+      this.lastFrame = this.oit!.render(this.scene, camera, models, this.overlays, materials!);
+    } else {
+      this.renderer.render(this.scene, camera);
+      // Read before the view cube draws: the renderer's counts reset on every render call.
+      const { calls, triangles, lines } = this.renderer.info.render;
+      this.lastFrame = { drawCalls: calls, triangles, lines };
+    }
     this.viewCube.render(this.renderer, camera, this.width, this.height);
     this.measureTool.updateLabels();
     this.needsRender = false;

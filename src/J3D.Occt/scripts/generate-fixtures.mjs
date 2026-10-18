@@ -209,6 +209,27 @@ if (wanted('translucent.step')) {
   writeStep(doc, 'translucent.step');
 }
 
+// intersecting.step — three 50 % opaque bars crossing at one centre (D134): red along X, green along
+// Y, blue along Z. Their centres coincide, so sorting whole objects by distance can't order them.
+if (wanted('intersecting.step')) {
+  const { doc, shapes, colors } = newDocument();
+  const assembly = shapes.NewShape();
+  oc.TDataStd_Name.Set(assembly, text('Crossing bars'));
+  const bars = [
+    ['Red bar', box(40, 10, 10), rgba(0.9, 0.1, 0.1, 0.5), translation(0, 15, 15)],
+    ['Green bar', box(10, 40, 10), rgba(0.1, 0.8, 0.1, 0.5), translation(15, 0, 15)],
+    ['Blue bar', box(10, 10, 40), rgba(0.1, 0.2, 0.9, 0.5), translation(15, 15, 0)],
+  ];
+  for (const [name, shape, colour, location] of bars) {
+    const bar = shapes.AddShape(shape, false, true);
+    oc.TDataStd_Name.Set(bar, text(name));
+    colors.SetColor(bar, colour, surf);
+    oc.TDataStd_Name.Set(shapes.AddComponent(assembly, bar, location), text(name));
+  }
+  shapes.UpdateAssemblies();
+  writeStep(doc, 'intersecting.step');
+}
+
 // surfaces.iges — a green cylinder.
 if (wanted('surfaces.iges')) {
   const { doc, shapes, colors } = newDocument();

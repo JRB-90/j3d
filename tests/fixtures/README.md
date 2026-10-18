@@ -11,6 +11,7 @@ Shared by Vitest (OCCT and mesh tests under Node) and Playwright (browser E2E). 
 | `surfaces.iges` | IGES | IGES reader, colours via IGESCAFControl |
 | `invalid.step` | STEP | Corrupt file → `ParseFailed` through a C++ exception (checks WASM exception handling) |
 | `translucent.step` | STEP | RGBA colours: an opaque core inside a 40 % opaque cover |
+| `intersecting.step` | STEP | Three 50 % opaque bars (red along X, green along Y, blue along Z) crossing at one centre: order-independent transparency (D134) |
 | `part.stl` | Binary STL | STL in the mesh worker, single-node tree |
 | `part.obj` | OBJ | OBJ in the mesh worker, object names, default materials |
 | `textured/part.obj` + `part.mtl` + `checker.png` | OBJ + MTL | `mtllib` sidecar grouping, MTL texture (`map_Kd`) and opacity (`d 0.4`) |
