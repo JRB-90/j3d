@@ -96,8 +96,10 @@ and so do models coming back from your last visit or an undo.
   they grant it persistent storage, which J3D asks for (Firefox shows a prompt; Chrome decides by itself).
 - Measurements are in millimetres: STEP and IGES are converted on import, glTF (metres by its specification) is
   converted when measured, and STL and OBJ are taken to be in millimetres.
-- Exports are written in the browser too, so a STEP export of a very large model needs memory on top of the model's
-  own, within the same 4 GB heap.
+- Exports are written in the browser too, in the model's own 4 GB heap. Writing needs far less memory than reading, so
+  every model that loads also exports: the 200 MB STEP saves as STEP in about 12 seconds and as BREP in 2, and one of
+  600 MB, about the largest that loads, as STEP in about half a minute. **Cancel** stops an export at once, although
+  the last few seconds of writing a STEP file carry on unseen, and the model's next export waits for them.
 - Not in this version yet: sections, exploded views, and a phone or tablet layout.
 
 ## Browsers

@@ -137,7 +137,8 @@ npm run fixtures:large -- 200 curved-100
 
 Name the same files in `J3D_LARGE_FIXTURES` to run the Node test (`src/J3D.Occt/src/large.test.ts`) and the E2E test
 (`LargeModelTests`), which also reports draw calls, frame cost, the longest main-thread task and the tree's opening
-time. Headless browsers draw in software, so its rendering numbers only compare runs with each other.
+time. Headless browsers draw in software, so its rendering numbers only compare runs with each other. Both also export
+each loaded file as STEP and BREP, after cancelling a STEP export part-way, and report the times and sizes (D141).
 
 ```bash
 J3D_LARGE_FIXTURES=200,curved-100 npm test --workspace @j3d/occt -- large
