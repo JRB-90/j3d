@@ -24,7 +24,7 @@ concurrency:
 jobs:
   build:
     name: Build OCCT WASM
-    runs-on: ubuntu-24.04 # pinned with ci.yml (D68)
+    runs-on: ubuntu-26.04 # pinned with ci.yml (D68, D131)
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7

@@ -13,6 +13,8 @@
                StartIcon="@Icons.Material.Filled.FileOpen"
                Color="Color.Inherit"
                Disabled="@(!Session.IsReady)"
+               Class="j3d-collapsible"
+               title="Import"
                data-testid="import-button">
         Import
     </MudButton>
@@ -26,6 +28,8 @@
              TransformOrigin="Origin.TopLeft"
              Dense="true"
              AriaLabel="@ExportLabel"
+             Class="j3d-collapsible"
+             title="Export"
              aria-busy="@(_exporting ? "true" : "false")"
              data-testid="export-menu">
         <div class="j3d-menu-header" data-testid="export-scope">@ExportLabel</div>
@@ -40,6 +44,7 @@
                    Color="Color.Inherit"
                    Disabled="@(!Session.IsReady)"
                    OnClick="FitAllAsync"
+                   Class="j3d-collapsible"
                    data-testid="fit-all-button">
             Fit all
         </MudButton>

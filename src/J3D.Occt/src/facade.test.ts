@@ -118,6 +118,17 @@ describe('STEP', () => {
     expect(core.opaqueIndexCount).toBe(core.indices.length);
   });
 
+  it('reads three crossing translucent bars as three half-opaque prototypes', async () => {
+    const scene = await load('intersecting.step', ImportFormat.Step);
+
+    expect(scene.nodes.map((node) => node.name)).toEqual(['Crossing bars', 'Red bar', 'Green bar', 'Blue bar']);
+    expect(scene.prototypes).toHaveLength(3);
+    for (const bar of scene.prototypes) {
+      expect(bar.uniformColor[3]).toBeCloseTo(0.5, 2);
+      expect(bar.opaqueIndexCount).toBe(0);
+    }
+  });
+
   it('meshes the curved template part (fillets, a lofted boss, drilled holes)', async () => {
     const scene = await load('curved-part.step', ImportFormat.Step);
 

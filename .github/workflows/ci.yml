@@ -42,9 +42,9 @@ jobs:
   build-test:
     name: Build & unit tests
     if: inputs.threads_benchmark == ''
-    # Pinned (D68): ubuntu-latest moves to 26.04 from 2026-10-19, and headed Firefox under Xvfb
-    # (D47, D51) is known to work on 24.04. Moving on is a deliberate change.
-    runs-on: ubuntu-24.04
+    # Pinned (D68, D131): moved to 26.04 in M10 after a trial run of every job there, headed Firefox
+    # under Xvfb (D47, D51) included. Moving on again is a deliberate change.
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
@@ -97,7 +97,7 @@ jobs:
   e2e:
     name: E2E (${{ matrix.browser }})
     needs: build-test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -174,7 +174,7 @@ jobs:
   threads-benchmark:
     name: Threading benchmark (S4)
     if: inputs.threads_benchmark != ''
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7

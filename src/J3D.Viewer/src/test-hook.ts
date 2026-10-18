@@ -87,6 +87,10 @@ export interface TestHook {
    * for measuring large selections (D89). .NET doesn't hear of it, so restore the state after.
    */
   timePartState(id: string, hidden: number[], selected: number[]): number | null;
+  /** How the last frame drew translucent surfaces (M10): `oit`, `sorted`, `unsupported` (no float targets), or null without WebGL2. */
+  transparency(): 'oit' | 'sorted' | 'unsupported' | null;
+  /** Turns order-independent transparency off (false) and on again, to compare the two (D130). */
+  useOrderIndependentTransparency(enabled: boolean): void;
   /** The Measure tool's state (M7), or null without WebGL2. */
   measureState(): ReturnType<Viewer['measureState']> | null;
   /** What the Measure tool would pick at a client point. */
@@ -174,6 +178,8 @@ export function installTestHook(
     hoveredPart: () => viewer?.hoveredPart ?? null,
     partState: (id) => viewer?.partState(id) ?? null,
     pickTimes: () => viewer?.takePickTimes() ?? null,
+    transparency: () => viewer?.transparency ?? null,
+    useOrderIndependentTransparency: (enabled) => viewer?.setOrderIndependentTransparency(enabled),
     measureState: () => viewer?.measureState() ?? null,
     entityAt: (x, y) => viewer?.entityAt(x, y) ?? null,
     store: () => store.state,
