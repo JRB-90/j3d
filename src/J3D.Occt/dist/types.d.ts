@@ -41,6 +41,12 @@ declare class J3DModel {
   measureEntity(kind: number, prototype: number, index: number, matrix: string): string;
   measurePair(kindA: number, prototypeA: number, indexA: number, matrixA: string, kindB: number, prototypeB: number, indexB: number, matrixB: string, shapeB: string): string;
   exportEntity(kind: number, prototype: number, index: number): string;
+  exportFile(format: number): number;
+  getOutputLength(): number;
+  getOutputChunkCount(): number;
+  getOutputChunkPtr(index: number): number;
+  getOutputChunkLength(index: number): number;
+  releaseOutput(): void;
   /** Releases the C++ object. The caller must ensure no further access. */
   delete(): void;
   [Symbol.dispose](): void;

@@ -1,6 +1,7 @@
 import type { EntityMeasure, EntityRef, ImportedScene, PairMeasure } from '@j3d/occt/facade';
 import type { Object3D } from 'three';
 import type { ModelFormat, ModelKind } from '../formats';
+import type { BrepExportFormat } from './protocol';
 
 export type ModelId = string;
 
@@ -74,10 +75,31 @@ export interface BrepMeasurer {
   exportEntity(entity: EntityRef): Promise<string>;
 }
 
+/** Saving a BREP model as imported, in its worker (M9, D83, D125). */
+export interface BrepExporter {
+  /**
+   * The file's bytes. `onProgress` gets a fraction, or null while OCCT writes a STEP file. Aborting
+   * `signal` stops OCCT and rejects with an {@link ExportCancelledError}; so does removing the model.
+   */
+  export(format: BrepExportFormat, options?: { onProgress?: (fraction: number | null) => void; signal?: AbortSignal }): Promise<ArrayBuffer>;
+}
+
+/** An export that was cancelled, or whose model was removed, before it finished. */
+export class ExportCancelledError extends Error {
+  constructor(message = 'Export cancelled.') {
+    super(message);
+    this.name = 'ExportCancelledError';
+  }
+}
+
 export type ModelContent =
-  | { kind: 'brep'; scene: ImportedScene; measure?: BrepMeasurer }
-  /** `nodes[i]` is the object of tree node i, for picking and hiding parts (D81). */
-  | { kind: 'mesh'; root: Object3D; nodes: Object3D[] };
+  | { kind: 'brep'; scene: ImportedScene; measure?: BrepMeasurer; exporter?: BrepExporter }
+  /**
+   * `nodes[i]` is the object of tree node i, for picking and hiding parts (D81). `unitScale` takes
+   * model units to millimetres (D105): 1000 for glTF, which is in metres, except J3D's own GLB, which
+   * says it's in millimetres (D123); 1 when absent.
+   */
+  | { kind: 'mesh'; root: Object3D; nodes: Object3D[]; unitScale?: number };
 
 /** What an import produces, before the manager attaches the model's summary. */
 export interface ImportResult {

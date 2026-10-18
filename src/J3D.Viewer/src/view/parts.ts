@@ -18,6 +18,7 @@ import {
   type Material,
   type Object3D,
 } from 'three';
+import { isJ3dEdges } from '../import/mesh/j3d-gltf';
 import type { TreeNode, Vector3Tuple } from '../import/types';
 
 /** The accent colour (docs/plan.md §6.6), used for the selection and, fainter, for hover (assumption 8). */
@@ -190,7 +191,10 @@ export class MeshParts implements ModelParts {
     for (const node of this.partNodes) {
       const hide = hidden.has(node);
       if (hide !== this.hidden.has(node)) {
-        this.objects[node]!.layers.set(hide ? HiddenLayer : 0);
+        const object = this.objects[node]!;
+        object.layers.set(hide ? HiddenLayer : 0);
+        // J3D's own GLB: a BREP part's edges go with it (D124).
+        object.children.filter(isJ3dEdges).forEach((edges) => edges.layers.set(hide ? HiddenLayer : 0));
         if (hide) {
           this.hidden.add(node);
         } else {

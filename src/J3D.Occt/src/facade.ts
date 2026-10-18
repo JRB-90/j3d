@@ -64,6 +64,12 @@ export interface J3DModelHandle {
     shapeB: string,
   ): string;
   exportEntity(kind: number, prototype: number, index: number): string;
+  exportFile(format: number): number;
+  getOutputLength(): number;
+  getOutputChunkCount(): number;
+  getOutputChunkPtr(index: number): number;
+  getOutputChunkLength(index: number): number;
+  releaseOutput(): void;
   delete(): void;
 }
 
@@ -71,6 +77,7 @@ export interface OcctModule {
   J3DModel: new () => J3DModelHandle;
   wasmMemory: WebAssembly.Memory;
   j3dProgress?: ((phase: number, fraction: number) => void) | undefined;
+  j3dCancelled?: (() => boolean) | undefined;
 }
 
 /** Geometry of one prototype (a unique part + style) in the part's own coordinates. */
@@ -224,6 +231,35 @@ export class OcctMeasureError extends Error {
   }
 }
 
+/** What a model can be saved as (M9, D83): the import numbering, in wrappers/j3d_facade.cpp. */
+export const ExportFormat = { Step: 0, Brep: 2 } as const;
+export type ExportFormat = (typeof ExportFormat)[keyof typeof ExportFormat];
+
+/** Must match the status codes in wrappers/j3d_facade.cpp. */
+export const ExportStatus = { Ok: 0, Failed: 1, Empty: 2, OutOfMemory: 3, Internal: 4, Cancelled: 5 } as const;
+export type ExportStatus = (typeof ExportStatus)[keyof typeof ExportStatus];
+
+/** STEP translates the model (with a fraction) and then writes it (without one); BREP only writes. */
+export const ExportPhase = { Transferring: 2, Writing: 5 } as const;
+export type ExportPhase = (typeof ExportPhase)[keyof typeof ExportPhase];
+
+export interface ExportOptions {
+  /** Fraction in [0, 1], or a negative number while the phase has no measurable progress. */
+  onProgress?: (phase: ExportPhase, fraction: number) => void;
+  /** Polled while OCCT works: returning true stops the export with {@link ExportStatus.Cancelled} (D125). */
+  isCancelled?: () => boolean;
+}
+
+export class OcctExportError extends Error {
+  constructor(
+    readonly status: ExportStatus,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'OcctExportError';
+  }
+}
+
 /** One imported model. Owns its C++ J3DModel (and therefore its BREP) until disposed. */
 export class OcctModel implements Disposable {
   private constructor(
@@ -288,6 +324,35 @@ export class OcctModel implements Disposable {
       parseMeasure(text);
     }
     return text;
+  }
+
+  /**
+   * The whole model as imported, as a STEP or BREP file (M9, D83). Runs synchronously; throws
+   * {@link OcctExportError}, with status Cancelled when `isCancelled` stopped it. The model stays usable.
+   */
+  exportFile(format: ExportFormat, options: ExportOptions = {}): Uint8Array<ArrayBuffer> {
+    if (!this.handle) {
+      throw new OcctExportError(ExportStatus.Internal, 'The model has been disposed.');
+    }
+    const handle = this.handle;
+    const { onProgress, isCancelled } = options;
+    this.module.j3dProgress = onProgress ? (phase, fraction) => onProgress(phase as ExportPhase, fraction) : undefined;
+    this.module.j3dCancelled = isCancelled;
+    try {
+      const status = handle.exportFile(format);
+      if (status === ExportStatus.Ok) {
+        return readOutput(this.module, handle);
+      }
+      const nearCeiling = this.module.wasmMemory.buffer.byteLength >= MaximumHeapBytes * OutOfMemoryHeapFraction;
+      if (status !== ExportStatus.Cancelled && status !== ExportStatus.OutOfMemory && nearCeiling) {
+        throw new OcctExportError(ExportStatus.OutOfMemory, `Out of memory (${handle.getLastError() || 'export failed'}).`);
+      }
+      throw new OcctExportError(status as ExportStatus, handle.getLastError() || 'Export failed.');
+    } finally {
+      handle.releaseOutput();
+      this.module.j3dProgress = undefined;
+      this.module.j3dCancelled = undefined;
+    }
   }
 
   /** WASM heap size of the module this model lives in (one module per worker). */
@@ -377,6 +442,18 @@ function extractPrototype(module: OcctModule, handle: J3DModelHandle, index: num
   } finally {
     data.delete();
   }
+}
+
+/** Copies the export's chunks out of WASM memory into one buffer outside the heap. */
+function readOutput(module: OcctModule, handle: J3DModelHandle): Uint8Array<ArrayBuffer> {
+  const output = new Uint8Array(handle.getOutputLength() >>> 0);
+  let offset = 0;
+  for (let index = 0; index < handle.getOutputChunkCount(); index++) {
+    const length = handle.getOutputChunkLength(index);
+    output.set(new Uint8Array(module.wasmMemory.buffer, handle.getOutputChunkPtr(index) >>> 0, length), offset);
+    offset += length;
+  }
+  return output;
 }
 
 function parseMeasure<T>(json: string): T {

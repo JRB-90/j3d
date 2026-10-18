@@ -69,6 +69,23 @@ public sealed class ViewerSession
         }
     }
 
+    /// <summary>Saves the visible scene, or the selection, as GLB or STL (M9). Null without a viewer.</summary>
+    public async Task<ExportOutcome?> ExportMeshAsync(MeshExportFormat format, bool selection) =>
+        IsReady ? await _viewer!.ExportMeshAsync(format, selection) : null;
+
+    /// <summary>Saves a BREP model as STEP or BREP (M9). Null without a viewer.</summary>
+    public async Task<ExportOutcome?> ExportModelAsync(ModelId id, BrepExportFormat format) =>
+        _viewer is not null ? await _viewer.ExportModelAsync(id, format) : null;
+
+    /// <summary>Stops a model's STEP or BREP export (D125).</summary>
+    public async Task CancelExportAsync(ModelId id)
+    {
+        if (_viewer is not null)
+        {
+            await _viewer.CancelExportAsync(id);
+        }
+    }
+
     /// <summary>Copies a measurement's value to the clipboard (M7).</summary>
     public async Task CopyTextAsync(string text)
     {

@@ -17,6 +17,24 @@
         Import
     </MudButton>
 
+    @* Export (M9, D119): the selection when there is one, else every visible part. Busy while it's written (D125). *@
+    <MudMenu Label="@(_exporting ? "Exporting…" : "Export")"
+             StartIcon="@(_exporting ? Icons.Material.Filled.HourglassTop : Icons.Material.Filled.FileDownload)"
+             Color="Color.Inherit"
+             Disabled="@(!Session.IsReady || !Scene.CanExport || _exporting)"
+             AnchorOrigin="Origin.BottomLeft"
+             TransformOrigin="Origin.TopLeft"
+             Dense="true"
+             AriaLabel="@ExportLabel"
+             aria-busy="@(_exporting ? "true" : "false")"
+             data-testid="export-menu">
+        <div class="j3d-menu-header" data-testid="export-scope">@ExportLabel</div>
+        @foreach (var format in MeshFormats)
+        {
+            <MudMenuItem Label="@format.DisplayName" OnClick="@(() => StartExport(format))" data-testid="@($"export-{FormatKey(format)}")" />
+        }
+    </MudMenu>
+
     <MudTooltip Text="Fit all (F)">
         <MudButton StartIcon="@Icons.Material.Filled.FitScreen"
                    Color="Color.Inherit"

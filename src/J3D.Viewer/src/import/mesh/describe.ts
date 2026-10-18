@@ -1,12 +1,17 @@
 import { Box3, type BufferGeometry, type InstancedMesh, type Material, type Mesh, type Object3D, type Texture } from 'three';
 import type { ImportResult, TreeNode } from '../types';
+import { isJ3dEdges } from './j3d-gltf';
 
 /**
  * Tree, counts, bounds and memory of a loaded mesh model.
  * @param root The object handed to the viewer (already Z-up).
  * @param treeRoot The object the tree starts from (the file's own root, inside `root`).
+ * @param unitScale Model units to millimetres (D105).
+ *
+ * A glTF node's name is the file's own (GLTFLoader keeps it in `userData.name`), not three's
+ * sanitised copy. The edges of J3D's own GLB belong to their parts and aren't nodes (D124).
  */
-export function describeMeshModel(root: Object3D, treeRoot: Object3D, rootName: string, warnings: string[]): ImportResult {
+export function describeMeshModel(root: Object3D, treeRoot: Object3D, rootName: string, warnings: string[], unitScale = 1): ImportResult {
   root.updateMatrixWorld(true);
   const geometries = new Map<BufferGeometry, number>();
   const textures = new Set<Texture>();
@@ -30,17 +35,20 @@ export function describeMeshModel(root: Object3D, treeRoot: Object3D, rootName: 
         texturesOf(material).forEach((texture) => textures.add(texture));
       }
     }
-    tree.push({ name: object.name || (parent < 0 ? rootName : object.type), parent, prototype });
+    const fileName = (object.userData as { name?: unknown }).name;
+    tree.push({ name: (typeof fileName === 'string' ? fileName : object.name) || (parent < 0 ? rootName : object.type), parent, prototype });
     nodes.push(object);
     for (const child of object.children) {
-      visit(child, index);
+      if (!isJ3dEdges(child)) {
+        visit(child, index);
+      }
     }
   };
   visit(treeRoot, -1);
 
   const box = new Box3().setFromObject(root);
   return {
-    content: { kind: 'mesh', root, nodes },
+    content: { kind: 'mesh', root, nodes, ...(unitScale === 1 ? {} : { unitScale }) },
     tree,
     bounds: box.isEmpty() ? { min: [0, 0, 0], max: [0, 0, 0] } : { min: box.min.toArray(), max: box.max.toArray() },
     stats: {

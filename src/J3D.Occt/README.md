@@ -6,9 +6,9 @@ following Replicad's approach: a trimmed build plus project-owned C++ wrappers. 
 | Path | Purpose |
 |---|---|
 | `libcascade.config.ts` | Build config: bound symbols, Emscripten settings, `single` (default) and `multi` variants |
-| `wrappers/j3d_facade.cpp` | C++ facade: `J3DModel` (import → mesh → scene/prototypes) and `J3DMeshData` (buffers) |
+| `wrappers/j3d_facade.cpp` | C++ facade: `J3DModel` (import → mesh → scene/prototypes; measuring, M7; STEP and BREP export, M9) and `J3DMeshData` (buffers) |
 | `src/facade.ts` | Typed wrapper: `OcctModel.load(module, source, format, fileName, options)` |
-| `src/facade.test.ts` | Integration tests: the real WASM under Node against `tests/fixtures` |
+| `src/facade.test.ts` | Integration tests: the real WASM under Node against `tests/fixtures` (also `measure.test.ts` and `export.test.ts`) |
 | `dist/` | Built `j3d_occt_{single,multi}` glue, `.wasm` (Git LFS), types, provenance. **Committed, never hand-edited.** |
 | `scripts/check-dist.mjs` | Fails if `dist/` wasn't built from the current config and C++ (used by CI) |
 | `scripts/generate-fixtures.mjs` | Regenerates the OCCT fixtures in `tests/fixtures` |

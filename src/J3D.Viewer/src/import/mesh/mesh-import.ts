@@ -35,8 +35,9 @@ export function createMeshRunner(options: MeshRunnerOptions): ImportRunner {
     const result = (async (): Promise<ImportResult> => {
       const warnings: string[] = [];
       let scene: Object3D;
+      let unitScale = 1;
       if (request.format === 'gltf') {
-        ({ root, scene } = await importGltf(request, options, warnings));
+        ({ root, scene, unitScale } = await importGltf(request, options, warnings));
       } else {
         const parsed = await parseInWorker(request, (release) => (releaseWorker = release));
         releaseWorker?.();
@@ -49,7 +50,7 @@ export function createMeshRunner(options: MeshRunnerOptions): ImportRunner {
         disposeObject(root);
         return new Promise<never>(() => {});
       }
-      return describeMeshModel(root, scene, request.fileName, warnings);
+      return describeMeshModel(root, scene, request.fileName, warnings, unitScale);
     })();
 
     return {

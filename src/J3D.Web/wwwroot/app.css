@@ -42,6 +42,14 @@ body {
         border-left: 1px solid var(--mud-palette-divider);
     }
 
+/* A menu's caption, such as what Export saves (M9). Menus open in the popover layer, outside any component's scoped CSS. */
+.j3d-menu-header {
+    padding: 6px 16px 4px;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    color: var(--mud-palette-text-secondary);
+}
+
 /* Hidden but still focusable and clickable through its label (unlike display: none in some browsers). */
 .j3d-visually-hidden {
     position: absolute;

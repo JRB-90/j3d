@@ -28,6 +28,11 @@ drawing all happen in the browser tab.
   copied into the browser's private storage for this page, and when you come back the models are imported again in
   their order, with the parts you hid still hidden and the camera where you left it. **Clear all**, above the list,
   removes every model and everything kept. Only one tab keeps models: a second J3D tab says so and keeps nothing.
+- **Export** what you see: the toolbar's **Export** saves every visible part, or only the selection when there is one,
+  as **GLB** (with colours, the tree and the BREP edges) or **STL** (binary or ASCII, one uncoloured mesh). A CAD
+  model's download icon in the list saves the whole model as imported, as **STEP** (with its assembly, names and
+  colours) or **BREP**, showing its progress in the list with a **Cancel** button. Files are saved where your browser
+  saves downloads, named after their model (or `scene` / `selection` for several).
 - CAD models are drawn with **shaded faces in the file's colours** and the **true BREP edges** over them; translucent
   colours are drawn translucent.
 - The view is **orthographic** by default, with a perspective toggle that keeps the framing.
@@ -46,6 +51,11 @@ drawing all happen in the browser tab.
 Mesh formats are shown as **mesh** models: they have no BREP edges. glTF files are Y-up by definition and are turned
 to J3D's Z-up; STL and OBJ are assumed to be Z-up already, as CAD exports are.
 
+**Exported GLB and STL files are in millimetres and Z-up, as J3D shows them**, which suits taking them back into CAD
+tools. glTF is meant to be in metres and Y-up, so other glTF viewers show J3D's GLB 1,000 times too big and lying on
+its back; J3D marks its own GLB files and reads them back exactly as they were exported. A glTF model, which J3D
+treats as metres, is exported 1,000 times larger, in millimetres.
+
 ## Controls
 
 | Action | Mouse | Touch | Keys and buttons |
@@ -63,6 +73,8 @@ to J3D's Z-up; STL and OBJ are assumed to be Z-up already, as CAD exports are.
 | Show everything | | | **Show all**, or `Shift+H` |
 | Undo, redo (hiding, showing, measuring, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
 | Measure | Click a face, edge or vertex, then another | Tap | **Measure** in the toolbar, or `M`; `Esc` drops the first pick |
+| Export the scene or the selection | | | **Export** in the toolbar: GLB, STL (binary) or STL (ASCII) |
+| Export a CAD model as imported | | | The model's download icon in the list: STEP or BREP |
 
 The view fits itself to the first model you import into an empty scene; later imports leave the camera where it is,
 and so do models coming back from your last visit or an undo.
@@ -82,7 +94,9 @@ and so do models coming back from your last visit or an undo.
   they grant it persistent storage, which J3D asks for (Firefox shows a prompt; Chrome decides by itself).
 - Measurements are in millimetres: STEP and IGES are converted on import, glTF (metres by its specification) is
   converted when measured, and STL and OBJ are taken to be in millimetres.
-- Not in this version yet: export (planned for iteration 2); sections, exploded views, and a phone or tablet layout.
+- Exports are written in the browser too, so a STEP export of a very large model needs memory on top of the model's
+  own, within the same 4 GB heap.
+- Not in this version yet: sections, exploded views, and a phone or tablet layout.
 
 ## Browsers
 
