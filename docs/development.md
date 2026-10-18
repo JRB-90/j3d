@@ -144,7 +144,7 @@ toolchain puts on the facade's C++ are listed in [plan.md §6.1](plan.md).
 
 ## CI
 
-`.github/workflows/ci.yml` runs on pull requests and pushes to `main`, on `ubuntu-24.04` (pinned, D68):
+`.github/workflows/ci.yml` runs on pull requests and pushes to `main`, on `ubuntu-26.04` (pinned, D68, D131):
 
 1. **Build & unit tests:** the OCCT staleness check, typecheck, Vitest (including the OCCT integration tests), a
    Release build, and the client and host tests.

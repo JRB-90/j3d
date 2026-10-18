@@ -5,7 +5,7 @@ A 3D CAD viewer that runs entirely in your browser. J3D opens STEP, IGES and BRE
 glTF meshes with [three.js](https://threejs.org/). **Your CAD files never leave your machine:** reading, meshing and
 drawing all happen in the browser tab.
 
-![J3D showing a filleted STEP part with its BREP edges, the view cube, and the model list with the part's tree](docs/screenshot.png)
+![J3D showing a two-plate assembly with its pin selected, a 35 mm measurement between the plates, the Export menu open, and the model list with the assembly's tree](docs/screenshot.png)
 
 ## What it does
 
@@ -85,7 +85,9 @@ and so do models coming back from your last visit or an undo.
   file's size, so the practical ceiling is roughly **550–600 MB of STEP**; a larger file fails with a clear "too large"
   error rather than crashing. On a laptop, a 200 MB STEP of 10,000 parts loads in about 30 seconds and orbits at 60
   frames a second on its integrated GPU.
-- Overlapping translucent parts can be drawn in the wrong order from some angles.
+- Translucent parts are blended without sorting, so overlapping and intersecting ones look right from every angle, but
+  closely stacked layers blend a little more evenly than real glass would. A GPU without float render targets (rare)
+  falls back to sorting, which can draw intersecting parts in the wrong order.
 - Kept models come back by being imported again, so a large file takes as long to return (after a refresh, or when
   its delete is undone) as it took to import: about 30 seconds for a 200 MB STEP. Selections, measurements and the
   undo history aren't kept across a refresh.
