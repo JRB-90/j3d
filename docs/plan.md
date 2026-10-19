@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). **Iteration 3 in progress** (§1, D142–D159): **M12 (selection modes, context menu and measurement) built, in review** (D160–D164); M13–M16 planned · **Last updated:** 2026-10-18
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). **Iteration 3 in progress** (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) in progress** (D165–D171); M14–M16 planned · **Last updated:** 2026-10-18
 
 ---
 
@@ -317,6 +317,13 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D162 | Mode switching (M12, D146) | **Keys 1, 2 and 3** (Model, Object, Feature), beside the toolbar switch, where D99's keys work. The selection is converted: Object to Model selects the models holding the selected parts, Model to Object selects all their parts, and switching to or from Feature clears it | Proposed as recommended. Chosen over clearing on every switch and over one key cycling the modes. |
 | D163 | Several features (M12, D146) | **Each one, plus totals**: a collapsible block per selected feature, as a single pick shows today, the newest open, plus totals where they add up (the selected edges' summed length, the selected faces' summed area) | Proposed as recommended. |
 | D164 | Context menu (M12, D152) | **Target-aware**: on a part or a tree node it selects the target if it isn't already selected, then offers its commands (Hide, Isolate, Measure from here, Export the selection); on empty space, Show all, Fit all and Export the scene. Desktop only: touch gets no menu | Proposed as recommended. Chosen over one menu everywhere with commands disabled, and over a long press on touch. |
+| D165 | Shared objects (M13) | **An edit applies to the occurrence picked**: moving one of the plant's six robots, or one of 400 identical bolts, moves only that one, since J3D's tree is per occurrence. When M15 writes STEP, an edited shared sub-assembly or part is made unique where it has to be | Proposed as recommended. Chosen over editing the definition (every instance moving) and over asking each time. |
+| D166 | Move keys (M13, D149) | **W shows the arrows and planes, E the rings**, as three's editor and Unity do; pressing the active key again, or Esc, turns Move off. Where D99's keys work | Proposed as recommended. Chosen over G to toggle with R to switch, and T with Space. |
+| D167 | Placement fields' place (M13, D148) | **In the selection panel while Move is on**, in place of its summary: the frame switch (Local, Parent, World) and X, Y, Z, Rx, Ry, Rz. They act on one object: a part picked in the view, the node picked in the tree, or a model in Model mode; with anything else selected the triad hides and the panel says why. Millimetres for every model, glTF converted as its measurements are (D105) | Proposed as recommended. Chosen over showing them for any single selected object, and over a separate panel. |
+| D168 | Snapping (M13, D149) | **While Ctrl is held**: the triad snaps to 1 mm steps and 15° angles; free otherwise | Proposed as recommended. Chosen over no snapping and over settable steps. |
+| D169 | A model's origin (M13, assumption 15) | **The file's origin**: a model's frame is the file's own, so it coincides with World until the model is moved. A top-level node's parent frame is its model's; a model's parent is World | Proposed as recommended. Chosen over the bounding box's centre, which isn't a real frame and changes as parts move or hide. |
+| D170 | Clicking while moving (M13) | **Clicks select as usual and the triad follows**; a click on empty space clears the selection and hides it | Proposed as recommended. Chosen over ignoring clicks off the triad. |
+| D171 | Origin frames' toggle (M13, D150) | **A toolbar button and the O key** | Proposed as recommended. Chosen over a button alone, and over showing the frame only while Move is on. |
 
 ---
 
@@ -960,7 +967,7 @@ Branch `feature/m11-loose-ends`, from `main` after [JRB-90/j3d#13](https://githu
 
 Planned on 2026-10-18 (D142–D159, five milestones by D157). Each starts with its own short question round (D158), so a scope below can still change; what's decided then is recorded in §2 and here.
 
-### M12 — Selection modes, context menu and measurement
+### M12 — Selection modes, context menu and measurement ✅ ([JRB-90/j3d#16](https://github.com/JRB-90/j3d/pull/16), squash-merged as `fe9b5d9`)
 
 Branch `feature/m12-selection-modes`, from `main` at `5a1fd8f`, with the iteration 3 plan as its first commit (D158). Decided at its start: D160–D164.
 
@@ -980,6 +987,8 @@ Branch `feature/m12-selection-modes`, from `main` at `5a1fd8f`, with the iterati
 - **Tests:** viewer Vitest 182 (`measure.test.ts` rewritten, with `FeatureSelection`, the totals and the keys); OCCT Vitest with `plant.step`'s structure; client bUnit 170 (`SelectModeStateTests` new, `MeasureStateTests` and `MeasureUiTests` rewritten, `PersistenceStateTests` without measurements); E2E 78 with `SelectionModeTests` (3), `MeasureTests` rewritten, and `StressTests` and `PersistenceTests` adapted. Locally: Chromium 76 passed and Firefox in Docker 76 passed (4 min 23 s), the opt-in large-file and stress tests skipped in each; the large-file test passed for `plant-10000` and `so101` in Chromium.
 
 ### M13 — Origin frames and moving
+
+Branch `feature/m13-moving`, from `main` at `fe9b5d9`. Decided at its start: D165–D171.
 
 - **Facade (a WASM rebuild):** every node's placement in the scene, so assemblies have frames and a placement can be expressed in its parent's frame (D148, D150).
 - **Viewer:** placements that change: batched ones through `setMatrixAt`, instanced ones in their instance matrices, and their merged edges (already in model space) rewritten in each placement's range (D94); mesh nodes through their `Object3D`s. The origin frames; the Move tool with `TransformControls`, camera-controls paused while a handle is dragged (R26); hover, picking, measuring, Fit all and the GLB and STL exports following the new placements.
