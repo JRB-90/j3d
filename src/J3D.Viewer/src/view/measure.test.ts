@@ -2,7 +2,8 @@ import type { EntityMeasure, EntityRef, PairMeasure } from '@j3d/occt/facade';
 import { Box3, Group, Vector3, type Intersection } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { BrepMeasurer } from '../import/types';
-import { MeasureTool, type MeasureHost, type MeasureModel } from './measure';
+import { totals, FeatureSelection, type FeatureSelectionInfo } from './features';
+import { MeasureTool, primaryValue, type MeasureHost, type MeasureModel } from './measure';
 import { angle, area, entityRows, length, pairLabel, pairRows, partRows, point, size } from './measure-format';
 import { HighlightMaterials, type ModelParts, type PickedEntity } from './parts';
 
@@ -14,6 +15,7 @@ const face = (index: number, x = 0): PickedEntity => ({
   point: [x, 0, 0],
 });
 const meshPoint = (x: number): PickedEntity => ({ kind: 'point', node: 2, point: [x, 0, 0] });
+const edge = (index: number): PickedEntity => ({ kind: 'edge', node: 1, ref: { kind: 1, prototype: 0, index, matrix: identity }, point: [0, 0, 0] });
 
 const boxFace: EntityMeasure = {
   kind: 'face',
@@ -46,10 +48,29 @@ describe('formatting (assumption 13)', () => {
     expect(pairRows(pair).map((row) => row.name)).toEqual(['Distance', 'Angle (planes)', 'Δx, Δy, Δz', 'From', 'To']);
     expect(pairLabel({ kind: 'pair', angle: 90 })).toBe('90.00°');
   });
+
+  it('labels a single pick with its headline value: Ø for circles and cylinders (D147)', () => {
+    const part = boxFace.part;
+    expect(primaryValue(boxFace)).toBe('200.000 mm²');
+    expect(primaryValue({ kind: 'face', area: 1, surface: 'cylinder', radius: 2, anchor: [0, 0, 0], part })).toBe('Ø 4.000 mm');
+    expect(primaryValue({ kind: 'edge', length: 12.566, curve: 'circle', radius: 2, anchor: [0, 0, 0], part })).toBe('Ø 4.000 mm');
+    expect(primaryValue({ kind: 'edge', length: 30, curve: 'line', anchor: [0, 0, 0], part })).toBe('30.000 mm');
+    expect(primaryValue({ kind: 'vertex', point: [1, 2, 3], anchor: [1, 2, 3], part })).toBe('(1.000, 2.000, 3.000)');
+  });
+
+  it('totals edges and faces only when there are two or more of them (D163)', () => {
+    const part = boxFace.part;
+    const line = (value: number): EntityMeasure => ({ kind: 'edge', length: value, curve: 'line', anchor: [0, 0, 0], part });
+    expect(totals([line(10)])).toEqual([]);
+    expect(totals([line(10), line(2.5), boxFace, boxFace, undefined])).toEqual([
+      { name: 'Total length (2 edges)', value: '12.500 mm' },
+      { name: 'Total area (2 faces)', value: '400.000 mm²' },
+    ]);
+  });
 });
 
-/** A fake viewer with two models: a BREP model "a" (worker answers from `answers`) and, optionally, a BREP "b" and a mesh "m". */
-function setup(picks: (PickedEntity & { model?: string })[], options: { unitScale?: number } = {}) {
+/** A fake viewer with two BREP models, "a" and "b", and a mesh model "m"; each click picks the next of `picks`. */
+function fakeHost(picks: (PickedEntity & { model?: string })[], options: { unitScale?: number; answer?: EntityMeasure } = {}) {
   const queue = [...picks];
   const parts = (): ModelParts =>
     ({
@@ -71,7 +92,7 @@ function setup(picks: (PickedEntity & { model?: string })[], options: { unitScal
       calls,
       entity: vi.fn(async () => {
         calls.push('entity');
-        return boxFace;
+        return options.answer ?? boxFace;
       }),
       pair: vi.fn(async (_a: EntityRef, _b: EntityRef, shapeB?: string) => {
         calls.push(shapeB ? `pair with ${shapeB}` : 'pair');
@@ -104,15 +125,23 @@ function setup(picks: (PickedEntity & { model?: string })[], options: { unitScal
     labels,
     requestRender: () => {},
   };
-  const pending: (string | null)[] = [];
-  const measured: string[] = [];
-  const tool = new MeasureTool(host, {
-    onPending: (info) => pending.push(info?.title ?? null),
-    onMeasured: (info) => measured.push(info.label),
+  return { host, workers, labels, overlays };
+}
+
+function setup(picks: (PickedEntity & { model?: string })[], options: { unitScale?: number; answer?: EntityMeasure } = {}) {
+  const fake = fakeHost(picks, options);
+  const references: (string | null)[] = [];
+  const results: (string | null)[] = [];
+  const tool = new MeasureTool(fake.host, {
+    onReference: (info) => references.push(info?.title ?? null),
+    onResult: (info) => results.push(info?.label ?? null),
   });
   tool.setActive(true);
-  return { tool, workers, pending, measured, labels, overlays };
+  return { ...fake, tool, references, results };
 }
+
+/** Lets the fake workers' answers arrive. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** Just enough of an element for the tool's labels, since these tests run without a DOM. */
 interface FakeElement {
@@ -125,7 +154,7 @@ interface FakeElement {
 }
 
 function fakeElement(): FakeElement {
-  const element = {
+  const element: FakeElement & Record<string, unknown> = {
     className: '',
     textContent: '',
     hidden: false,
@@ -135,30 +164,63 @@ function fakeElement(): FakeElement {
     append: (child: FakeElement) => element.children.push(child),
     remove: () => {},
     getBoundingClientRect: () => ({ left: 0, top: 0 }),
-    ownerDocument: { createElement: () => fakeElement() },
+    ownerDocument: {
+      createElement: () => {
+        const child = fakeElement() as FakeElement & Record<string, unknown>;
+        child['remove'] = () => element.children.splice(element.children.indexOf(child), 1);
+        return child;
+      },
+    },
   };
   return element;
 }
 
-describe('MeasureTool (D101)', () => {
-  it('shows the first pick, then keeps the pair as a labelled dimension', async () => {
-    const { tool, workers, pending, measured, labels } = setup([face(0), face(1)]);
+describe('MeasureTool (D147)', () => {
+  it("draws the reference's value, then measures it against each click, one result at a time", async () => {
+    const { tool, workers, references, results, labels } = setup([face(0), face(1), face(2)]);
 
     await tool.click(0, 0);
-    expect(pending).toEqual(['Face (plane) of Box']);
-    expect(tool.pendingEntity?.entity.kind).toBe('face');
+    expect(references).toEqual(['Face (plane) of Box']);
+    expect(tool.referenceEntity?.entity.kind).toBe('face');
+    expect(tool.labels()).toEqual([{ role: 'reference', label: '200.000 mm²' }]);
 
     await tool.click(0, 0);
     expect(workers.a.calls).toEqual(['entity', 'pair']);
-    expect(measured).toEqual(['30.000 mm · 0.00°']);
-    expect(pending.at(-1)).toBeNull();
-    expect(tool.pendingEntity).toBeUndefined();
-    expect(tool.list()).toEqual([{ id: 'm1', label: '30.000 mm · 0.00°', shown: true }]);
-    const [label] = (labels as unknown as FakeElement).children;
-    expect([label?.dataset['testid'], label?.textContent]).toEqual(['measure-label', '30.000 mm · 0.00°']);
+    expect(results).toEqual(['30.000 mm · 0.00°']);
+
+    await tool.click(0, 0);
+    // The second result replaces the first; the reference stays.
+    expect(results).toEqual(['30.000 mm · 0.00°', '30.000 mm · 0.00°']);
+    expect(tool.labels().map((label) => label.role)).toEqual(['reference', 'result']);
+    const children = (labels as unknown as FakeElement).children;
+    expect(children.map((label) => [label.dataset['testid'], label.dataset['role'], label.textContent])).toEqual([
+      ['measure-label', 'reference', '200.000 mm²'],
+      ['measure-label', 'result', '30.000 mm · 0.00°'],
+    ]);
 
     tool.updateLabels();
-    expect(label?.style.transform).toContain('translate(10.0px, 20.0px)');
+    expect(children[1]?.style.transform).toContain('translate(10.0px, 20.0px)');
+  });
+
+  it('draws a circle as its diameter (D147)', async () => {
+    const circle: EntityMeasure = {
+      kind: 'edge',
+      length: 12.566,
+      curve: 'circle',
+      radius: 2,
+      centre: [10, 0, 0],
+      normal: [0, 0, 1],
+      anchor: [12, 0, 0],
+      part: boxFace.part,
+    };
+    const { tool, overlays } = setup([edge(3)], { answer: circle });
+
+    await tool.click(0, 0);
+    expect(tool.labels()).toEqual([{ role: 'reference', label: 'Ø 4.000 mm' }]);
+    const across = overlays.getObjectByName('measure reference')!.children[0] as unknown as {
+      geometry: { getAttribute(name: string): { array: Float32Array } };
+    };
+    expect([...across.geometry.getAttribute('position').array]).toEqual([8, 0, 0, 12, 0, 0]);
   });
 
   it("measures across models by sending B's shape into A's worker (D102)", async () => {
@@ -172,35 +234,95 @@ describe('MeasureTool (D101)', () => {
   });
 
   it('measures mesh points approximately, in millimetres for glTF (D81, D105)', async () => {
-    const { tool, pending, measured } = setup([{ ...meshPoint(0), model: 'm' }, { ...meshPoint(0.5), model: 'm' }], { unitScale: 1000 });
+    const { tool, references, results } = setup([{ ...meshPoint(0), model: 'm' }, { ...meshPoint(0.5), model: 'm' }], { unitScale: 1000 });
 
     await tool.click(0, 0);
-    expect(pending).toEqual(['Point on Post']);
+    expect(references).toEqual(['Point on Post']);
     await tool.click(0, 0);
-    expect(measured).toEqual(['≈ 500.000 mm']);
+    expect(results).toEqual(['≈ 500.000 mm']);
   });
 
-  it('drops a pending pick on Esc or when switched off, and shows only what .NET says (D108)', async () => {
-    const { tool, pending } = setup([face(0), face(0), face(1)]);
+  it('starts from a given reference, and clears everything when turned off (Esc)', async () => {
+    const { host } = fakeHost([face(1)]);
+    const seen: (string | null)[] = [];
+    const tool = new MeasureTool(host, {
+      onReference: (info) => seen.push(info?.title ?? null),
+      onResult: (info) => seen.push(info?.label ?? null),
+    });
 
+    tool.setActive(true, { id: 'a', entity: face(0) });
+    await settle();
+    expect(tool.referenceEntity?.entity).toEqual(face(0));
     await tool.click(0, 0);
-    tool.cancelPending();
-    expect(pending).toEqual(['Face (plane) of Box', null]);
+    expect(tool.labels()).toHaveLength(2);
 
-    await tool.click(0, 0);
-    await tool.click(0, 0);
-    tool.setShown([]);
-    expect(tool.list()[0]?.shown).toBe(false);
-    tool.setShown(['m1']);
-    expect(tool.list()[0]?.shown).toBe(true);
+    tool.setActive(false);
+    expect(tool.referenceEntity).toBeUndefined();
+    expect(tool.labels()).toEqual([]);
+    expect(seen).toEqual(['Face (plane) of Box', '30.000 mm · 0.00°', null, null]);
+  });
 
+  it("drops what's on a part that's hidden or a model that's removed (D98)", async () => {
+    const { tool } = setup([face(0), { ...face(1), model: 'b' }]);
+    await tool.click(0, 0);
+    await tool.click(0, 0);
+
+    tool.dropHidden('b', new Set([1]));
+    expect(tool.labels().map((label) => label.role)).toEqual(['reference']);
     tool.removeModel('a');
-    expect(tool.list()).toEqual([]);
+    expect(tool.referenceEntity).toBeUndefined();
   });
 
   it('ignores clicks on nothing', async () => {
-    const { tool, pending } = setup([]);
+    const { tool, references } = setup([]);
     await tool.click(0, 0);
-    expect(pending).toEqual([]);
+    expect(references).toEqual([]);
+  });
+});
+
+describe('FeatureSelection (D146, D163)', () => {
+  function features(picks: (PickedEntity & { model?: string })[]) {
+    const fake = fakeHost(picks);
+    const reports: FeatureSelectionInfo[] = [];
+    const selection = new FeatureSelection(fake.host, (info) => reports.push(info));
+    return { ...fake, selection, reports, ids: () => reports.at(-1)?.features.map((feature) => feature.id) };
+  }
+
+  it('selects one feature, adds and removes with Ctrl, and clears on nothing', async () => {
+    const { selection, reports, ids } = features([face(0), face(1), face(0), face(1)]);
+
+    selection.click(0, 0, false);
+    await settle();
+    expect(reports.at(-1)?.features.map((feature) => feature.title)).toEqual(['Face (plane) of Box']);
+    selection.click(0, 0, true);
+    await settle();
+    expect(ids()).toEqual(['f1', 'f2']);
+    expect(reports.at(-1)?.totals).toEqual([{ name: 'Total area (2 faces)', value: '400.000 mm²' }]);
+
+    selection.click(0, 0, true); // face 0 again: removed
+    expect(ids()).toEqual(['f2']);
+    selection.click(0, 0, false); // face 1 again, alone: stays
+    expect(selection.entities.map((picked) => picked.entity)).toEqual([face(1)]);
+
+    selection.click(0, 0, false); // nothing
+    expect(ids()).toEqual([]);
+  });
+
+  it('has no features on mesh models', () => {
+    const { selection } = features([{ ...meshPoint(0), model: 'm' }]);
+    selection.click(0, 0, false);
+    expect(selection.entities).toEqual([]);
+  });
+
+  it('drops the features of hidden parts and removed models (D98)', async () => {
+    const { selection, ids } = features([face(0), { ...face(1), model: 'b' }]);
+    selection.click(0, 0, false);
+    selection.click(0, 0, true);
+    await settle();
+
+    selection.dropHidden('b', new Set([1]));
+    expect(ids()).toEqual(['f1']);
+    selection.removeModel('a');
+    expect(ids()).toEqual([]);
   });
 });

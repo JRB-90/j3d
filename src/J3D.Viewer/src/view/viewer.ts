@@ -46,7 +46,8 @@ import {
   type Projection,
 } from './camera-math';
 import { MaterialCache } from './materials';
-import { MeasureTool, type MeasureModel } from './measure';
+import { FeatureSelection, type FeatureSelectionInfo } from './features';
+import { MeasureTool, type MeasureModel, type Picked } from './measure';
 import type { MeasureInfo } from './measure-format';
 import type { MeshExportFormat } from './mesh-export';
 import { OrderIndependentTransparency, sceneMaterials, type SceneMaterials } from './oit';
@@ -106,18 +107,43 @@ export interface PartRef {
   node: number;
 }
 
-/** What the keyboard asks of .NET, which owns selection, visibility and the undo history (D95, D99). */
-export type ViewerCommand = 'clearSelection' | 'hide' | 'isolate' | 'showAll' | 'undo' | 'redo' | 'measure';
+/** What the keyboard asks of .NET, which owns selection, visibility and the undo history (D95, D99, D162). */
+export type ViewerCommand =
+  | 'clearSelection'
+  | 'hide'
+  | 'isolate'
+  | 'showAll'
+  | 'undo'
+  | 'redo'
+  | 'measure'
+  | 'selectModels'
+  | 'selectObjects'
+  | 'selectFeatures';
+
+/** What a click selects (M12, D146): whole models, placed parts, or BREP faces, edges and vertices. */
+export type SelectionMode = 'model' | 'object' | 'feature';
+
+/** A right click that didn't drag (D164): where, the part under it, and whether there's an entity to measure from. */
+export interface ContextTarget {
+  x: number;
+  y: number;
+  part: PartRef | undefined;
+  canMeasure: boolean;
+}
 
 export interface ViewerOptions {
   /** A click that didn't drag: the part under the pointer, or undefined on empty space. */
   onPick?: (part: PartRef | undefined, additive: boolean) => void;
   onCommand?: (command: ViewerCommand) => void;
-  /** The Measure tool's first pick, or null when it's dropped or finished (M7, D101). */
-  onMeasurePending?: (info: MeasureInfo | null) => void;
-  /** A measurement the Measure tool has kept. */
-  onMeasured?: (info: MeasureInfo) => void;
+  /** The Measure tool's reference, or null when there's none (D147). */
+  onMeasureReference?: (info: MeasureInfo | null) => void;
+  /** The reference against the last click, or null. */
+  onMeasureResult?: (info: MeasureInfo | null) => void;
   onMeasureError?: (message: string) => void;
+  /** The features selected in Feature mode, once their values are known (D146, D163). */
+  onFeatures?: (selection: FeatureSelectionInfo) => void;
+  /** A right click that didn't drag, for the context menu (D164). */
+  onContextMenu?: (target: ContextTarget) => void;
   /** The camera moved, zoomed or changed projection: drawn with a different view (M8, D82). */
   onCameraChange?: () => void;
 }
@@ -175,12 +201,16 @@ export class Viewer {
   /** Selection and hover overlays (D93), drawn after the models. */
   private readonly overlays = new Group();
   private readonly raycaster = new Raycaster();
-  private hovered: (PartRef & { highlight: Highlight | undefined }) | undefined;
+  private hovered: (PartRef & { whole: boolean; highlight: Highlight | undefined }) | undefined;
   private hoverPoint: { x: number; y: number } | undefined;
   private hoverRequest = 0;
   private lastPick = { milliseconds: 0, count: 0, longest: 0 };
   private readonly labels: HTMLElement;
   private readonly measureTool: MeasureTool;
+  private readonly features: FeatureSelection;
+  private selectionMode: SelectionMode = 'object';
+  /** The entity under the last right click, for "Measure from here" (D164). */
+  private contextEntity: Picked | undefined;
   /** The view last drawn, to report camera changes. */
   private drawnView = '';
   /** Weighted blended OIT where the GPU supports it (D90, D130), and whether the last frame used it. */
@@ -219,27 +249,30 @@ export class Viewer {
     this.labels = document.createElement('div');
     this.labels.className = 'j3d-measure-labels';
     host.append(this.labels);
-    this.measureTool = new MeasureTool(
-      {
-        hitAt: (x, y) => this.hitAt(x, y),
-        screenAt: (x, y, hitPoint) => this.screenAt(x, y, hitPoint),
-        model: (id) => this.measureModel(id),
-        toClient: (world) => {
-          this.camera.updateMatrixWorld();
-          const ndc = world.clone().project(this.camera);
-          const rect = this.renderer.domElement.getBoundingClientRect();
-          return { x: rect.left + ((ndc.x + 1) / 2) * rect.width, y: rect.top + ((1 - ndc.y) / 2) * rect.height, visible: ndc.z <= 1 };
-        },
-        overlays: this.overlays,
-        highlights: this.highlights,
-        labels: this.labels,
-        requestRender: () => this.requestRender(),
+    const measureHost = {
+      hitAt: (x: number, y: number) => this.hitAt(x, y),
+      screenAt: (x: number, y: number, hitPoint: Vector3) => this.screenAt(x, y, hitPoint),
+      model: (id: ModelId) => this.measureModel(id),
+      toClient: (world: Vector3) => {
+        this.camera.updateMatrixWorld();
+        const ndc = world.clone().project(this.camera);
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        return { x: rect.left + ((ndc.x + 1) / 2) * rect.width, y: rect.top + ((1 - ndc.y) / 2) * rect.height, visible: ndc.z <= 1 };
       },
-      {
-        ...(options.onMeasurePending ? { onPending: options.onMeasurePending } : {}),
-        ...(options.onMeasured ? { onMeasured: options.onMeasured } : {}),
-        ...(options.onMeasureError ? { onError: options.onMeasureError } : {}),
-      },
+      overlays: this.overlays,
+      highlights: this.highlights,
+      labels: this.labels,
+      requestRender: () => this.requestRender(),
+    };
+    this.measureTool = new MeasureTool(measureHost, {
+      ...(options.onMeasureReference ? { onReference: options.onMeasureReference } : {}),
+      ...(options.onMeasureResult ? { onResult: options.onMeasureResult } : {}),
+      ...(options.onMeasureError ? { onError: options.onMeasureError } : {}),
+    });
+    this.features = new FeatureSelection(
+      measureHost,
+      (selection) => options.onFeatures?.(selection),
+      (message) => options.onMeasureError?.(message),
     );
 
     this.orthographic = new OrthographicCamera();
@@ -400,18 +433,18 @@ export class Viewer {
     this.requestRender();
   }
 
-  /**
-   * Removes a model and frees what the viewer built for it. The camera doesn't move. A deleted model
-   * that an undo can bring back keeps its measurements, hidden (M8).
-   */
-  remove(id: ModelId, keepMeasurements = false): void {
+  /** Removes a model and frees what the viewer built for it, with any measurement or feature on it. The camera doesn't move. */
+  remove(id: ModelId): void {
+    this.measureTool.removeModel(id);
+    this.features.removeModel(id);
+    if (this.contextEntity?.id === id) {
+      this.contextEntity = undefined;
+    }
     const entry = this.models.get(id);
     if (!entry) {
-      this.measureTool.removeModel(id, keepMeasurements);
       return;
     }
     this.models.delete(id);
-    this.measureTool.removeModel(id, keepMeasurements);
     this.setSelectionHighlight(entry, undefined);
     if (this.hovered?.id === id) {
       this.setHovered(undefined);
@@ -421,16 +454,6 @@ export class Viewer {
     entry.dispose?.();
     this.updateSceneBounds();
     this.requestRender();
-  }
-
-  /** Drops a removed model's measurements for good: it can't come back (M8). */
-  forgetModel(id: ModelId): void {
-    this.measureTool.forgetModel(id);
-  }
-
-  /** Drops every kept measurement (Clear all, D110). */
-  forgetMeasurements(): void {
-    this.measureTool.forgetAll();
   }
 
   /**
@@ -514,9 +537,11 @@ export class Viewer {
     if (!sameSet(hiddenSet, entry.hidden)) {
       entry.hidden = hiddenSet;
       entry.parts.setHidden(hiddenSet);
-      if (this.hovered?.id === id && hiddenSet.has(this.hovered.node)) {
+      if (this.hovered?.id === id && (this.hovered.whole || hiddenSet.has(this.hovered.node))) {
         this.setHovered(undefined);
       }
+      this.measureTool.dropHidden(id, hiddenSet);
+      this.features.dropHidden(id, hiddenSet);
     }
     const shown = selected.filter((node) => !hiddenSet.has(node));
     if (!sameSet(new Set(shown), new Set(entry.selected))) {
@@ -532,46 +557,70 @@ export class Viewer {
     return found && { id: found.id, node: found.node };
   }
 
-  /** Turns the Measure tool on or off (D79); .NET decides, from the toolbar or the M key. */
-  setMeasureMode(active: boolean): void {
+  /**
+   * Turns the Measure tool on or off (D79, D147); .NET decides, from the toolbar, the M key or the
+   * context menu. It starts from the entity under the last right click ("Measure from here") or
+   * else the last selected feature, which then leaves the feature selection.
+   */
+  setMeasureMode(active: boolean, fromContext = false): void {
+    const reference = active ? (fromContext ? this.contextEntity : this.features.entities.at(-1)) : undefined;
     if (active) {
       this.setHovered(undefined);
+      this.features.hover(undefined, undefined);
+      this.features.clear();
     }
-    this.measureTool.setActive(active);
+    this.measureTool.setActive(active, reference);
   }
 
-  /** Shows exactly these kept measurements (D108). */
-  setMeasurements(shown: readonly string[]): void {
-    this.measureTool.setShown(shown);
+  /** What a click selects (D146): .NET decides, from the toolbar or the keys 1, 2 and 3 (D162). */
+  setSelectionMode(mode: SelectionMode): void {
+    if (mode === this.selectionMode) {
+      return;
+    }
+    this.selectionMode = mode;
+    this.setHovered(undefined);
+    this.features.hover(undefined, undefined);
+    if (mode !== 'feature') {
+      this.features.clear();
+    }
   }
 
-  /** The Measure tool's state, for tests: whether it's on, what it would pick, the pending pick and the kept measurements. */
+  /** Drops the selected features (Esc, or a switch of mode). */
+  clearFeatures(): void {
+    this.features.clear();
+  }
+
+  /** The Measure tool's state, for tests: whether it's on, what it would pick, the reference and the labels drawn. */
   measureState(): {
     active: boolean;
     busy: boolean;
-    hovered: { id: string; kind: string; node: number; index: number } | null;
-    pending: { id: string; kind: string; node: number; index: number } | null;
-    measurements: { id: string; label: string; shown: boolean }[];
+    hovered: EntityBrief | null;
+    reference: EntityBrief | null;
+    result: string | null;
+    labels: { role: 'reference' | 'result'; label: string }[];
   } {
-    const brief = (picked: ReturnType<MeasureTool['entityAt']>) =>
-      picked
-        ? { id: picked.id, kind: picked.entity.kind, node: picked.entity.node, index: picked.entity.kind === 'point' ? -1 : picked.entity.ref.index }
-        : null;
     return {
       active: this.measureTool.isActive,
       busy: this.measureTool.busy,
       hovered: brief(this.measureTool.hoveredEntity),
-      pending: brief(this.measureTool.pendingEntity),
-      measurements: this.measureTool.list(),
+      reference: brief(this.measureTool.referenceEntity),
+      result: this.measureTool.resultLabel ?? null,
+      labels: this.measureTool.labels(),
+    };
+  }
+
+  /** Feature selection's state, for tests: the mode, the feature under the pointer and those selected. */
+  selectionState(): { mode: SelectionMode; hoveredFeature: EntityBrief | null; features: EntityBrief[] } {
+    return {
+      mode: this.selectionMode,
+      hoveredFeature: brief(this.features.hoveredEntity),
+      features: this.features.entities.map((picked) => brief(picked)!),
     };
   }
 
   /** What the Measure tool would pick at a client point (for tests). */
-  entityAt(clientX: number, clientY: number): { id: string; kind: string; node: number; index: number } | null {
-    const picked = this.measureTool.entityAt(clientX, clientY);
-    return picked
-      ? { id: picked.id, kind: picked.entity.kind, node: picked.entity.node, index: picked.entity.kind === 'point' ? -1 : picked.entity.ref.index }
-      : null;
+  entityAt(clientX: number, clientY: number): EntityBrief | null {
+    return brief(this.measureTool.entityAt(clientX, clientY));
   }
 
   /** The nearest visible part surface under a client point, with the intersection. */
@@ -818,6 +867,7 @@ export class Viewer {
     }
     this.oit?.dispose();
     this.measureTool.dispose();
+    this.features.dispose();
     this.labels.remove();
     this.materials.dispose();
     this.highlights.dispose();
@@ -970,9 +1020,6 @@ export class Viewer {
     if (command === 'fit') {
       this.fitAll();
     } else if (command) {
-      if (command === 'clearSelection') {
-        this.measureTool.cancelPending(); // Esc also drops a half-done measurement (D101)
-      }
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault(); // not the browser's own undo
       }
@@ -1006,8 +1053,10 @@ export class Viewer {
     }
   }
 
+  /** The part under the pointer, faintly highlighted (D89); in Model mode, its whole model (D146). */
   private setHovered(part: PartRef | undefined): void {
-    if (part?.id === this.hovered?.id && part?.node === this.hovered?.node) {
+    const whole = this.selectionMode === 'model';
+    if (part?.id === this.hovered?.id && (part === undefined || (whole && this.hovered?.whole) || (!whole && part.node === this.hovered?.node))) {
       return;
     }
     if (this.hovered?.highlight) {
@@ -1015,11 +1064,12 @@ export class Viewer {
       this.hovered.highlight.dispose();
     }
     const entry = part && this.models.get(part.id);
-    const highlight = entry && part ? entry.parts.highlight([part.node], 'hovered' satisfies HighlightKind, this.highlights) : undefined;
+    const nodes = entry && part ? (whole ? entry.parts.partNodes.filter((node) => !entry.hidden.has(node)) : [part.node]) : [];
+    const highlight = entry && nodes.length > 0 ? entry.parts.highlight(nodes, 'hovered' satisfies HighlightKind, this.highlights) : undefined;
     if (highlight) {
       this.overlays.add(highlight.object);
     }
-    this.hovered = part && { ...part, highlight };
+    this.hovered = part && { ...part, whole, highlight };
     this.renderer.domElement.style.cursor = part ? 'pointer' : '';
     this.requestRender();
   }
@@ -1030,9 +1080,9 @@ export class Viewer {
    * never gets here (see {@link installViewCubeInput}).
    */
   private installPartInput(canvas: HTMLCanvasElement): void {
-    let press: { id: number; x: number; y: number } | undefined;
+    let press: { id: number; button: number; x: number; y: number } | undefined;
     this.listen(canvas, 'pointerdown', (event) => {
-      press = event.button === 0 ? { id: event.pointerId, x: event.clientX, y: event.clientY } : undefined;
+      press = event.button === 0 || event.button === 2 ? { id: event.pointerId, button: event.button, x: event.clientX, y: event.clientY } : undefined;
       this.hoverPoint = undefined;
       this.setHovered(undefined);
     });
@@ -1042,15 +1092,21 @@ export class Viewer {
       if (
         !start ||
         start.id !== event.pointerId ||
+        start.button !== event.button ||
         Math.hypot(event.clientX - start.x, event.clientY - start.y) > ClickTolerance ||
         this.viewCubeRegionAt(event.clientX, event.clientY) !== undefined
       ) {
         return;
       }
-      if (this.measureTool.isActive) {
+      const additive = event.ctrlKey || event.metaKey;
+      if (start.button === 2) {
+        this.openContextMenu(event.clientX, event.clientY);
+      } else if (this.measureTool.isActive) {
         void this.measureTool.click(event.clientX, event.clientY);
+      } else if (this.selectionMode === 'feature') {
+        this.features.click(event.clientX, event.clientY, additive);
       } else {
-        this.options.onPick?.(this.pickPart(event.clientX, event.clientY), event.ctrlKey || event.metaKey);
+        this.options.onPick?.(this.pickPart(event.clientX, event.clientY), additive);
       }
     });
     this.listen(canvas, 'pointermove', (event) => {
@@ -1065,6 +1121,8 @@ export class Viewer {
           const over = point && this.viewCubeRegionAt(point.x, point.y) === undefined ? point : undefined;
           if (this.measureTool.isActive) {
             this.measureTool.hover(over?.x, over?.y);
+          } else if (this.selectionMode === 'feature') {
+            this.features.hover(over?.x, over?.y);
           } else {
             this.setHovered(over && this.pickPart(over.x, over.y));
           }
@@ -1075,7 +1133,24 @@ export class Viewer {
       this.hoverPoint = undefined;
       this.setHovered(undefined);
       this.measureTool.hover(undefined, undefined);
+      this.features.hover(undefined, undefined);
     });
+  }
+
+  /**
+   * A right click that didn't drag (D164): .NET opens the menu and selects the part, if it isn't
+   * selected; in Feature mode the feature under the pointer is selected here. The entity under it
+   * is kept for "Measure from here".
+   */
+  private openContextMenu(x: number, y: number): void {
+    this.contextEntity = this.measureTool.entityAt(x, y);
+    if (this.selectionMode === 'feature' && !this.measureTool.isActive) {
+      const feature = this.features.featureAt(x, y);
+      if (feature && !this.features.has(feature)) {
+        this.features.select(feature, false);
+      }
+    }
+    this.options.onContextMenu?.({ x, y, part: this.pickPart(x, y), canMeasure: this.contextEntity !== undefined });
   }
 
   /**
@@ -1151,7 +1226,7 @@ export class Viewer {
   }
 }
 
-/** D99's keys: `F` fits; Esc, H, I, Shift+H, Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z) go to .NET. */
+/** D99's keys: `F` fits; Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z), and 1, 2 and 3 (D162) go to .NET. */
 export function keyCommand(key: string, shift: boolean, control: boolean): ViewerCommand | 'fit' | undefined {
   if (control) {
     if (key === 'z') {
@@ -1170,9 +1245,29 @@ export function keyCommand(key: string, shift: boolean, control: boolean): Viewe
       return shift ? undefined : 'isolate';
     case 'm':
       return shift ? undefined : 'measure';
+    case '1':
+      return 'selectModels';
+    case '2':
+      return 'selectObjects';
+    case '3':
+      return 'selectFeatures';
     default:
       return undefined;
   }
+}
+
+/** An entity, briefly, for tests. */
+export interface EntityBrief {
+  id: string;
+  kind: string;
+  node: number;
+  index: number;
+}
+
+function brief(picked: Picked | undefined): EntityBrief | null {
+  return picked
+    ? { id: picked.id, kind: picked.entity.kind, node: picked.entity.node, index: picked.entity.kind === 'point' ? -1 : picked.entity.ref.index }
+    : null;
 }
 
 function sameSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {

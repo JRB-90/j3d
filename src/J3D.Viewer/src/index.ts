@@ -15,7 +15,7 @@ import type { Projection } from './view/camera-math';
 import { installDropTarget } from './view/drop-target';
 import { baseName } from './view/export-scene';
 import type { MeshExportFormat } from './view/mesh-export';
-import { Viewer } from './view/viewer';
+import { Viewer, type SelectionMode } from './view/viewer';
 
 export { detectFormat, fileInputAccept, kindOf, supportedExtensions } from './formats';
 export type { ModelFormat, ModelKind } from './formats';
@@ -23,6 +23,7 @@ export type { Projection } from './view/camera-math';
 export type { StoredModel, StoredScene } from './store/types';
 export type { BrepExportFormat } from './import/protocol';
 export type { MeshExportFormat } from './view/mesh-export';
+export type { SelectionMode } from './view/viewer';
 
 /** How an export ended (M9): the file saved, cancelled, or why it failed. Mirrors J3D.Web.Client/Interop/ExportOutcome.cs. */
 export interface ExportOutcome {
@@ -44,14 +45,14 @@ export interface ViewerHandle {
   importDrop(dataTransfer: DataTransfer): Promise<void>;
   /**
    * Cancels an import, deletes a loaded model or dismisses a failed one, and with it its kept files;
-   * or, `undoable`, deletes a model an undo can bring back, keeping its files and measurements (D84).
+   * or, `undoable`, deletes a model an undo can bring back, keeping its files (D84).
    */
   removeModel(id: string, undoable?: boolean): void;
   /** What was kept when the page opened, once the stored camera is applied (D82, D111). */
   restoreScene(): Promise<StoredScene>;
   /** Imports models again from their kept files, under their old ids: a reload or an undone delete (D117). */
   restoreModels(models: StoredModel[]): void;
-  /** Drops a deleted model's kept files and measurements: no undo can bring it back now. */
+  /** Drops a deleted model's kept files: no undo can bring it back now. */
   forgetModel(id: string): void;
   /** Removes every model and everything kept (D110). */
   clearAll(): void;
@@ -63,10 +64,12 @@ export interface ViewerHandle {
   setProjection(projection: Projection): void;
   /** Applies a model's hidden and selected part nodes, which .NET owns (D95). */
   setPartState(id: string, hidden: number[], selected: number[]): void;
-  /** Turns the Measure tool on or off (M7, D79). */
-  setMeasureMode(active: boolean): void;
-  /** Shows exactly these kept measurements (D108). */
-  setMeasurements(shown: string[]): void;
+  /** Turns the Measure tool on or off (M7, D79), from the entity under the last right click when `fromContext` (D147, D164). */
+  setMeasureMode(active: boolean, fromContext?: boolean): void;
+  /** What a click selects: models, objects or features (M12, D146). */
+  setSelectionMode(mode: SelectionMode): void;
+  /** Drops the selected features (Esc, D146). */
+  clearFeatures(): void;
   /** Saves the visible scene, or the selection, as GLB or STL: a download (M9, D119, D120). */
   exportMesh(format: MeshExportFormat, selection: boolean): Promise<ExportOutcome>;
   /** Saves a BREP model as imported, as STEP or BREP, reporting progress to .NET's `OnExportProgress` (D83, D125). */
@@ -102,10 +105,12 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
         // Picks and key commands go to .NET, which owns selection, visibility and undo (D95).
         onPick: (part, additive) => call(dotnet, 'OnPartPicked', part?.id ?? null, part?.node ?? -1, additive),
         onCommand: (command) => call(dotnet, 'OnViewerCommand', command),
-        // The Measure tool's results go to .NET, which lists them and owns their undo (M7).
-        onMeasurePending: (info) => call(dotnet, 'OnMeasurePending', info),
-        onMeasured: (info) => call(dotnet, 'OnMeasured', info),
+        // The Measure tool's reference and result, and the selected features, go to .NET's panel (D146, D147).
+        onMeasureReference: (info) => call(dotnet, 'OnMeasureReference', info),
+        onMeasureResult: (info) => call(dotnet, 'OnMeasureResult', info),
         onMeasureError: (message) => call(dotnet, 'OnMeasureFailed', message),
+        onFeatures: (selection) => call(dotnet, 'OnFeaturesSelected', selection),
+        onContextMenu: ({ x, y, part, canMeasure }) => call(dotnet, 'OnContextMenu', part?.id ?? null, part?.node ?? -1, x, y, canMeasure),
       })
     : undefined;
   const testControls = isTestHookEnabled() ? createTestHookControls() : undefined;
@@ -129,7 +134,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   const keptSources = new Map<ModelId, BatchFile[]>();
   const undoable = new Set<ModelId>();
   const unsubscribeView = view
-    ? models.subscribe({ loaded: (model) => view.add(model), removed: (id) => view.remove(id, undoable.has(id)) })
+    ? models.subscribe({ loaded: (model) => view.add(model), removed: (id) => view.remove(id) })
     : undefined;
   const unsubscribeStore = models.subscribe({
     loaded: ({ summary, restored }) => {
@@ -198,7 +203,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       }
       if (!models.remove(id)) {
         undoable.delete(id);
-        view?.remove(id, isUndoable);
+        view?.remove(id);
       }
     },
     restoreScene() {
@@ -219,7 +224,6 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     forgetModel(id) {
       keptSources.delete(id);
       store.delete(id);
-      view?.forgetModel(id);
     },
     clearAll() {
       for (const { summary } of models.models) {
@@ -227,7 +231,6 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       }
       keptSources.clear();
       store.clear();
-      view?.forgetMeasurements();
     },
     setModelOrder(ids) {
       store.setOrder(ids);
@@ -242,11 +245,14 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       view?.setPartState(id, hidden, selected);
       store.setHidden(id, hidden);
     },
-    setMeasureMode(active) {
-      view?.setMeasureMode(active);
+    setMeasureMode(active, fromContext = false) {
+      view?.setMeasureMode(active, fromContext);
     },
-    setMeasurements(shown) {
-      view?.setMeasurements(shown);
+    setSelectionMode(mode) {
+      view?.setSelectionMode(mode);
+    },
+    clearFeatures() {
+      view?.clearFeatures();
     },
     async exportMesh(format, selection) {
       if (!view) {

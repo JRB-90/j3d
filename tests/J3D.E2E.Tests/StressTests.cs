@@ -7,7 +7,7 @@ namespace J3D.E2E.Tests;
 /// M11 (D140): twice in M8's manual checklist, a model's Delete opened no dialog right after a
 /// measurement. On demand only: <c>J3D_STRESS=50</c> runs that many rounds of measuring across two
 /// models, then clicking Delete on the measured one, alternately while the measurement is still being
-/// worked out and once it's listed, and expects the dialog every time.
+/// worked out and once it's shown, and expects the dialog every time.
 /// </summary>
 public sealed class StressTests(J3DAppFixture app) : ViewerPageTest(app)
 {
@@ -35,11 +35,11 @@ public sealed class StressTests(J3DAppFixture app) : ViewerPageTest(app)
         for (var round = 1; round <= rounds; round++)
         {
             await Page.Mouse.ClickAsync((float)top.X, (float)top.Y);
-            await Expect(Page.GetByTestId("measure-pending")).ToHaveCountAsync(1);
+            await Expect(Page.GetByTestId("measure-reference")).ToHaveCountAsync(1);
             await Page.Mouse.ClickAsync((float)block.X, (float)block.Y);
             if (round % 2 == 0)
             {
-                await Expect(Page.GetByTestId("measurement")).ToContainTextAsync("10.000 mm");
+                await Expect(Page.GetByTestId("measure-result")).ToContainTextAsync("10.000 mm");
             }
 
             await delete.ClickAsync();
@@ -55,9 +55,11 @@ public sealed class StressTests(J3DAppFixture app) : ViewerPageTest(app)
                 missed.Add(round);
             }
 
-            await Expect(Page.GetByTestId("measurement")).ToHaveCountAsync(1);
-            await Page.GetByTestId("measure-clear").ClickAsync();
-            await Expect(Page.GetByTestId("measurement")).ToHaveCountAsync(0);
+            // Since M12 (D147) Esc clears the measurement and ends the tool; M starts it again.
+            await Expect(Page.GetByTestId("measure-result")).ToHaveCountAsync(1);
+            await Page.Keyboard.PressAsync("Escape");
+            await Expect(Page.GetByTestId("measure-label")).ToHaveCountAsync(0);
+            await Page.Keyboard.PressAsync("m");
         }
 
         TestContext.Current.TestOutputHelper?.WriteLine(

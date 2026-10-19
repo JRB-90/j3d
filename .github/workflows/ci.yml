@@ -78,7 +78,10 @@ jobs:
 
       - name: Generate large STEP fixtures
         if: env.J3D_LARGE_FIXTURES != ''
-        run: npm run fixtures:large -- ${J3D_LARGE_FIXTURES//,/ }
+        run: |
+          # Plants are written by OCCT's full build (D161), which isn't a project dependency.
+          if [[ ",$J3D_LARGE_FIXTURES," == *",plant-"* ]]; then npm install --no-save libcascade@3.1.0; fi
+          npm run fixtures:large -- ${J3D_LARGE_FIXTURES//,/ }
 
       - name: Typecheck & test (Vitest, including OCCT integration tests)
         run: |
@@ -139,7 +142,10 @@ jobs:
 
       - name: Generate large STEP fixtures
         if: env.J3D_LARGE_FIXTURES != ''
-        run: npm run fixtures:large -- ${J3D_LARGE_FIXTURES//,/ }
+        run: |
+          # Plants are written by OCCT's full build (D161), which isn't a project dependency.
+          if [[ ",$J3D_LARGE_FIXTURES," == *",plant-"* ]]; then npm install --no-save libcascade@3.1.0; fi
+          npm run fixtures:large -- ${J3D_LARGE_FIXTURES//,/ }
 
       - name: Install Playwright browser
         run: pwsh tests/J3D.E2E.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps ${{ matrix.browser }}

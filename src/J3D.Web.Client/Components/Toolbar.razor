@@ -35,7 +35,7 @@
         <div class="j3d-menu-header" data-testid="export-scope">@ExportLabel</div>
         @foreach (var format in MeshFormats)
         {
-            <MudMenuItem Label="@format.DisplayName" OnClick="@(() => StartExport(format))" data-testid="@($"export-{FormatKey(format)}")" />
+            <MudMenuItem Label="@format.DisplayName" OnClick="@(() => StartExport(format, Scene.HasSelection))" data-testid="@($"export-{FormatKey(format)}")" />
         }
     </MudMenu>
 
@@ -60,6 +60,26 @@
                     data-testid="projection">
         <MudToggleItem Value="Projection.Orthographic" Text="Orthographic" />
         <MudToggleItem Value="Projection.Perspective" Text="Perspective" />
+    </MudToggleGroup>
+
+    @* What a click selects (M12, D146): models, objects or features, with the keys 1, 2 and 3 (D162). *@
+    <MudToggleGroup T="SelectMode"
+                    Value="Scene.Mode"
+                    ValueChanged="Scene.SetSelectionMode"
+                    Size="Size.Small"
+                    Color="Color.Primary"
+                    Disabled="@(!Session.IsReady)"
+                    Class="j3d-selection-mode"
+                    aria-label="Selection mode"
+                    data-testid="selection-mode">
+        @foreach (var mode in SelectModes)
+        {
+            <MudToggleItem Value="mode" aria-pressed="@(Scene.Mode == mode ? "true" : "false")" data-testid="@($"mode-{ModeKey(mode)}")">
+                <MudTooltip Text="@ModeTooltip(mode)">
+                    <MudIcon Icon="@ModeIcon(mode)" Size="Size.Small" aria-label="@ModeTooltip(mode)" />
+                </MudTooltip>
+            </MudToggleItem>
+        }
     </MudToggleGroup>
 
     @* The Measure tool (M7, D79): a toggle, highlighted while it's on. *@

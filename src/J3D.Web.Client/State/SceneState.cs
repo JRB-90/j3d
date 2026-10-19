@@ -9,16 +9,17 @@ namespace J3D.Web.Client.State;
 /// <c>Viewport</c> feeds it from the viewer's callbacks and the <c>ModelList</c> renders it. Scoped
 /// (D56): one per tab under WebAssembly, and never shared between the host's prerender requests.
 /// Since M6 it also owns each model's selected and hidden parts and the undo history (D95): the
-/// <c>Viewport</c> applies them to the viewer. Since M7 it holds the Measure tool's mode, its pending
-/// first pick and the kept measurements (D101), which follow their parts (D108). Since M8 it lists
-/// the models kept from the last visit, and deleting a model is an undoable step (D84): the viewer
-/// frees the model, keeping its files, and an undo imports it again under the same id (D117).
+/// <c>Viewport</c> applies them to the viewer. Since M8 it lists the models kept from the last visit,
+/// and deleting a model is an undoable step (D84): the viewer frees the model, keeping its files, and
+/// an undo imports it again under the same id (D117). Since M12 it holds the selection mode (D146) and
+/// the features the viewer reports selected, the Measure tool's reference and result (D147), which
+/// aren't kept or undoable, and asks for the context menu (D164).
 /// </summary>
 public sealed class SceneState
 {
     private readonly UndoHistory _history = new();
 
-    /// <summary>Raised after every change to <see cref="Models"/> or the history.</summary>
+    /// <summary>Raised after every change to <see cref="Models"/>, the history, the mode, the features or the measurement.</summary>
     public event Action? Changed;
 
     /// <summary>Raised when a part picked in 3D should be shown in its model's tree (D96).</summary>
@@ -30,29 +31,40 @@ public sealed class SceneState
     /// <summary>Raised when models are listed again, from the last visit or by an undo: the viewer imports them from their kept files.</summary>
     public event Action<IReadOnlyList<ModelEntry>>? RestoreRequested;
 
-    /// <summary>Raised when no step can bring a deleted model back any more: the viewer drops its files and measurements.</summary>
+    /// <summary>Raised when no step can bring a deleted model back any more: the viewer drops its files.</summary>
     public event Action<ModelId>? ForgetRequested;
 
     /// <summary>Raised by Clear all (D110): the viewer removes every model and everything kept.</summary>
     public event Action? ClearAllRequested;
 
+    /// <summary>Raised when the selected features should go (Esc, D146): the viewer owns them.</summary>
+    public event Action? ClearFeaturesRequested;
+
+    /// <summary>Raised when the context menu should open (D164), after its target has been selected.</summary>
+    public event Action<ContextMenuTarget>? ContextMenuRequested;
+
+    /// <summary>Raised when the context menu asks for a GLB or STL export: of the selection, or of the visible scene.</summary>
+    public event Action<MeshExportFormat, bool>? ExportRequested;
+
     public ImmutableList<ModelEntry> Models { get; private set; } = [];
 
-    /// <summary>The Measure tool is on: clicks pick faces, edges and vertices instead of parts (D79).</summary>
+    /// <summary>What a click selects (D146).</summary>
+    public SelectMode Mode { get; private set; } = SelectMode.Objects;
+
+    /// <summary>The faces, edges and vertices selected in Feature mode, as the viewer reports them (D146, D163).</summary>
+    public FeatureSelection Features { get; private set; } = FeatureSelection.Empty;
+
+    /// <summary>The Measure tool is on: clicks pick faces, edges and vertices instead of selecting (D79).</summary>
     public bool MeasureMode { get; private set; }
 
-    /// <summary>The Measure tool's first pick, with its properties, until the second (D101).</summary>
-    public MeasureInfo? PendingMeasure { get; private set; }
+    /// <summary>The Measure tool's reference and its values, until Esc (D147).</summary>
+    public MeasureInfo? MeasureReference { get; private set; }
 
-    /// <summary>Kept measurements, oldest first.</summary>
-    public ImmutableList<MeasureInfo> Measurements { get; private set; } = [];
+    /// <summary>The reference against the last click, replaced by each click (D147).</summary>
+    public MeasureInfo? MeasureResult { get; private set; }
 
-    /// <summary>The kept measurements whose parts are all visible: the ones the viewer draws (D108).</summary>
-    public IReadOnlyList<MeasureInfo> ShownMeasurements => [.. Measurements.Where(IsShown)];
-
-    /// <summary>A measurement is shown while every part it measures is listed, loaded and visible.</summary>
-    public bool IsShown(MeasureInfo measurement) => measurement.Parts.All(part =>
-        Find(part.ModelId) is { Tree: not null } model && !model.Hidden.Contains(part.Node));
+    /// <summary>The Measure tool was asked to start from the entity under the last right click, not yet passed to the viewer.</summary>
+    public bool MeasureFromContextRequested { get; private set; }
 
     public bool CanUndo => _history.CanUndo;
 
@@ -112,10 +124,7 @@ public sealed class SceneState
         }
     }
 
-    /// <summary>
-    /// Deletes a model as an undoable step (D84): its measurements go with it (D108), and the viewer
-    /// frees it at once, keeping its files for an undo.
-    /// </summary>
+    /// <summary>Deletes a model as an undoable step (D84): the viewer frees it at once, keeping its files for an undo.</summary>
     public void Delete(ModelId id)
     {
         var index = Models.FindIndex(model => model.Id == id);
@@ -124,17 +133,18 @@ public sealed class SceneState
             return;
         }
 
-        var step = new DeleteStep(Models[index], index, Measurements.RemoveAll(measurement => !measurement.Touches(id)));
+        var step = new DeleteStep(Models[index], index);
         Record(step);
-        Apply(step.Redo(new SceneContent(Models, Measurements)));
+        Apply(step.Redo(new SceneContent(Models)));
     }
 
-    /// <summary>Clear all (D110): every model, measurement and step goes, and the viewer removes everything kept. It can't be undone.</summary>
+    /// <summary>Clear all (D110): every model and step goes, and the viewer removes everything kept. It can't be undone.</summary>
     public void ClearAll()
     {
         _history.Clear();
-        PendingMeasure = null;
-        Measurements = [];
+        MeasureReference = null;
+        MeasureResult = null;
+        Features = FeatureSelection.Empty;
         Set([], always: true);
         ClearAllRequested?.Invoke();
     }
@@ -158,12 +168,6 @@ public sealed class SceneState
         if (index >= 0)
         {
             _history.Forget(id);
-            Measurements = Measurements.RemoveAll(measurement => measurement.Touches(id));
-            if (PendingMeasure?.Touches(id) == true)
-            {
-                PendingMeasure = null;
-            }
-
             Set(Models.RemoveAt(index), always: true);
         }
     }
@@ -172,16 +176,50 @@ public sealed class SceneState
     public void Clear()
     {
         _history.Clear();
-        PendingMeasure = null;
-        var hadMeasurements = !Measurements.IsEmpty;
-        Measurements = [];
-        if (!Models.IsEmpty || hadMeasurements)
+        MeasureReference = null;
+        MeasureResult = null;
+        Features = FeatureSelection.Empty;
+        if (!Models.IsEmpty)
         {
             Set([], always: true);
         }
     }
 
-    /// <summary>The toolbar's Measure button or the M key (D79). Turning it off drops a pending pick.</summary>
+    /// <summary>
+    /// The toolbar's mode switch or the keys 1, 2 and 3 (D146, D162). The selection is converted: from
+    /// Object to Model, every model with a selected part is selected whole; from Model to Object, its
+    /// parts stay selected; switching to or from Feature clears it.
+    /// </summary>
+    public void SetSelectionMode(SelectMode mode)
+    {
+        if (mode == Mode)
+        {
+            return;
+        }
+
+        var models = Models;
+        if (mode == SelectMode.Features || Mode == SelectMode.Features)
+        {
+            models = models.ConvertAll(model => model.WithParts(model.Hidden, []));
+        }
+        else if (mode == SelectMode.Models)
+        {
+            models = models.ConvertAll(model => model.Selected.IsEmpty ? model : model.WithParts(model.Hidden, VisibleParts(model)));
+        }
+
+        Mode = mode;
+        Features = FeatureSelection.Empty; // the viewer drops its own as it changes mode
+        Set(models, always: true);
+    }
+
+    /// <summary>The features the viewer has selected, once their values are known (D146).</summary>
+    public void SetFeatures(FeatureSelection features)
+    {
+        Features = Mode == SelectMode.Features ? features : FeatureSelection.Empty;
+        Set(Models, always: true);
+    }
+
+    /// <summary>The toolbar's Measure button or the M key (D79). Turning it off drops the reference and the result (D147).</summary>
     public void ToggleMeasureMode() => SetMeasureMode(!MeasureMode);
 
     public void SetMeasureMode(bool on)
@@ -189,41 +227,65 @@ public sealed class SceneState
         if (on != MeasureMode)
         {
             MeasureMode = on;
-            PendingMeasure = on ? PendingMeasure : null;
+            MeasureReference = null;
+            MeasureResult = null;
+            MeasureFromContextRequested = false;
             Set(Models, always: true);
         }
     }
 
-    /// <summary>The viewer's first pick, or null when it was dropped or finished.</summary>
-    public void SetPendingMeasure(MeasureInfo? pending)
+    /// <summary>"Measure from here" (D164): the Measure tool starts again, from the entity under the right click.</summary>
+    public void MeasureFromHere()
     {
-        if (pending != PendingMeasure)
-        {
-            PendingMeasure = MeasureMode ? pending : null;
-            Set(Models, always: true);
-        }
+        MeasureMode = true;
+        MeasureReference = null;
+        MeasureResult = null;
+        MeasureFromContextRequested = true;
+        Set(Models, always: true);
     }
 
-    /// <summary>A measurement the viewer has kept: listed and undoable (D84, D101).</summary>
-    public void AddMeasurement(MeasureInfo measurement)
+    /// <summary>The <c>Viewport</c> has passed a "Measure from here" on to the viewer.</summary>
+    public bool TakeMeasureFromContext()
     {
-        if (Measurements.Any(kept => kept.Id == measurement.Id) || !measurement.Parts.All(part => Find(part.ModelId) is not null))
-        {
-            return;
-        }
-
-        ChangeMeasurements(Measurements.Add(measurement));
+        var requested = MeasureFromContextRequested;
+        MeasureFromContextRequested = false;
+        return requested;
     }
 
-    public void RemoveMeasurement(string id) => ChangeMeasurements(Measurements.RemoveAll(measurement => measurement.Id == id));
+    /// <summary>The viewer's reference, or null when it's gone (D147).</summary>
+    public void SetMeasureReference(MeasureInfo? reference)
+    {
+        MeasureReference = MeasureMode ? reference : null;
+        Set(Models, always: true);
+    }
 
-    /// <summary>The panel's Clear: removes every kept measurement, as one undoable step.</summary>
-    public void ClearMeasurements() => ChangeMeasurements([]);
+    /// <summary>The reference against the last click, or null.</summary>
+    public void SetMeasureResult(MeasureInfo? result)
+    {
+        MeasureResult = MeasureMode ? result : null;
+        Set(Models, always: true);
+    }
+
+    /// <summary>
+    /// Esc (D99, D147): the Measure tool's measurement goes and the tool turns off; otherwise the
+    /// selection is cleared.
+    /// </summary>
+    public void Escape()
+    {
+        if (MeasureMode)
+        {
+            SetMeasureMode(false);
+        }
+        else
+        {
+            ClearSelection();
+        }
+    }
 
     /// <summary>
     /// A click in the viewport (D77): on a part, it becomes the selection, or with Ctrl it's added
     /// or removed; on empty space (no model), the selection is cleared unless Ctrl was held. The
-    /// tree then reveals the part (D96).
+    /// tree then reveals the part (D96). In Model mode the part's whole model is selected (D146).
     /// </summary>
     public void Pick(ModelId? id, int node, bool additive)
     {
@@ -235,6 +297,12 @@ public sealed class SceneState
                 ClearSelection();
             }
 
+            return;
+        }
+
+        if (Mode == SelectMode.Models)
+        {
+            SelectModel(target, additive);
             return;
         }
 
@@ -257,13 +325,26 @@ public sealed class SceneState
 
     /// <summary>
     /// A click on a tree node: the visible parts under it become the selection, or with Ctrl are
-    /// added, or removed when they're all selected already (D77, D96).
+    /// added, or removed when they're all selected already (D77, D96). In Model mode its whole model
+    /// is selected; in Feature mode, which has no parts selected, it switches to Object first (D146).
     /// </summary>
     public void SelectNode(ModelId id, int node, bool additive)
     {
         if (Find(id) is not { Tree: { } tree } target || !tree.Contains(node))
         {
             return;
+        }
+
+        if (Mode == SelectMode.Models)
+        {
+            SelectModel(target, additive);
+            return;
+        }
+
+        if (Mode == SelectMode.Features)
+        {
+            SetSelectionMode(SelectMode.Objects);
+            target = Find(id)!;
         }
 
         var parts = tree.PartsUnder(node).Where(part => !target.Hidden.Contains(part)).ToList();
@@ -278,7 +359,68 @@ public sealed class SceneState
         }
     }
 
-    public void ClearSelection() => Set(Models.ConvertAll(model => model.WithParts(model.Hidden, [])));
+    /// <summary>Clears the selected parts, and in Feature mode the selected features, which the viewer holds.</summary>
+    public void ClearSelection()
+    {
+        if (Mode == SelectMode.Features && !Features.IsEmpty)
+        {
+            Features = FeatureSelection.Empty;
+            ClearFeaturesRequested?.Invoke();
+            Set(Models, always: true);
+        }
+
+        Set(Models.ConvertAll(model => model.WithParts(model.Hidden, [])));
+    }
+
+    /// <summary>A model selected whole (Model mode): every visible part of it.</summary>
+    public static bool IsModelSelected(ModelEntry model) =>
+        model.Tree is not null && !model.Selected.IsEmpty && VisibleParts(model).All(model.Selected.Contains);
+
+    /// <summary>
+    /// A right click in the viewport that didn't drag (D164): on a part, outside Feature mode, the part
+    /// (or in Model mode its model) is selected unless it already is, and the menu offers its commands;
+    /// elsewhere the scene's. The viewer has already selected a feature under it in Feature mode.
+    /// </summary>
+    public void OpenContextMenu(ModelId? id, int node, double x, double y, bool canMeasure)
+    {
+        var onTarget = false;
+        if (Mode != SelectMode.Features && id is { } modelId && Find(modelId) is { Tree: { } tree } target && tree.IsPart(node) && !target.Hidden.Contains(node))
+        {
+            onTarget = true;
+            var selected = Mode == SelectMode.Models ? IsModelSelected(target) : target.Selected.Contains(node);
+            if (!selected)
+            {
+                Pick(modelId, node, additive: false);
+            }
+        }
+
+        ContextMenuRequested?.Invoke(new ContextMenuTarget(x, y, onTarget, canMeasure));
+    }
+
+    /// <summary>A right click on a tree node (D164): the node is selected unless it already is, then the menu opens.</summary>
+    public void OpenNodeContextMenu(ModelId id, int node, double x, double y)
+    {
+        if (Find(id) is not { Tree: { } tree } target || !tree.Contains(node))
+        {
+            return;
+        }
+
+        var selected = Mode switch
+        {
+            SelectMode.Models => IsModelSelected(target),
+            SelectMode.Objects => target.IsSelected(node),
+            _ => false,
+        };
+        if (!selected)
+        {
+            SelectNode(id, node, additive: false);
+        }
+
+        ContextMenuRequested?.Invoke(new ContextMenuTarget(x, y, OnTarget: HasSelection, CanMeasure: false));
+    }
+
+    /// <summary>The context menu's Export: GLB or STL of the selection, or of the visible scene.</summary>
+    public void RequestExport(MeshExportFormat format, bool selection) => ExportRequested?.Invoke(format, selection);
 
     /// <summary>Hides the selected parts, which leaves the selection empty (D78, D98).</summary>
     public void HideSelection() => ChangeVisibility(model => model.Hidden.Union(model.Selected));
@@ -324,7 +466,7 @@ public sealed class SceneState
     {
         if (_history.Undo() is { } step)
         {
-            Apply(step.Undo(new SceneContent(Models, Measurements)));
+            Apply(step.Undo(new SceneContent(Models)));
         }
     }
 
@@ -332,7 +474,23 @@ public sealed class SceneState
     {
         if (_history.Redo() is { } step)
         {
-            Apply(step.Redo(new SceneContent(Models, Measurements)));
+            Apply(step.Redo(new SceneContent(Models)));
+        }
+    }
+
+    private static IEnumerable<int> VisibleParts(ModelEntry model) => model.Tree?.Parts.Where(part => !model.Hidden.Contains(part)) ?? [];
+
+    /// <summary>Model mode: a model's visible parts become the selection, or with Ctrl it's added or removed whole.</summary>
+    private void SelectModel(ModelEntry target, bool additive)
+    {
+        if (additive)
+        {
+            var selected = IsModelSelected(target) ? [] : VisibleParts(target);
+            Update(target.Id, model => model.WithParts(model.Hidden, selected));
+        }
+        else
+        {
+            Set(Models.ConvertAll(model => model.WithParts(model.Hidden, model.Id == target.Id ? VisibleParts(model) : [])));
         }
     }
 
@@ -340,12 +498,6 @@ public sealed class SceneState
     private void Apply(SceneContent content)
     {
         var before = Models;
-        Measurements = content.Measurements;
-        if (PendingMeasure is { } pending && !pending.Parts.All(part => content.Models.Exists(model => model.Id == part.ModelId)))
-        {
-            PendingMeasure = null;
-        }
-
         Set(content.Models, always: true);
 
         foreach (var gone in before.Where(model => !content.Models.Exists(kept => kept.Id == model.Id)))
@@ -371,18 +523,6 @@ public sealed class SceneState
                 ForgetRequested?.Invoke(dropped.Id);
             }
         }
-    }
-
-    private void ChangeMeasurements(ImmutableList<MeasureInfo> measurements)
-    {
-        if (measurements.SequenceEqual(Measurements))
-        {
-            return;
-        }
-
-        Record(new MeasurementsStep(Measurements, measurements));
-        Measurements = measurements;
-        Set(Models, always: true);
     }
 
     /// <summary>Applies new hidden parts to loaded models and records the change as one undoable step, if anything changed.</summary>
@@ -430,7 +570,7 @@ public sealed class SceneState
         }
     }
 
-    /// <summary>Raises <see cref="Changed"/> only when an entry changed, unless the history did (<paramref name="always"/>).</summary>
+    /// <summary>Raises <see cref="Changed"/> only when an entry changed, unless something else did (<paramref name="always"/>).</summary>
     private void Set(ImmutableList<ModelEntry> models, bool always = false)
     {
         if (!always && (ReferenceEquals(models, Models) || models.SequenceEqual(Models, ReferenceEqualityComparer.Instance)))

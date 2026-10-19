@@ -92,3 +92,8 @@
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
     }
+
+    /* The Measure tool's reference (D147): its own value, told apart from the result. */
+    .j3d-viewport ::deep .j3d-measure-label--reference {
+        border-style: dashed;
+    }

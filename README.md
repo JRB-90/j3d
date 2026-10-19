@@ -12,18 +12,25 @@ drawing all happen in the browser tab.
 - **Import** several files at once with the **Import** button, or drop files or whole folders onto the view.
 - Each file becomes a **model** in the list on the left, with its progress while importing (and a cancel button), then
   its size, triangle and part counts, any warnings, and its **assembly tree**.
-- **Select** parts by clicking them in the view or in the tree (Ctrl+click adds or removes); the selected part is
-  highlighted in blue, named in a panel at the bottom left, and shown in the tree. The part under the pointer is
-  highlighted faintly before you click.
+- **Select** by clicking in the view or in the tree (Ctrl+click adds or removes), at one of three levels picked in
+  the toolbar or with `1`, `2` and `3`: **Model** selects whole models, **Object** single parts (or, from the tree,
+  sub-assemblies), and **Feature** the faces, edges and vertices of CAD models. Selected parts are highlighted in
+  blue, named in a panel at the bottom left, and shown in the tree; selected features are listed in the panel with
+  their values, and with the total length or area of several. What's under the pointer is highlighted faintly
+  before you click.
+- **Right-click** a part, a tree node or empty space (a click that doesn't drag) for a menu of what you can do there:
+  hide, isolate, measure from that point and export the selection, or show all, fit all and export the scene.
 - **Hide, isolate and show** parts with the eye beside each model and tree node, or the toolbar buttons and keys
-  below. **Undo and redo** cover hiding and showing, measurements, and deleting a model.
-- **Measure** CAD models exactly from their BREP geometry: turn on **Measure** (or press `M`), click a face, edge or
-  vertex to see its properties (area, length, radius, normal, axis…) and its part's volume and size, then click a
-  second one for the distance between them, the angle between planes or lines, and the distance between circle
-  centres. Each measurement is kept, drawn in the view and listed in the panel with copy buttons. On mesh models
-  the tool measures between points, snapping to vertices, and marks the results approximate (≈).
+  below. **Undo and redo** cover hiding and showing, and deleting a model.
+- **Measure** CAD models exactly from their BREP geometry: turn on **Measure** (or press `M`) and click a face, edge
+  or vertex. That first pick is the **reference**: its own value is drawn on it (an edge's length, a circle's
+  diameter, a face's area) and its properties (area, length, radius, normal, axis…) and its part's volume and size
+  are listed in the panel. Each later click shows the reference against what it picked (the distance between them,
+  the angle between planes or lines, the distance between circle centres), replacing the last result. A feature
+  selected before you turn the tool on becomes the reference; `Esc` clears the measurement and turns the tool off.
+  On mesh models the tool measures between points, snapping to vertices, and marks the results approximate (≈).
 - **Delete** a model from the list. J3D asks first, then frees all of its memory; **Undo** brings it back into its
-  place, imported again from its kept copy, with its hidden parts and measurements.
+  place, imported again from its kept copy, with its hidden parts.
 - **Your models are kept** for your next visit: each imported file (with its buffers, materials and textures) is
   copied into the browser's private storage for this page, and when you come back the models are imported again in
   their order, with the parts you hid still hidden and the camera where you left it. **Clear all**, above the list,
@@ -65,14 +72,16 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Zoom | Wheel (towards the pointer) | Pinch | |
 | Fit everything visible in view | | | **Fit all** in the toolbar, or `F` |
 | Isometric view of everything | | | **Home**, beside the view cube |
-| Select a part | Click it (a click that doesn't drag) | Tap it | Click a node in the tree selects every part under it |
-| Add or remove a part | Ctrl+click | | Ctrl+click in the tree |
+| Select models, objects or features | | | The **Model**, **Object** and **Feature** switch in the toolbar, or `1`, `2`, `3` |
+| Select | Click it (a click that doesn't drag) | Tap it | Click a node in the tree selects every part under it (its model in Model mode) |
+| Add or remove | Ctrl+click | | Ctrl+click in the tree |
 | Clear the selection | Click empty space | Tap empty space | `Esc` |
+| Commands for what's under the pointer | Right-click (a click that doesn't drag) | | Right-click a node in the tree |
 | Hide the selection | | | **Hide** in the toolbar, or `H`; or a node's eye in the tree |
 | Show only the selection | | | **Isolate**, or `I` |
 | Show everything | | | **Show all**, or `Shift+H` |
-| Undo, redo (hiding, showing, measuring, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
-| Measure | Click a face, edge or vertex, then another | Tap | **Measure** in the toolbar, or `M`; `Esc` drops the first pick |
+| Undo, redo (hiding, showing, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
+| Measure | Click a face, edge or vertex (the reference), then others | Tap | **Measure** in the toolbar, or `M`; **Measure from here** in the right-click menu; `Esc` ends it |
 | Export the scene or the selection | | | **Export** in the toolbar: GLB, STL (binary) or STL (ASCII) |
 | Export a CAD model as imported | | | The model's download icon in the list: STEP or BREP |
 
@@ -90,7 +99,7 @@ and so do models coming back from your last visit or an undo.
   falls back to sorting, which can draw intersecting parts in the wrong order.
 - Kept models come back by being imported again, so a large file takes as long to return (after a refresh, or when
   its delete is undone) as it took to import: about 30 seconds for a 200 MB STEP. Selections, measurements and the
-  undo history aren't kept across a refresh.
+  undo history aren't kept across a refresh, and a measurement lasts only until the next click or `Esc`.
 - Kept files count against the browser's storage for the page. When it's full, a model stays open for the visit and
   its list item says it wasn't kept. Browsers may also clear the storage of sites you haven't used for a while unless
   they grant it persistent storage, which J3D asks for (Firefox shows a prompt; Chrome decides by itself).

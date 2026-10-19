@@ -93,6 +93,8 @@ export interface TestHook {
   useOrderIndependentTransparency(enabled: boolean): void;
   /** The Measure tool's state (M7), or null without WebGL2. */
   measureState(): ReturnType<Viewer['measureState']> | null;
+  /** Since M12: the selection mode, the feature under the pointer and the selected features (D146). */
+  selectionState(): ReturnType<Viewer['selectionState']> | null;
   /** What the Measure tool would pick at a client point. */
   entityAt(x: number, y: number): ReturnType<Viewer['entityAt']>;
   /** What the store keeps (M8): this tab's status, the kept models, the order .NET gave and the camera. */
@@ -181,6 +183,7 @@ export function installTestHook(
     transparency: () => viewer?.transparency ?? null,
     useOrderIndependentTransparency: (enabled) => viewer?.setOrderIndependentTransparency(enabled),
     measureState: () => viewer?.measureState() ?? null,
+    selectionState: () => viewer?.selectionState() ?? null,
     entityAt: (x, y) => viewer?.entityAt(x, y) ?? null,
     store: () => store.state,
     storeIdle: () => store.idle(),

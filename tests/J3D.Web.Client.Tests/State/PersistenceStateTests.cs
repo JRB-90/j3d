@@ -49,19 +49,13 @@ public sealed class PersistenceStateTests
     }
 
     [Fact]
-    public void Deleting_a_model_is_undone_into_its_place_with_its_hidden_parts_and_measurements()
+    public void Deleting_a_model_is_undone_into_its_place_with_its_hidden_parts()
     {
         LoadAll();
         _scene.ToggleNodeVisibility(B, 1);
-        _scene.AddMeasurement(Measure("m1", (B, 3), (A, 3)));
-        _scene.AddMeasurement(Measure("m2", (A, 1)));
-        _scene.ToggleMeasureMode();
-        _scene.SetPendingMeasure(Measure("", (B, 4)));
 
         _scene.Delete(B);
         Assert.Equal(["a", "c"], ModelIds());
-        Assert.Equal(["m2"], MeasurementIds());
-        Assert.Null(_scene.PendingMeasure);
         Assert.Equal(["delete b"], _requests);
 
         _scene.Undo();
@@ -70,16 +64,10 @@ public sealed class PersistenceStateTests
         Assert.True(restored.IsRestored);
         Assert.Equal(ModelStatus.Queued, restored.Status);
         Assert.Equal([1], restored.Hidden.Order());
-        Assert.Equal(["m2", "m1"], MeasurementIds());
-        Assert.DoesNotContain(_scene.ShownMeasurements, static m => m.Id == "m1"); // until it has loaded (D108)
         Assert.Equal(["delete b", "restore b"], _requests);
-
-        _scene.MarkLoaded(B, Info());
-        Assert.Contains(_scene.ShownMeasurements, static m => m.Id == "m1");
 
         _scene.Redo();
         Assert.Equal(["a", "c"], ModelIds());
-        Assert.Equal(["m2"], MeasurementIds());
         Assert.Equal(["delete b", "restore b", "delete b"], _requests);
     }
 
@@ -145,11 +133,10 @@ public sealed class PersistenceStateTests
     }
 
     [Fact]
-    public void Clear_all_removes_every_model_measurement_and_step()
+    public void Clear_all_removes_every_model_and_step()
     {
         LoadAll();
         Assert.True(_scene.CanClearAll);
-        _scene.AddMeasurement(Measure("m1", (A, 1)));
         _scene.Delete(B);
         _scene.Delete(A);
         _scene.Delete(C);
@@ -157,7 +144,6 @@ public sealed class PersistenceStateTests
 
         _scene.ClearAll();
         Assert.Empty(_scene.Models);
-        Assert.Empty(_scene.Measurements);
         Assert.False(_scene.CanUndo || _scene.CanRedo || _scene.CanClearAll);
         Assert.Equal("clear", _requests[^1]);
     }
@@ -198,15 +184,5 @@ public sealed class PersistenceStateTests
         }
     }
 
-    private static MeasureInfo Measure(string id, params (ModelId Model, int Node)[] parts) => new(
-        id,
-        $"Distance {id}",
-        "30.000 mm",
-        [new MeasureRow("Distance", "30.000 mm")],
-        [.. parts.Select(static part => new MeasurePart(part.Model.Value, part.Node))],
-        Approximate: false);
-
     private List<string> ModelIds() => [.. _scene.Models.Select(static model => model.Id.Value)];
-
-    private List<string> MeasurementIds() => [.. _scene.Measurements.Select(static m => m.Id)];
 }

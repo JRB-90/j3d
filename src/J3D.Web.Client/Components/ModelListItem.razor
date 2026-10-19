@@ -1,4 +1,4 @@
-<div class="j3d-model j3d-model--@StatusName" data-testid="model-item" data-status="@StatusName">
+<div class="@ItemClass" data-testid="model-item" data-status="@StatusName" data-selected="@(ModelSelected ? "true" : "false")">
     <div class="j3d-model-header">
         <span class="j3d-model-name" title="@Model.Summary.FileName" data-testid="model-name">@Model.Summary.FileName</span>
         <span class="j3d-model-format" data-testid="model-format">@Model.Summary.Format.DisplayName</span>
@@ -173,7 +173,10 @@
                                              data-selected="@(Model.IsSelected(node) ? "true" : "false")"
                                              data-testid="model-tree-node">
                                 <BodyContent Context="item">
-                                    <span class="j3d-tree-node-name">@context.Text</span>
+                                    <span class="j3d-tree-node-name"
+                                          @oncontextmenu="@(args => OpenNodeMenu(node, args))"
+                                          @oncontextmenu:preventDefault="true"
+                                          @oncontextmenu:stopPropagation="true">@context.Text</span>
                                     <span class="j3d-tree-node-eye" @onclick:stopPropagation="true">
                                         <MudIconButton Icon="@EyeIcon(visibility)"
                                                        Size="Size.Small"

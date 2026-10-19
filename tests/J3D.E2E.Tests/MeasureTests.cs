@@ -1,37 +1,58 @@
 using System.Text.Json;
+using Microsoft.Playwright;
 
 namespace J3D.E2E.Tests;
 
 /// <summary>
-/// M7: the Measure tool (decisions D79–D81, D101–D108) through the real mouse, keys and panel, on
-/// geometry with known answers. <c>box.brep</c> is 10 × 20 × 30 from the origin, seen from Home's
-/// front-right-top view, so its top (z = 30), front (y = 0) and right (x = 10) faces show.
+/// The Measure tool (M7's D79–D81, D102–D107; since M12 one reference against each click, D147) through
+/// the real mouse, keys and panel, on geometry with known answers. <c>box.brep</c> is 10 × 20 × 30 from
+/// the origin, seen from Home's front-right-top view, so its top (z = 30), front (y = 0) and right
+/// (x = 10) faces show.
 /// </summary>
 public sealed class MeasureTests(J3DAppFixture app) : ViewerPageTest(app)
 {
     [Fact]
-    public async Task A_face_shows_its_properties_and_a_second_face_keeps_the_pair()
+    public async Task The_reference_shows_its_value_and_each_click_replaces_the_result()
     {
         await LoadAsync("box.brep");
         await Page.Keyboard.PressAsync("m");
-        await Expect(Page.GetByTestId("measure-hint")).ToHaveTextAsync("Pick a face, edge or vertex.");
+        await Expect(Page.GetByTestId("measure-hint")).ToContainTextAsync("Pick a face, edge or vertex");
 
         await ClickWorldAsync(5, 10, 30); // the top face
-        var pending = Page.GetByTestId("measure-pending");
-        await Expect(pending).ToContainTextAsync("Face (plane) of box.brep");
-        await Expect(pending).ToContainTextAsync("200.000 mm²");
-        await Expect(pending).ToContainTextAsync("(0.000, 0.000, 1.000)");
-        await Expect(pending).ToContainTextAsync("6000.000 mm³");
+        var reference = Page.GetByTestId("measure-reference");
+        await Expect(reference).ToContainTextAsync("Face (plane) of box.brep");
+        await Expect(reference).ToContainTextAsync("200.000 mm²");
+        await Expect(reference).ToContainTextAsync("(0.000, 0.000, 1.000)");
+        await Expect(reference).ToContainTextAsync("6000.000 mm³");
+        await Expect(Label("reference")).ToHaveTextAsync("200.000 mm²");
 
         await ClickWorldAsync(5, 0, 15); // the front face
-        await Expect(Page.GetByTestId("measure-pending")).ToHaveCountAsync(0);
-        var label = Page.GetByTestId("measure-label");
-        await Expect(label).ToHaveTextAsync("0.000 mm · 90.00°");
-        await Expect(label).ToBeVisibleAsync();
-        var measurement = Page.GetByTestId("measurement");
-        await Expect(measurement).ToContainTextAsync("Angle (planes)");
-        await Expect(measurement).ToContainTextAsync("90.00°");
+        await Expect(Label("result")).ToHaveTextAsync("0.000 mm · 90.00°");
+        await Expect(Page.GetByTestId("measure-result")).ToContainTextAsync("Angle (planes)");
+
+        await ClickWorldAsync(10, 15, 0.2); // the right face's bottom edge, just inside the silhouette, clear of the panel
+        await Expect(Label("result")).ToHaveTextAsync("30.000 mm · 0.00°");
+        await Expect(Page.GetByTestId("measure-label")).ToHaveCountAsync(2); // the reference and one result
+        await Expect(reference).ToContainTextAsync("Face (plane) of box.brep");
+        await Expect(reference).Not.ToContainTextAsync("200.000 mm²"); // its values fold away beside a result
+        await reference.GetByTestId("measure-reference-toggle").ClickAsync();
+        await Expect(reference).ToContainTextAsync("200.000 mm²");
         AssertNoConsoleErrors();
+    }
+
+    [Fact]
+    public async Task A_circle_is_drawn_as_its_diameter()
+    {
+        // curved-part.step's six drilled holes are 2 mm in radius; one is centred at (6, 6) in its top face (z = 20).
+        await LoadAsync("curved-part.step");
+        await Page.Keyboard.PressAsync("m");
+        var rim = await ProjectAsync(6 + 2 * Math.Cos(-Math.PI / 4), 6 + 2 * Math.Sin(-Math.PI / 4), 20);
+        Assert.Equal("edge", (await EntityAtAsync(rim))!.Kind);
+
+        await ClickAsync(rim);
+
+        await Expect(Page.GetByTestId("measure-reference")).ToContainTextAsync("Edge (circle) of Curved part");
+        await Expect(Label("reference")).ToHaveTextAsync("Ø 4.000 mm");
     }
 
     [Fact]
@@ -50,9 +71,9 @@ public sealed class MeasureTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.WaitForFunctionAsync("() => window.__j3dTest.measureState().hovered?.kind === 'vertex'");
 
         await ClickAsync(corner);
-        await Expect(Page.GetByTestId("measure-pending")).ToContainTextAsync("Vertex of box.brep");
+        await Expect(Page.GetByTestId("measure-reference")).ToContainTextAsync("Vertex of box.brep");
         await ClickWorldAsync(0.3, 0.3, 30); // just inside the front-left-top corner, which is on the silhouette
-        await Expect(Page.GetByTestId("measure-label")).ToHaveTextAsync("10.000 mm");
+        await Expect(Label("result")).ToHaveTextAsync("10.000 mm");
     }
 
     [Fact]
@@ -63,11 +84,11 @@ public sealed class MeasureTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.Keyboard.PressAsync("m");
 
         await ClickWorldAsync(5, 10, 30);
-        await Expect(Page.GetByTestId("measure-pending")).ToContainTextAsync("box.brep");
+        await Expect(Page.GetByTestId("measure-reference")).ToContainTextAsync("box.brep");
         await ClickWorldAsync(35, 25, 20);
 
-        await Expect(Page.GetByTestId("measure-label")).ToHaveTextAsync("10.000 mm · 0.00°");
-        await Expect(Page.GetByTestId("measurement")).Not.ToContainTextAsync("≈");
+        await Expect(Label("result")).ToHaveTextAsync("10.000 mm · 0.00°");
+        await Expect(Page.GetByTestId("measure-result")).Not.ToContainTextAsync("≈");
     }
 
     [Fact]
@@ -80,14 +101,14 @@ public sealed class MeasureTests(J3DAppFixture app) : ViewerPageTest(app)
         // Just inside two corners of its top: the pick snaps to the corners (8 px), which a ray aimed at
         // the silhouette itself could miss.
         await ClickWorldAsync(-4.6, -4.6, 60);
-        await Expect(Page.GetByTestId("measure-pending")).ToContainTextAsync("Point on Post");
+        await Expect(Page.GetByTestId("measure-reference")).ToContainTextAsync("Point on Post");
         await ClickWorldAsync(4.6, -4.6, 60);
 
-        await Expect(Page.GetByTestId("measure-label")).ToHaveTextAsync("≈ 10000.000 mm");
+        await Expect(Label("result")).ToHaveTextAsync("≈ 10000.000 mm");
     }
 
     [Fact]
-    public async Task Esc_drops_a_pending_pick_and_measurements_undo_follow_their_parts_and_clear()
+    public async Task Esc_clears_the_measurement_and_ends_the_tool_which_nothing_undoes()
     {
         await LoadAsync("box.brep");
         var id = (await ModelsAsync())[0].Id;
@@ -95,33 +116,49 @@ public sealed class MeasureTests(J3DAppFixture app) : ViewerPageTest(app)
         await Expect(Page.GetByTestId("measure-button")).ToHaveAttributeAsync("aria-pressed", "true");
 
         await ClickWorldAsync(5, 10, 30);
-        await Expect(Page.GetByTestId("measure-pending")).ToHaveCountAsync(1);
-        await Page.Keyboard.PressAsync("Escape");
-        await Expect(Page.GetByTestId("measure-pending")).ToHaveCountAsync(0);
-
-        await ClickWorldAsync(5, 10, 30);
         await ClickWorldAsync(10, 10, 15);
-        await Expect(Page.GetByTestId("measure-label")).ToHaveCountAsync(1);
+        await Expect(Page.GetByTestId("measure-label")).ToHaveCountAsync(2);
+        await Expect(Page.GetByTestId("undo-button")).ToBeDisabledAsync(); // measuring isn't a step
 
-        await Page.Keyboard.PressAsync("Control+z");
-        await Expect(Page.GetByTestId("measurement")).ToHaveCountAsync(0);
-        await Page.WaitForFunctionAsync("() => !window.__j3dTest.measureState().measurements[0].shown");
-        await Page.Keyboard.PressAsync("Control+y");
-        await Expect(Page.GetByTestId("measurement")).ToHaveCountAsync(1);
-
-        // Hiding the part hides its measurement, which stays listed (D108).
-        await Page.GetByTestId("model-eye").ClickAsync();
-        await Expect(Page.GetByTestId("measurement")).ToHaveAttributeAsync("data-shown", "false");
-        await Expect(Page.GetByTestId("measure-label")).ToBeHiddenAsync();
-        await Page.GetByTestId("model-eye").ClickAsync();
-        await Expect(Page.GetByTestId("measure-label")).ToBeVisibleAsync();
-
-        await Page.GetByTestId("measure-clear").ClickAsync();
-        await Expect(Page.GetByTestId("measurement")).ToHaveCountAsync(0);
-        await Page.Keyboard.PressAsync("m");
+        await Page.Keyboard.PressAsync("Escape");
+        await Expect(Page.GetByTestId("measure-button")).ToHaveAttributeAsync("aria-pressed", "false");
+        await Expect(Page.GetByTestId("measure-label")).ToHaveCountAsync(0);
         await Expect(Page.GetByTestId("selection-panel")).ToHaveCountAsync(0);
         Assert.False((await PartStateAsync(id)).Selected.Length > 0, "measuring clicks don't select parts");
+
+        // Hiding the reference's part ends the measurement too (D98).
+        await Page.Keyboard.PressAsync("m");
+        await ClickWorldAsync(5, 10, 30);
+        await Expect(Label("reference")).ToHaveCountAsync(1);
+        await Page.GetByTestId("model-eye").ClickAsync();
+        await Expect(Page.GetByTestId("measure-label")).ToHaveCountAsync(0);
+        await Expect(Page.GetByTestId("measure-reference")).ToHaveCountAsync(0);
     }
+
+    [Fact]
+    public async Task Measure_from_here_and_a_selected_feature_start_the_tool_from_them()
+    {
+        await LoadAsync("box.brep");
+
+        // A right click on the front face: "Measure from here".
+        var front = await ProjectAsync(5, 0, 15);
+        await Page.Mouse.ClickAsync((float)front.X, (float)front.Y, new() { Button = MouseButton.Right });
+        await Page.GetByTestId("context-measure").ClickAsync();
+        await Expect(Page.GetByTestId("measure-button")).ToHaveAttributeAsync("aria-pressed", "true");
+        await Expect(Page.GetByTestId("measure-reference")).ToContainTextAsync("300.000 mm²");
+
+        // In Feature mode, the last selected feature becomes the reference.
+        await Page.Keyboard.PressAsync("Escape");
+        await Page.Keyboard.PressAsync("3");
+        await ClickWorldAsync(5, 10, 30);
+        await Expect(Page.GetByTestId("feature-title")).ToHaveTextAsync(["Face (plane) of box.brep"]);
+        await Page.Keyboard.PressAsync("m");
+        await Expect(Page.GetByTestId("measure-reference")).ToContainTextAsync("200.000 mm²");
+        await Expect(Page.GetByTestId("feature-panel")).ToHaveCountAsync(0);
+        AssertNoConsoleErrors();
+    }
+
+    private ILocator Label(string role) => Page.Locator($"[data-testid=measure-label][data-role={role}]");
 
     /// <summary>Imports fixtures through the toolbar, waits until they're listed as loaded, then Home, so the view is known.</summary>
     private async Task LoadAsync(params string[] fixtures)

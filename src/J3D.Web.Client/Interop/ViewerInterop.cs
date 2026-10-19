@@ -79,15 +79,18 @@ public sealed class ViewerInterop : IAsyncDisposable
     public ValueTask SetPartStateAsync(ModelId id, IEnumerable<int> hidden, IEnumerable<int> selected) =>
         _viewer.InvokeVoidAsync("setPartState", id.Value, hidden.Order().ToArray(), selected.Order().ToArray());
 
-    /// <summary>Turns the Measure tool on or off (M7, D79).</summary>
-    public ValueTask SetMeasureModeAsync(bool active) => _viewer.InvokeVoidAsync("setMeasureMode", active);
+    /// <summary>
+    /// Turns the Measure tool on or off (M7, D79), from the entity under the last right click when
+    /// <paramref name="fromContext"/> ("Measure from here", D164), else from the last selected feature (D147).
+    /// </summary>
+    public ValueTask SetMeasureModeAsync(bool active, bool fromContext = false) =>
+        _viewer.InvokeVoidAsync("setMeasureMode", active, fromContext);
 
-    /// <summary>Shows exactly these kept measurements (D108).</summary>
-    public ValueTask SetMeasurementsAsync(IEnumerable<string> shown)
-    {
-        string[] ids = [.. shown];
-        return _viewer.InvokeVoidAsync("setMeasurements", (object)ids); // one argument, not one per id
-    }
+    /// <summary>What a click selects: models, objects or features (M12, D146).</summary>
+    public ValueTask SetSelectionModeAsync(SelectMode mode) => _viewer.InvokeVoidAsync("setSelectionMode", mode);
+
+    /// <summary>Drops the features selected in Feature mode, which the viewer holds (D146).</summary>
+    public ValueTask ClearFeaturesAsync() => _viewer.InvokeVoidAsync("clearFeatures");
 
     /// <summary>Saves the visible scene, or only the selection, as GLB or STL: a browser download (M9, D119, D120).</summary>
     public ValueTask<ExportOutcome> ExportMeshAsync(MeshExportFormat format, bool selection) =>

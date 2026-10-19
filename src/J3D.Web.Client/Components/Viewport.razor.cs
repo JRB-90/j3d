@@ -15,7 +15,8 @@ namespace J3D.Web.Client.Components;
 /// Since M6 it also relays picks and key commands to the <see cref="SceneState"/>, which owns
 /// selection, visibility and undo, and applies each model's parts back to the viewer (D95). Since M8
 /// it lists the models kept from the last visit, and has the viewer delete, restore and forget models
-/// as the scene asks, and keep their order (D117).
+/// as the scene asks, and keep their order (D117). Since M12 it sends the selection mode, relays the
+/// selected features, the Measure tool's reference and result, and right clicks for the context menu.
 /// </summary>
 public sealed partial class Viewport(IJSRuntime js, ViewerSession session, SceneState scene, ISnackbar snackbar) : IAsyncDisposable
 {
@@ -25,9 +26,9 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     private bool _disposed;
     private bool _restoreStarted;
 
-    /// <summary>What the viewer was last told of the Measure tool, so only changes are sent.</summary>
+    /// <summary>What the viewer was last told of the Measure tool and the selection mode, so only changes are sent.</summary>
     private bool _appliedMeasureMode;
-    private string _appliedMeasurements = "";
+    private SelectMode _appliedSelectionMode = SelectMode.Objects;
 
     /// <summary>The model order the viewer was last given.</summary>
     private string _appliedOrder = "";
@@ -62,6 +63,7 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         scene.RestoreRequested += OnRestoreRequested;
         scene.ForgetRequested += OnForgetRequested;
         scene.ClearAllRequested += OnClearAllRequested;
+        scene.ClearFeaturesRequested += OnClearFeaturesRequested;
         AttachToSession();
     }
 
@@ -103,14 +105,23 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     public void OnPartPicked(string? modelId, int node, bool additive) =>
         scene.Pick(modelId is null ? null : new ModelId(modelId), node, additive);
 
-    /// <summary>A key the viewer caught (D99): Esc, H, I, Shift+H, Ctrl+Z, Ctrl+Y.</summary>
+    /// <summary>A key the viewer caught (D99, D162): Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y, 1, 2 and 3.</summary>
     [JSInvokable]
     public void OnViewerCommand(string command)
     {
         switch (command)
         {
             case "clearSelection":
-                scene.ClearSelection();
+                scene.Escape();
+                break;
+            case "selectModels":
+                scene.SetSelectionMode(SelectMode.Models);
+                break;
+            case "selectObjects":
+                scene.SetSelectionMode(SelectMode.Objects);
+                break;
+            case "selectFeatures":
+                scene.SetSelectionMode(SelectMode.Features);
                 break;
             case "hide":
                 scene.HideSelection();
@@ -133,13 +144,22 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         }
     }
 
-    /// <summary>The Measure tool's first pick, or null when it's dropped or finished (D101).</summary>
+    /// <summary>The Measure tool's reference, or null when it's gone (D147).</summary>
     [JSInvokable]
-    public void OnMeasurePending(MeasureInfo? info) => scene.SetPendingMeasure(info);
+    public void OnMeasureReference(MeasureInfo? info) => scene.SetMeasureReference(info);
 
-    /// <summary>A measurement the Measure tool has kept.</summary>
+    /// <summary>The reference against the last click, or null.</summary>
     [JSInvokable]
-    public void OnMeasured(MeasureInfo info) => scene.AddMeasurement(info);
+    public void OnMeasureResult(MeasureInfo? info) => scene.SetMeasureResult(info);
+
+    /// <summary>The features selected in Feature mode (D146).</summary>
+    [JSInvokable]
+    public void OnFeaturesSelected(FeatureSelection selection) => scene.SetFeatures(selection);
+
+    /// <summary>A right click that didn't drag, on a part or on nothing (D164).</summary>
+    [JSInvokable]
+    public void OnContextMenu(string? modelId, int node, double x, double y, bool canMeasure) =>
+        scene.OpenContextMenu(modelId is null ? null : new ModelId(modelId), node, x, y, canMeasure);
 
     [JSInvokable]
     public void OnMeasureFailed(string message) => snackbar.Add($"Couldn't measure that: {message}", Severity.Warning);
@@ -170,6 +190,7 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         scene.RestoreRequested -= OnRestoreRequested;
         scene.ForgetRequested -= OnForgetRequested;
         scene.ClearAllRequested -= OnClearAllRequested;
+        scene.ClearFeaturesRequested -= OnClearFeaturesRequested;
         if (_viewer is not null)
         {
             session.Detach(_viewer);
@@ -191,6 +212,8 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     private void OnForgetRequested(ModelId id) => _ = CallViewerAsync(viewer => viewer.ForgetModelAsync(id));
 
     private void OnClearAllRequested() => _ = CallViewerAsync(static viewer => viewer.ClearAllAsync());
+
+    private void OnClearFeaturesRequested() => _ = CallViewerAsync(static viewer => viewer.ClearFeaturesAsync());
 
     private async Task CallViewerAsync(Func<ViewerInterop, ValueTask> call)
     {
@@ -280,18 +303,24 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         var orderChanged = order != _appliedOrder;
         _appliedOrder = order;
 
+        var selectionMode = scene.Mode;
+        var selectionModeChanged = selectionMode != _appliedSelectionMode;
+        _appliedSelectionMode = selectionMode;
         var measureMode = scene.MeasureMode;
-        var measurements = string.Join(',', scene.ShownMeasurements.Select(static measurement => measurement.Id));
-        var modeChanged = measureMode != _appliedMeasureMode;
-        var measurementsChanged = measurements != _appliedMeasurements;
+        var fromContext = scene.TakeMeasureFromContext();
+        var modeChanged = measureMode != _appliedMeasureMode || fromContext;
         _appliedMeasureMode = measureMode;
-        _appliedMeasurements = measurements;
 
         try
         {
             if (orderChanged)
             {
                 await viewer.SetModelOrderAsync(ids);
+            }
+
+            if (selectionModeChanged)
+            {
+                await viewer.SetSelectionModeAsync(selectionMode);
             }
 
             foreach (var model in pending)
@@ -301,12 +330,7 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
 
             if (modeChanged)
             {
-                await viewer.SetMeasureModeAsync(measureMode);
-            }
-
-            if (measurementsChanged)
-            {
-                await viewer.SetMeasurementsAsync(measurements.Length == 0 ? [] : measurements.Split(','));
+                await viewer.SetMeasureModeAsync(measureMode, fromContext);
             }
         }
         catch (JSDisconnectedException)

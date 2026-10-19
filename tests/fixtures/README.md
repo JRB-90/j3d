@@ -11,6 +11,7 @@ Shared by Vitest (OCCT and mesh tests under Node) and Playwright (browser E2E). 
 | `surfaces.iges` | IGES | IGES reader, colours via IGESCAFControl |
 | `invalid.step` | STEP | Corrupt file → `ParseFailed` through a C++ exception (checks WASM exception handling) |
 | `translucent.step` | STEP | RGBA colours: an opaque core inside a 40 % opaque cover |
+| `plant.step` | STEP | A generated "plant" (D161): 2 lines of 3 stations, 146 parts from 12 part shapes, 7 levels deep (Plant › Line › Station › Robot › Arm › Wrist › Gripper), assemblies reused as instances, rotated placements, and two compound parts (Guard, Gripper) for Expand |
 | `intersecting.step` | STEP | Three 50 % opaque bars (red along X, green along Y, blue along Z) crossing at one centre: order-independent transparency (D134) |
 | `part.stl` | Binary STL | STL in the mesh worker, single-node tree |
 | `part.obj` | OBJ | OBJ in the mesh worker, object names, default materials |
@@ -55,4 +56,10 @@ npm run fixtures:large -- --curved 25 50
 
 ```bash
 npm run benchmark:threads --workspace @j3d/occt -- large/large-25mb.step large/curved-25mb.step
+```
+
+`plant-<parts>` writes `plant-<parts>.step`, a plant like `plant.step` in lines of ten stations, with at least that many parts (`plant-10000` has 10,122 in 42 lines, 1.8 MB). It's written by OCCT, so it needs libcascade installed, as above. `so101` downloads the real SO-101 robot arm (`so101.step`, 20 MB, 387 placements of 86 solids) from [TheRobotStudio/SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) (Apache-2.0) at a pinned commit, checked against its SHA-256 (D160). Neither is committed:
+
+```bash
+npm run fixtures:large -- plant-10000 so101
 ```
