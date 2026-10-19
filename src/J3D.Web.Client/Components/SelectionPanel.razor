@@ -1,7 +1,56 @@
 @if (IsVisible)
 {
     <div class="j3d-selection-panel" role="status" aria-live="polite" data-testid="selection-panel">
-        @if (Scene.MeasureMode)
+        @if (Scene.Moving is not null)
+        {
+            @* The Move tool's fields (M13, D148, D167): the target's pose in the chosen frame, applied on Enter. *@
+            <div class="j3d-move" data-testid="move-panel">
+                @if (Scene.MoveTarget is { } target && Scene.TargetPose is { } pose)
+                {
+                    <div class="j3d-selection-title" title="@TargetName(target)" data-testid="move-title">@TargetName(target)</div>
+                    <MudToggleGroup T="MoveFrame"
+                                    Value="Scene.Frame"
+                                    ValueChanged="SetFrame"
+                                    Size="Size.Small"
+                                    Color="Color.Primary"
+                                    Class="j3d-move-frame"
+                                    aria-label="Frame"
+                                    data-testid="move-frame">
+                        @foreach (var frame in Frames)
+                        {
+                            <MudToggleItem Value="frame" Text="@frame.ToString()" data-testid="@($"move-frame-{frame.ToString().ToLowerInvariant()}")" />
+                        }
+                    </MudToggleGroup>
+                    <div class="j3d-move-fields">
+                        @for (var i = 0; i < FieldNames.Length; i++)
+                        {
+                            var field = i;
+                            <label class="j3d-move-field">
+                                <span>@FieldNames[field]</span>
+                                <input type="text"
+                                       inputmode="decimal"
+                                       value="@FieldValue(pose, field)"
+                                       @oninput="@(args => _drafts[field] = args.Value?.ToString())"
+                                       @onkeydown="@(args => OnFieldKey(args, pose))"
+                                       aria-label="@FieldLabels[field]"
+                                       data-testid="@($"move-{FieldNames[field].ToLowerInvariant()}")" />
+                                <span class="j3d-move-unit">@(field < 3 ? "mm" : "°")</span>
+                            </label>
+                        }
+                    </div>
+                    <div class="j3d-measure-hint" data-testid="move-hint">
+                        @(Scene.Frame == MoveFrame.Local
+                            ? "Type a move about the object's own axes and press Enter. Drag the arrows (W) or rings (E); Ctrl snaps."
+                            : "Type a pose and press Enter. Drag the arrows (W) or rings (E); Ctrl snaps.")
+                    </div>
+                }
+                else
+                {
+                    <div class="j3d-measure-hint" data-testid="move-hint">@(Scene.MoveHint ?? "Finding where it is…")</div>
+                }
+            </div>
+        }
+        else if (Scene.MeasureMode)
         {
             <div class="j3d-measure" data-testid="measure-panel">
                 @if (Scene.MeasureReference is { } reference)

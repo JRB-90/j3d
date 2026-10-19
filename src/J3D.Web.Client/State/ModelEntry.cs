@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using J3D.Web.Client.Interop;
 using J3D.Web.Client.Models;
 
@@ -37,7 +38,7 @@ public sealed record ModelEntry(ModelSummary Summary)
 
     /// <summary>A deleted model coming back (D84): as it was, but queued, with nothing selected.</summary>
     public static ModelEntry Restoring(ModelEntry deleted) =>
-        new(deleted.Summary) { Hidden = deleted.Hidden, NotKept = deleted.NotKept, IsRestored = true };
+        new(deleted.Summary) { Hidden = deleted.Hidden, Placements = deleted.Placements, NotKept = deleted.NotKept, IsRestored = true };
 
     public ModelStatus Status { get; private init; } = ModelStatus.Queued;
 
@@ -59,6 +60,16 @@ public sealed record ModelEntry(ModelSummary Summary)
 
     /// <summary>The selected part nodes; never hidden ones (D98).</summary>
     public PartSet Selected { get; private init; } = PartSet.Empty;
+
+    /// <summary>
+    /// The nodes moved in this visit, each with its placement in its parent's frame (M13, D145); node
+    /// <see cref="ModelFrameNode"/> is the model's own frame (D169). The viewer keeps and draws them;
+    /// this is what undo and redo work on, and the <c>Viewport</c> sends a node's when it changes.
+    /// </summary>
+    public ImmutableDictionary<int, Matrix4d> Placements { get; private init; } = [];
+
+    /// <summary>The node number that stands for the whole model (M13, D169).</summary>
+    public const int ModelFrameNode = -1;
 
     /// <summary>Why the model's files couldn't be kept for the next visit (D115), or null.</summary>
     public string? NotKept { get; private init; }
@@ -93,6 +104,12 @@ public sealed record ModelEntry(ModelSummary Summary)
             Hidden = Hidden.IsEmpty ? Hidden : Hidden.Where(tree.IsPart),
         };
     }
+
+    /// <summary>A node (or the model) moved to a placement in its parent's frame. Only a loaded model, or one coming back, moves.</summary>
+    public ModelEntry WithPlacement(int node, Matrix4d placement) =>
+        (Status != ModelStatus.Loaded && !IsRestored) || (Placements.TryGetValue(node, out var current) && current.Equals(placement))
+            ? this
+            : this with { Placements = Placements.SetItem(node, placement) };
 
     /// <summary>An export started, moved on or ended (null). Only a loaded model exports.</summary>
     public ModelEntry WithExport(ModelExport? export) =>

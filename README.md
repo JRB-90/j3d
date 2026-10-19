@@ -18,10 +18,17 @@ drawing all happen in the browser tab.
   blue, named in a panel at the bottom left, and shown in the tree; selected features are listed in the panel with
   their values, and with the total length or area of several. What's under the pointer is highlighted faintly
   before you click.
+- **Move** a part, a sub-assembly (picked in the tree) or a whole model (in Model mode): turn on **Move** (or press
+  `W`) to drag the arrows and planes of a triad at the object's origin, or press `E` for its rings to turn it; hold
+  `Ctrl` to snap to whole millimetres and 15°. The panel shows the object's position (X, Y, Z in mm) and turn (Rx,
+  Ry, Rz in degrees, about X, then Y, then Z) in its **Parent**'s frame or the **World**'s; type new values and press
+  Enter to put it there, or in **Local** type a move about the object's own axes. Moving one of several copies of a
+  part or sub-assembly moves only that one. **Origin frames** (`O`) draws the X, Y and Z axes at the selected
+  objects' origins. Moves can be undone and are kept for your next visit; a model's origin is its file's.
 - **Right-click** a part, a tree node or empty space (a click that doesn't drag) for a menu of what you can do there:
-  hide, isolate, measure from that point and export the selection, or show all, fit all and export the scene.
+  hide, isolate, move, measure from that point and export the selection, or show all, fit all and export the scene.
 - **Hide, isolate and show** parts with the eye beside each model and tree node, or the toolbar buttons and keys
-  below. **Undo and redo** cover hiding and showing, and deleting a model.
+  below. **Undo and redo** cover hiding and showing, moving, and deleting a model.
 - **Measure** CAD models exactly from their BREP geometry: turn on **Measure** (or press `M`) and click a face, edge
   or vertex. That first pick is the **reference**: its own value is drawn on it (an edge's length, a circle's
   diameter, a face's area) and its properties (area, length, radius, normal, axis…) and its part's volume and size
@@ -30,10 +37,11 @@ drawing all happen in the browser tab.
   selected before you turn the tool on becomes the reference; `Esc` clears the measurement and turns the tool off.
   On mesh models the tool measures between points, snapping to vertices, and marks the results approximate (≈).
 - **Delete** a model from the list. J3D asks first, then frees all of its memory; **Undo** brings it back into its
-  place, imported again from its kept copy, with its hidden parts.
+  place, imported again from its kept copy, with its hidden parts and moves.
 - **Your models are kept** for your next visit: each imported file (with its buffers, materials and textures) is
   copied into the browser's private storage for this page, and when you come back the models are imported again in
-  their order, with the parts you hid still hidden and the camera where you left it. **Clear all**, above the list,
+  their order, with the parts you hid still hidden, the parts you moved where you put them, and the camera where
+  you left it. **Clear all**, above the list,
   removes every model and everything kept. Only one tab keeps models: a second J3D tab says so and keeps nothing.
 - **Export** what you see: the toolbar's **Export** saves every visible part, or only the selection when there is one,
   as **GLB** (with colours, the tree and the BREP edges) or **STL** (binary or ASCII, one uncoloured mesh). A CAD
@@ -80,8 +88,12 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Hide the selection | | | **Hide** in the toolbar, or `H`; or a node's eye in the tree |
 | Show only the selection | | | **Isolate**, or `I` |
 | Show everything | | | **Show all**, or `Shift+H` |
-| Undo, redo (hiding, showing, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
+| Move the selected part, sub-assembly or model | Drag the triad's arrows or planes; `Ctrl` snaps | | **Move** in the toolbar, or `W`; type X, Y, Z in the panel and press Enter |
+| Turn it | Drag the triad's rings; `Ctrl` snaps to 15° | | `E`; type Rx, Ry, Rz in the panel and press Enter |
+| Show origin frames | | | **Origin frames** in the toolbar, or `O` |
+| Undo, redo (hiding, showing, moving, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
 | Measure | Click a face, edge or vertex (the reference), then others | Tap | **Measure** in the toolbar, or `M`; **Measure from here** in the right-click menu; `Esc` ends it |
+| End the Move or Measure tool | | | `Esc` (again to clear the selection) |
 | Export the scene or the selection | | | **Export** in the toolbar: GLB, STL (binary) or STL (ASCII) |
 | Export a CAD model as imported | | | The model's download icon in the list: STEP or BREP |
 
@@ -109,6 +121,8 @@ and so do models coming back from your last visit or an undo.
   every model that loads also exports: the 200 MB STEP saves as STEP in about 12 seconds and as BREP in 2, and one of
   600 MB, about the largest that loads, as STEP in about half a minute. **Cancel** stops an export at once, although
   the last few seconds of writing a STEP file carry on unseen, and the model's next export waits for them.
+- Moves are kept and drawn, and GLB and STL exports follow them, but a CAD model's STEP and BREP exports still save
+  it as imported until a later version writes the edited assembly.
 - Not in this version yet: sections, exploded views, and a phone or tablet layout.
 
 ## Browsers

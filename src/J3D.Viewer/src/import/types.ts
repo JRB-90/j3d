@@ -37,6 +37,12 @@ export interface Bounds {
   max: Vector3Tuple;
 }
 
+/** A moved node's placement in its parent's frame (node -1: the model's frame), column-major (M13, D145). */
+export interface KeptPlacement {
+  node: number;
+  matrix: number[];
+}
+
 /** One node of the model tree. The tree is flat: parents always come before their children. */
 export interface TreeNode {
   name: string;
@@ -119,5 +125,5 @@ export interface LoadedModel extends ImportResult {
    * Imported again from its kept files, after a reload or an undone delete (M8): the hidden parts to
    * apply as it's added. The view doesn't fit to it (D111).
    */
-  restored?: { hidden: number[] };
+  restored?: { hidden: number[]; placements?: KeptPlacement[] };
 }

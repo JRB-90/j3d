@@ -5,7 +5,7 @@
 
 import type { ImportedScene, PrototypeMesh } from '@j3d/occt/facade';
 import { readFileSync } from 'node:fs';
-import { Box3, Group, LineSegments, Mesh, type MeshStandardMaterial, type Object3D } from 'three';
+import { Box3, Group, LineSegments, Matrix4, Mesh, type MeshStandardMaterial, type Object3D } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ModelFormat } from '../formats';
 import { describeMeshModel } from '../import/mesh/describe';
@@ -16,7 +16,9 @@ import { parseStl } from '../import/mesh/parse';
 import type { ImportRequest } from '../import/runner';
 import { SidecarSet } from '../import/sidecars';
 import type { ImportResult } from '../import/types';
+import { buildBrepObject } from './brep-object';
 import { buildExportScene, exportFileName, type ExportSource } from './export-scene';
+import { MaterialCache } from './materials';
 import { writeMeshFile } from './mesh-export';
 
 const fixture = (path: string) => new Uint8Array(readFileSync(new URL(`../../../../tests/fixtures/${path}`, import.meta.url)));
@@ -105,6 +107,21 @@ const names = (object: Object3D): unknown => ({ name: object.name, children: obj
 const boundsOf = (object: Object3D) => new Box3().setFromObject(object);
 
 describe('buildExportScene', () => {
+  it('exports parts where a move put them (M13): from the instance matrices a move rewrites', () => {
+    const scene = bracket();
+    const placements = [translated(0), translated(0), translated(0, 0, 35), translated(10, 20, 0)];
+    scene.nodes.forEach((node, index) => (node.matrix = placements[index]!));
+    const { parts } = buildBrepObject('bracket.step', scene, new MaterialCache());
+    parts.setPlacement(0, new Matrix4().makeTranslation(100, 0, 0));
+
+    const built = buildExportScene([brepSource({ content: { kind: 'brep', scene } })], false, 'gltf');
+    const [, top, pin] = (built.scene.children[0] as Group).children as [Mesh, Mesh, Mesh];
+
+    expect(top.matrixWorld.elements.slice(12, 15)).toEqual([100, 0, 35]);
+    expect(pin.matrixWorld.elements.slice(12, 15)).toEqual([110, 20, 0]);
+    built.dispose();
+  });
+
   it("keeps a BREP model's tree, placing every part and sharing each prototype's geometry", () => {
     const built = buildExportScene([brepSource()], false, 'gltf');
     const [assembly] = built.scene.children as [Group];

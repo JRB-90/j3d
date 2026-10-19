@@ -20,6 +20,7 @@ import {
 import { EdgeVisibilityAttribute, type LinearRgba, type MaterialCache } from './materials';
 import {
   EdgePickRadius,
+  ModelFrame,
   pointHighlight,
   VertexPickRadius,
   type Highlight,
@@ -27,6 +28,7 @@ import {
   type HighlightMaterials,
   type ModelParts,
   type PickedEntity,
+  type Placement,
   type ScreenSpace,
 } from './parts';
 
@@ -52,7 +54,9 @@ interface Batch {
 /** Where one placement (scene instance) is drawn, so it can be hidden on its own. */
 interface PlacementSlots {
   surfaces: ({ batch: BatchedMesh; id: number } | { mesh: InstancedMesh; index: number })[];
-  edges?: { visibility: BufferAttribute; start: number; count: number } | { matrices: InstancedBufferAttribute; index: number };
+  edges?:
+    | { geometry: BufferGeometry; visibility: BufferAttribute; start: number; count: number }
+    | { matrices: InstancedBufferAttribute; index: number };
 }
 
 /**
@@ -155,7 +159,7 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
     let start = 0;
     for (const { edges, instance } of looseEdges) {
       const count = edges.length / 3;
-      slots[instance]!.edges = { visibility, start, count };
+      slots[instance]!.edges = { geometry, visibility, start, count };
       start += count;
     }
     owned.push(geometry);
@@ -197,6 +201,10 @@ class BrepParts implements ModelParts {
   private readonly zero = new Matrix4().makeScale(0, 0, 0);
   private overlayGeometries = new Map<number, BufferGeometry>();
   private placementBoxes: Float64Array | undefined;
+  /** Each tree node's placement in its parent's frame, 16 numbers each, and the model's frame (M13, D169). */
+  private readonly locals: Float64Array;
+  private readonly frame = new Matrix4();
+  private childrenOf: number[][] | undefined;
 
   constructor(
     private readonly scene: ImportedScene,
@@ -214,6 +222,119 @@ class BrepParts implements ModelParts {
     });
     this.partNodes = [...this.placementsOf.keys()].sort((a, b) => a - b);
     this.hiddenPlacements = new Uint8Array(scene.instances.length);
+    this.locals = new Float64Array(scene.nodes.length * 16);
+    const identity = new Matrix4().elements;
+    scene.nodes.forEach((node, index) => this.locals.set(node.matrix ?? identity, index * 16));
+  }
+
+  placement(node: number): Placement {
+    if (node === ModelFrame || !this.scene.nodes[node]) {
+      return { local: node === ModelFrame ? this.frame.clone() : new Matrix4(), parentWorld: new Matrix4() };
+    }
+    return { local: new Matrix4().fromArray(this.locals, node * 16), parentWorld: this.worldOf(this.scene.nodes[node]!.parent) };
+  }
+
+  /**
+   * Gives a node (or the model) a new placement in its parent's frame: every placement under it gets
+   * its world matrix again from the chain of placements above it, and is drawn there (R23).
+   */
+  setPlacement(node: number, local: Matrix4): number[] {
+    let tops: number[];
+    if (node === ModelFrame) {
+      this.frame.copy(local);
+      tops = this.scene.nodes.flatMap((item, index) => (item.parent < 0 ? [index] : []));
+    } else if (this.scene.nodes[node]) {
+      local.toArray(this.locals, node * 16);
+      tops = [node];
+    } else {
+      return [];
+    }
+    const children = (this.childrenOf ??= this.computeChildren());
+    const parts: number[] = [];
+    const placements: number[] = [];
+    const visit = (current: number, parentWorld: Matrix4) => {
+      const world = parentWorld.clone().multiply(new Matrix4().fromArray(this.locals, current * 16));
+      const own = this.placementsOf.get(current);
+      if (own) {
+        parts.push(current);
+        for (const placement of own) {
+          world.toArray(this.scene.instances[placement]!.matrix);
+          placements.push(placement);
+        }
+      }
+      children[current]!.forEach((child) => visit(child, world));
+    };
+    for (const top of tops) {
+      visit(top, this.worldOf(this.scene.nodes[top]!.parent));
+    }
+    this.drawPlacements(placements);
+    return parts;
+  }
+
+  /** A node's world placement; {@link ModelFrame}'s is the model's frame. */
+  private worldOf(node: number): Matrix4 {
+    const world = new Matrix4();
+    const local = new Matrix4();
+    for (let current = node; current >= 0; current = this.scene.nodes[current]!.parent) {
+      world.premultiply(local.fromArray(this.locals, current * 16));
+    }
+    return world.premultiply(this.frame);
+  }
+
+  private computeChildren(): number[][] {
+    const children: number[][] = this.scene.nodes.map(() => []);
+    this.scene.nodes.forEach((node, index) => {
+      if (node.parent >= 0) {
+        children[node.parent]!.push(index);
+      }
+    });
+    return children;
+  }
+
+  /** Draws these placements where their instance matrices now say: a hidden instanced copy stays zeroed (D94). */
+  private drawPlacements(placements: readonly number[]): void {
+    const matrix = new Matrix4();
+    const point = new Vector3();
+    const batches = new Set<BatchedMesh>();
+    const instanced = new Set<InstancedMesh>();
+    const attributes = new Set<BufferAttribute | InstancedBufferAttribute>();
+    const edgeGeometries = new Set<BufferGeometry>();
+    for (const placement of placements) {
+      const instance = this.scene.instances[placement]!;
+      const hidden = this.hiddenPlacements[placement] === 1;
+      matrix.fromArray(instance.matrix);
+      const slot = this.slots[placement]!;
+      for (const surface of slot.surfaces) {
+        if ('batch' in surface) {
+          surface.batch.setMatrixAt(surface.id, matrix);
+          batches.add(surface.batch);
+        } else if (!hidden) {
+          surface.mesh.setMatrixAt(surface.index, matrix);
+          instanced.add(surface.mesh);
+        }
+      }
+      const edges = slot.edges;
+      if (edges && 'visibility' in edges) {
+        const positions = edges.geometry.getAttribute('position') as BufferAttribute;
+        const source = this.scene.prototypes[instance.prototype]!.edges;
+        for (let i = 0; i < edges.count; i++) {
+          point.fromArray(source, i * 3).applyMatrix4(matrix).toArray(positions.array, (edges.start + i) * 3);
+        }
+        attributes.add(positions);
+        edgeGeometries.add(edges.geometry);
+      } else if (edges && !hidden) {
+        matrix.toArray(edges.matrices.array, edges.index * 16);
+        attributes.add(edges.matrices);
+      }
+    }
+    batches.forEach((batch) => batch.computeBoundingSphere());
+    instanced.forEach((mesh) => {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    });
+    attributes.forEach((attribute) => (attribute.needsUpdate = true));
+    edgeGeometries.forEach((geometry) => geometry.computeBoundingSphere());
+    this.placementBoxes = undefined;
   }
 
   nodeOf(hit: Intersection): number {

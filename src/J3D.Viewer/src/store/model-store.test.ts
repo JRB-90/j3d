@@ -109,6 +109,48 @@ describe('ModelStore', () => {
     expect(reopened.store.has('a')).toBe(true);
   });
 
+  it('keeps the order .NET gave while the store was still opening', async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const tab = openTab(disk, locks);
+    tab.store.setOrder(['a']); // a model imported at once, before the store has opened
+    await tab.store.opened;
+    await tab.store.save(summary('a'), [source('a.step')]);
+    await tab.store.idle();
+    tab.store.dispose();
+    await tab.store.idle();
+
+    expect((await openTab(disk, locks).store.opened).models).toEqual([{ summary: summary('a'), hidden: [] }]);
+  });
+
+  it("keeps each model's moves with it, the model's own frame too, and drops them with the model (M13, D145)", async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const first = openTab(disk, locks);
+    await first.store.opened;
+    first.store.setOrder(['a', 'b']);
+    await first.store.save(summary('a'), [source('a.step')]);
+    await first.store.save(summary('b'), [source('b.step')]);
+    const moved = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, 0, 1];
+    const frame = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 7, 0, 1];
+    first.store.setPlacement('a', 2, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1]);
+    first.store.setPlacement('a', 2, moved); // the latest placement replaces the last
+    first.store.setPlacement('a', -1, frame);
+    first.store.setPlacement('b', 3, moved);
+    first.store.delete('b');
+    await first.store.idle();
+    first.store.dispose();
+    await first.store.idle();
+
+    const reopened = openTab(disk, locks);
+    expect(await reopened.store.opened).toEqual({ status: 'kept', models: [{ summary: summary('a'), hidden: [] }], camera: null });
+    expect(reopened.store.placementsOf('a')).toEqual([
+      { node: 2, matrix: moved },
+      { node: -1, matrix: frame },
+    ]);
+    expect(reopened.store.placementsOf('b')).toEqual([]);
+  });
+
   it('gathers changes into one manifest write', async () => {
     const tab = openTab(new FakeDisk(), new FakeLocks());
     await tab.store.opened;

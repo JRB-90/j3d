@@ -107,6 +107,11 @@ export interface SceneNode {
   parent: number;
   /** Index into prototypes for a part, or -1 for an assembly. */
   prototype: number;
+  /**
+   * The placement in the parent's frame (a root's is its world placement), column-major 4x4 (M13, D150).
+   * Always there from the facade; scenes built by hand in tests may leave it out (identity).
+   */
+  matrix?: number[];
 }
 
 export interface SceneInstance {

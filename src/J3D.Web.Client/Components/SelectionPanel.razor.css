@@ -35,6 +35,52 @@
     margin-top: 8px;
 }
 
+/* The Move tool's fields (M13, D148): a frame switch, then X, Y, Z and Rx, Ry, Rz in two rows. */
+.j3d-selection-panel ::deep .j3d-move-frame {
+    margin: 6px 0;
+}
+
+.j3d-move-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 10px;
+    margin-bottom: 6px;
+}
+
+.j3d-move-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+    .j3d-move-field span:first-child {
+        min-width: 1.4em;
+    }
+
+    .j3d-move-field input {
+        width: 100%;
+        min-width: 0;
+        padding: 3px 6px;
+        border: 1px solid var(--mud-palette-divider);
+        border-radius: 4px;
+        background: transparent;
+        color: var(--mud-palette-text-primary);
+        font: inherit;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+        .j3d-move-field input:focus {
+            outline: none;
+            border-color: var(--mud-palette-primary);
+        }
+
+.j3d-move-unit {
+    min-width: 1.6em;
+}
+
 .j3d-measure-hint {
     font-size: 0.8125rem;
     color: var(--mud-palette-text-secondary);

@@ -92,6 +92,21 @@ public sealed class ViewerInterop : IAsyncDisposable
     /// <summary>Drops the features selected in Feature mode, which the viewer holds (D146).</summary>
     public ValueTask ClearFeaturesAsync() => _viewer.InvokeVoidAsync("clearFeatures");
 
+    /// <summary>The Move tool (M13, D149): its mode (null: off), the one object it moves, and the frame its triad and fields use (D148).</summary>
+    public ValueTask SetMoveToolAsync(MoveMode? mode, (ModelId Id, int Node)? target, MoveFrame frame) =>
+        _viewer.InvokeVoidAsync("setMoveTool", mode, target is { } moved ? new MoveTargetRef(moved.Id, moved.Node) : null, frame);
+
+    /// <summary>A node (or a model, node -1) to a placement in its parent's frame (D145): typed, undone or redone.</summary>
+    public ValueTask SetPlacementAsync(ModelId id, int node, Matrix4d placement) =>
+        _viewer.InvokeVoidAsync("setPlacement", id.Value, node, placement.ToArray());
+
+    /// <summary>The objects to draw origin frames at (D150), or none.</summary>
+    public ValueTask SetOriginFramesAsync(IEnumerable<(ModelId Id, int Node)> targets)
+    {
+        var array = targets.Select(static target => new MoveTargetRef(target.Id, target.Node)).ToArray();
+        return _viewer.InvokeVoidAsync("setOriginFrames", (object)array); // one argument, not one per target
+    }
+
     /// <summary>Saves the visible scene, or only the selection, as GLB or STL: a browser download (M9, D119, D120).</summary>
     public ValueTask<ExportOutcome> ExportMeshAsync(MeshExportFormat format, bool selection) =>
         _viewer.InvokeAsync<ExportOutcome>("exportMesh", format, selection);

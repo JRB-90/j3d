@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import type { TreeNode } from '../import/types';
 import { buildBrepObject, InstancingThreshold } from './brep-object';
 import { EdgeVisibilityAttribute, MaterialCache } from './materials';
-import { HiddenLayer, HighlightMaterials, MeshParts } from './parts';
+import { HiddenLayer, HighlightMaterials, MeshParts, ModelFrame } from './parts';
 import { keyCommand } from './viewer';
 
 const translated = (x: number) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1];
@@ -148,6 +148,27 @@ describe('mesh parts', () => {
     return { root, nodes: [root, a, b, c], tree };
   }
 
+  it("moves a node with its children, and the whole model by its frame over the import's own root turn (M13, D153, D169)", () => {
+    const { root, nodes, tree } = hierarchy();
+    root.rotation.x = Math.PI / 2; // as glTF's turn to Z-up
+    root.updateMatrixWorld(true);
+    const parts = new MeshParts(nodes, tree, root);
+
+    expect(parts.placement(ModelFrame).local.equals(new Matrix4())).toBe(true);
+    expect(parts.placement(2).local.elements[12]).toBe(3);
+    expect(parts.placement(2).parentWorld.equals(nodes[1]!.matrixWorld)).toBe(true);
+
+    expect(parts.setPlacement(1, new Matrix4().makeTranslation(1, 0, 0))).toEqual([1, 2]);
+    expect(nodes[2]!.matrixWorld.elements[12]).toBeCloseTo(4);
+    expect(parts.nodeBounds(2).min.x).toBeCloseTo(3.5);
+
+    expect(parts.setPlacement(ModelFrame, new Matrix4().makeTranslation(0, 0, 10))).toEqual([1, 2]);
+    expect(nodes[2]!.matrixWorld.elements[14]).toBeCloseTo(10);
+    // The root keeps its own turn under the model's frame.
+    expect(new Vector3(0, 1, 0).transformDirection(root.matrixWorld).z).toBeCloseTo(1);
+    expect(parts.placement(ModelFrame).local.elements[14]).toBe(10);
+  });
+
   it('lists the nodes with geometry and picks them by object', () => {
     const { root, nodes, tree } = hierarchy();
     const parts = new MeshParts(nodes, tree);
@@ -204,6 +225,11 @@ describe('keyCommand (D99)', () => {
     expect(keyCommand('1', false, false)).toBe('selectModels');
     expect(keyCommand('2', false, false)).toBe('selectObjects');
     expect(keyCommand('3', false, false)).toBe('selectFeatures');
+    // The Move tool's arrows and rings, and the origin frames (M13, D166, D171).
+    expect(keyCommand('w', false, false)).toBe('moveTranslate');
+    expect(keyCommand('e', false, false)).toBe('moveRotate');
+    expect(keyCommand('o', false, false)).toBe('originFrames');
+    expect(keyCommand('w', true, false)).toBeUndefined();
     expect(keyCommand('1', false, true)).toBeUndefined();
   });
 

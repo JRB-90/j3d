@@ -1,4 +1,4 @@
-import type { ModelId, ModelSummary } from '../import/types';
+import type { KeptPlacement, ModelId, ModelSummary } from '../import/types';
 import type { Projection } from '../view/camera-math';
 
 /** Where the camera was: what the viewer needs to put it back (D111). */
@@ -11,10 +11,11 @@ export interface CameraSnapshot {
   zoom: number;
 }
 
-/** A model the manifest lists, in list order, with its hidden part nodes (D82). */
+/** A model the manifest lists, in list order, with its hidden part nodes (D82) and, since M13, its moves (D145). */
 export interface ManifestModel {
   id: ModelId;
   hidden: number[];
+  placements?: KeptPlacement[];
 }
 
 /**

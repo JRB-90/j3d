@@ -3,7 +3,7 @@ import { ModelImportError, toImportError } from './errors';
 import { throttleProgress, type ProgressListener } from './progress';
 import type { ImportRunner, ImportTask } from './runner';
 import { planBatch, SidecarSet, UnusedSidecarReason, type BatchFile } from './sidecars';
-import type { ImportError, ImportPhase, ImportResult, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types';
+import type { ImportError, ImportPhase, ImportResult, KeptPlacement, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types';
 
 /** Model lifecycle events. Progress is limited to 10 reports per second per model. */
 export interface ModelManagerListener {
@@ -40,7 +40,7 @@ interface Entry extends ModelEntry {
   batch: Batch;
   /** The sidecars its import found, which are kept with it (D113). */
   used: Set<BatchFile>;
-  restored?: { hidden: number[] };
+  restored?: { hidden: number[]; placements?: KeptPlacement[] };
   task?: ImportTask;
   finished: boolean;
   report: ProgressListener;
@@ -114,7 +114,12 @@ export class ModelManager {
    * undone delete. It's listed at once and imports once the files are read, its own file first;
    * when they can't be read, it fails with `MissingFile`. Its hidden parts go with the loaded model.
    */
-  importStored(summary: ModelSummary, files: Promise<readonly BatchFile[]>, hidden: readonly number[]): void {
+  importStored(
+    summary: ModelSummary,
+    files: Promise<readonly BatchFile[]>,
+    hidden: readonly number[],
+    placements: readonly KeptPlacement[] = [],
+  ): void {
     if (this.entries.has(summary.id)) {
       return;
     }
@@ -123,7 +128,7 @@ export class ModelManager {
       status: 'queued',
       batch: { sidecars: new SidecarSet([]), pending: 1 },
       used: new Set(),
-      restored: { hidden: [...hidden] },
+      restored: { hidden: [...hidden], ...(placements.length > 0 ? { placements: placements.map((kept) => ({ ...kept })) } : {}) },
       finished: false,
       report: this.reporter(summary.id),
     };

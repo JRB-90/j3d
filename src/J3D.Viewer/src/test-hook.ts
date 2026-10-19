@@ -95,6 +95,14 @@ export interface TestHook {
   measureState(): ReturnType<Viewer['measureState']> | null;
   /** Since M12: the selection mode, the feature under the pointer and the selected features (D146). */
   selectionState(): ReturnType<Viewer['selectionState']> | null;
+  /** Since M13: the Move tool (on, dragging, its target) and how many origin frames are drawn (D149, D150). */
+  moveState(): ReturnType<Viewer['moveState']> | null;
+  /** Since M13: how long giving a node (or a model, -1) a placement takes, in ms, overlays and bounds included (R23). */
+  timePlacement(id: string, node: number, matrix: number[]): number | null;
+  /** Since M13: the triad's handle under a client point, or null (D149). */
+  moveHandleAt(x: number, y: number): string | null;
+  /** Since M13: a node's (or with -1 a model's) placement in its parent's frame and that frame in the world, column-major. */
+  placement(id: string, node: number): { local: number[]; parentWorld: number[] } | null;
   /** What the Measure tool would pick at a client point. */
   entityAt(x: number, y: number): ReturnType<Viewer['entityAt']>;
   /** What the store keeps (M8): this tab's status, the kept models, the order .NET gave and the camera. */
@@ -184,6 +192,18 @@ export function installTestHook(
     useOrderIndependentTransparency: (enabled) => viewer?.setOrderIndependentTransparency(enabled),
     measureState: () => viewer?.measureState() ?? null,
     selectionState: () => viewer?.selectionState() ?? null,
+    moveState: () => viewer?.moveState() ?? null,
+    moveHandleAt: (x, y) => viewer?.moveHandleAt(x, y) ?? null,
+    timePlacement: (id, node, matrix) => {
+      if (!viewer) return null;
+      const start = performance.now();
+      viewer.setPlacement(id, node, matrix);
+      return performance.now() - start;
+    },
+    placement: (id, node) => {
+      const placement = viewer?.placementOf({ id, node });
+      return placement ? { local: placement.local.toArray(), parentWorld: placement.parentWorld.toArray() } : null;
+    },
     entityAt: (x, y) => viewer?.entityAt(x, y) ?? null,
     store: () => store.state,
     storeIdle: () => store.idle(),

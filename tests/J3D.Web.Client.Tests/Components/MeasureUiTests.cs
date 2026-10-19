@@ -142,13 +142,14 @@ public sealed class MeasureUiTests : BunitTestBase
         Assert.NotEmpty(popovers.FindAll("[data-testid=context-measure]"));
         Assert.Empty(popovers.FindAll("[data-testid=context-show-all]"));
         popovers.Find("[data-testid=context-hide]").Click();
-        Assert.Equal([3], Scene.Find(Id)!.Hidden.Order());
+        // A menu item's handler runs as the menu closes, so its effect is waited for.
+        popovers.WaitForAssertion(() => Assert.Equal([3], Scene.Find(Id)!.Hidden.Order()));
 
         await Act(() => Scene.OpenContextMenu(null, -1, 100, 100, canMeasure: false));
         popovers.WaitForAssertion(() => Assert.NotEmpty(popovers.FindAll("[data-testid=context-show-all]")));
         Assert.Empty(popovers.FindAll("[data-testid=context-measure]"));
         popovers.Find("[data-testid=context-show-all]").Click();
-        Assert.True(Scene.Find(Id)!.Hidden.IsEmpty);
+        popovers.WaitForAssertion(() => Assert.True(Scene.Find(Id)!.Hidden.IsEmpty));
     }
 
     [Fact]

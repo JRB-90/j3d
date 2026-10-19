@@ -86,6 +86,26 @@ export interface ModelParts {
   entityAt(hit: Intersection, screen: ScreenSpace): PickedEntity | undefined;
   /** One picked entity drawn in the accent colour. */
   entityHighlight(entity: PickedEntity, kind: HighlightKind, materials: HighlightMaterials): Highlight | undefined;
+  /**
+   * A tree node's placement in its parent's frame, and that frame in the world (M13, D148). Node
+   * {@link ModelFrame} is the model itself: its frame is the file's, identity until it's moved (D169),
+   * and a root node's parent frame is the model's.
+   */
+  placement(node: number): Placement;
+  /**
+   * Gives a node, or the model ({@link ModelFrame}), a new placement in its parent's frame; everything
+   * under it moves with it. Returns the part nodes that moved.
+   */
+  setPlacement(node: number, local: Matrix4): number[];
+}
+
+/** The node number that stands for a whole model (M13, D169). */
+export const ModelFrame = -1;
+
+/** Where a node is: its placement in its parent's frame, and that frame's placement in the world. */
+export interface Placement {
+  local: Matrix4;
+  parentWorld: Matrix4;
 }
 
 /** The overlay materials, shared by every model's highlights. */
@@ -167,11 +187,16 @@ export class MeshParts implements ModelParts {
   private readonly nodeOfObject = new Map<Object3D, number>();
   private readonly hidden = new Set<number>();
   private boxes: Map<number, Box3> | undefined;
+  /** The model's frame (M13, D169), and the root's own placement as imported (glTF's turn to Z-up, say). */
+  private readonly frame = new Matrix4();
+  private readonly rootStart: Matrix4 | undefined;
 
   constructor(
     private readonly objects: readonly Object3D[],
     tree: readonly TreeNode[],
+    private readonly root?: Object3D,
   ) {
+    this.rootStart = root?.matrix.clone();
     const parts: number[] = [];
     tree.forEach((node, index) => {
       const object = objects[index];
@@ -283,6 +308,49 @@ export class MeshParts implements ModelParts {
   entityHighlight(entity: PickedEntity, kind: HighlightKind, materials: HighlightMaterials): Highlight | undefined {
     return pointHighlight(entity.point, kind, materials);
   }
+
+  /** A node's object's own matrix, in its Three.js parent's frame (D153). */
+  placement(node: number): Placement {
+    if (node === ModelFrame) {
+      return { local: this.frame.clone(), parentWorld: new Matrix4() };
+    }
+    const object = this.objects[node];
+    if (!object) {
+      return { local: new Matrix4(), parentWorld: new Matrix4() };
+    }
+    object.parent?.updateWorldMatrix(true, false);
+    return { local: object.matrix.clone(), parentWorld: object.parent?.matrixWorld.clone() ?? new Matrix4() };
+  }
+
+  setPlacement(node: number, local: Matrix4): number[] {
+    let object: Object3D | undefined;
+    if (node === ModelFrame) {
+      if (!this.root || !this.rootStart) {
+        return [];
+      }
+      this.frame.copy(local);
+      object = this.root;
+      setObjectMatrix(object, local.clone().multiply(this.rootStart));
+    } else {
+      object = this.objects[node];
+      if (!object) {
+        return [];
+      }
+      setObjectMatrix(object, local);
+    }
+    object.updateMatrixWorld(true);
+    this.boxes = undefined;
+    const moved = new Set<Object3D>();
+    object.traverse((child) => moved.add(child));
+    return this.partNodes.filter((part) => moved.has(this.objects[part]!));
+  }
+}
+
+function setObjectMatrix(object: Object3D, matrix: Matrix4): void {
+  if (object.matrixAutoUpdate) {
+    matrix.decompose(object.position, object.quaternion, object.scale);
+  }
+  object.matrix.copy(matrix);
 }
 
 /** A single dot at a world point. */

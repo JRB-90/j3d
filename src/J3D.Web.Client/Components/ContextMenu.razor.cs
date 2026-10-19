@@ -1,3 +1,4 @@
+using J3D.Web.Client.Models;
 using J3D.Web.Client.Interop;
 using J3D.Web.Client.State;
 using Microsoft.AspNetCore.Components.Web;
@@ -37,4 +38,13 @@ public sealed partial class ContextMenu(SceneState scene, ViewerSession session)
             await _menu.OpenMenuAsync(new MouseEventArgs { ClientX = target.X, ClientY = target.Y, PageX = target.X, PageY = target.Y });
         }
     });
+
+    /// <summary>Move (M13): the Move tool on with its arrows, unless it's on already.</summary>
+    private void StartMoving()
+    {
+        if (Scene.Moving is null)
+        {
+            Scene.SetMoveMode(MoveMode.Translate);
+        }
+    }
 }

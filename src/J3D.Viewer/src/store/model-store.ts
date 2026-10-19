@@ -1,5 +1,5 @@
 import { basename, type BatchFile } from '../import/sidecars';
-import type { ModelId, ModelSummary } from '../import/types';
+import type { KeptPlacement, ModelId, ModelSummary } from '../import/types';
 import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol';
 import type { CameraSnapshot, Manifest, StoredMeta, StoredScene, StoreStatus } from './types';
 
@@ -55,6 +55,8 @@ export class ModelStore {
   private last: Promise<unknown> = Promise.resolve();
   private order: ModelId[] = [];
   private readonly hidden = new Map<ModelId, number[]>();
+  /** Each model's moved nodes and their placements in their parents' frames (M13, D145). */
+  private readonly placements = new Map<ModelId, Map<number, number[]>>();
   /** Models whose copies are complete, so the manifest may list them. */
   private readonly complete = new Set<ModelId>();
   /** Models being copied; a delete meanwhile takes them out, so the finished copy isn't listed. */
@@ -127,6 +129,7 @@ export class ModelStore {
     const listed = this.complete.delete(id);
     this.saving.delete(id);
     this.hidden.delete(id);
+    this.placements.delete(id);
     if (this.status === 'kept') {
       this.request({ type: 'delete', id }).catch((error: unknown) => console.warn('J3D: a kept model could not be deleted.', error));
       if (listed) {
@@ -140,6 +143,7 @@ export class ModelStore {
     this.complete.clear();
     this.saving.clear();
     this.hidden.clear();
+    this.placements.clear();
     this.order = [];
     clearTimeout(this.manifestTimer);
     this.manifestTimer = undefined;
@@ -164,6 +168,24 @@ export class ModelStore {
         this.scheduleManifest();
       }
     }
+  }
+
+  /** A node of a model (or the model, node -1) moved to this placement in its parent's frame (M13). */
+  setPlacement(id: ModelId, node: number, matrix: readonly number[]): void {
+    let moved = this.placements.get(id);
+    if (!moved) {
+      moved = new Map();
+      this.placements.set(id, moved);
+    }
+    moved.set(node, [...matrix]);
+    if (this.complete.has(id)) {
+      this.scheduleManifest();
+    }
+  }
+
+  /** A model's kept moves, to apply when it's imported again. */
+  placementsOf(id: ModelId): KeptPlacement[] {
+    return [...(this.placements.get(id) ?? [])].map(([node, matrix]) => ({ node, matrix }));
   }
 
   setCamera(camera: CameraSnapshot): void {
@@ -214,12 +236,19 @@ export class ModelStore {
 
     const { manifest, metas } = await this.request<{ manifest: Manifest | null; metas: Record<ModelId, StoredMeta> }>({ type: 'open' });
     this.status = 'kept';
-    const models = (manifest?.models ?? []).map(({ id, hidden }) => {
+    const models = (manifest?.models ?? []).map(({ id, hidden, placements }) => {
       this.complete.add(id);
       this.hidden.set(id, hidden);
+      if (placements?.length) {
+        this.placements.set(id, new Map(placements.map(({ node, matrix }) => [node, matrix])));
+      }
       return { summary: metas[id]!.summary, hidden };
     });
-    this.order = models.map(({ summary }) => summary.id);
+    // .NET may have listed models imported while the store was opening: its order stands, and it lists
+    // the kept models too once they're back (found in M13: the order was lost, so nothing was kept).
+    if (this.order.length === 0) {
+      this.order = models.map(({ summary }) => summary.id);
+    }
     this.camera = manifest?.camera ?? null;
     return { status: 'kept', models, camera: this.camera };
   }
@@ -287,7 +316,12 @@ export class ModelStore {
   private writeManifest(): void {
     clearTimeout(this.manifestTimer);
     this.manifestTimer = undefined;
-    const models = this.order.filter((id) => this.complete.has(id)).map((id) => ({ id, hidden: this.hidden.get(id) ?? [] }));
+    const models = this.order
+      .filter((id) => this.complete.has(id))
+      .map((id) => {
+        const placements = this.placementsOf(id);
+        return { id, hidden: this.hidden.get(id) ?? [], ...(placements.length > 0 ? { placements } : {}) };
+      });
     this.request({ type: 'manifest', manifest: { version: 1, models, camera: this.camera } }).catch((error: unknown) =>
       console.warn("J3D: the scene couldn't be kept.", error),
     );

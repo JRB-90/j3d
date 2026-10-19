@@ -763,8 +763,9 @@ public:
   }
 
   /**
-   * JSON: { nodes: [{ name, parent, prototype }], instances: [{ node, prototype, matrix }] }.
-   * prototype is -1 for assemblies; matrix is the instance's world transform (column-major 4x4).
+   * JSON: { nodes: [{ name, parent, prototype, matrix }], instances: [{ node, prototype, matrix }] }.
+   * prototype is -1 for assemblies; a node's matrix is its placement in its parent's frame (M13), and an
+   * instance's its world transform (column-major 4x4).
    */
   std::string getSceneJson() const { return sceneJson_; }
 
@@ -1261,7 +1262,11 @@ private:
       }
       nodes += "{\"name\":";
       j3d::appendJsonString(nodes, name);
-      nodes += ",\"parent\":" + std::to_string(parent) + ",\"prototype\":" + std::to_string(prototypeIndex) + '}';
+      nodes += ",\"parent\":" + std::to_string(parent) + ",\"prototype\":" + std::to_string(prototypeIndex) +
+               ",\"matrix\":";
+      // The placement in the parent's frame (M13, D150): a root's is its world placement.
+      j3d::appendMatrix(nodes, node.LocalTrsf.Transformation());
+      nodes += '}';
 
       parentAtDepth.resize(depth + 1);
       parentAtDepth[depth] = nodeCount;
