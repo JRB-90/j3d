@@ -58,8 +58,9 @@
                     Disabled="@(!Session.IsReady)"
                     Class="j3d-projection"
                     data-testid="projection">
-        <MudToggleItem Value="Projection.Orthographic" Text="Orthographic" />
-        <MudToggleItem Value="Projection.Perspective" Text="Perspective" />
+        @* Below 1,100 px the labels shorten (app.css), so the bar keeps one line at 900 px (M13). *@
+        <MudToggleItem Value="Projection.Orthographic"><span class="j3d-label-long">Orthographic</span><span class="j3d-label-short" aria-hidden="true">Ortho</span></MudToggleItem>
+        <MudToggleItem Value="Projection.Perspective"><span class="j3d-label-long">Perspective</span><span class="j3d-label-short" aria-hidden="true">Persp</span></MudToggleItem>
     </MudToggleGroup>
 
     @* What a click selects (M12, D146): models, objects or features, with the keys 1, 2 and 3 (D162). *@
@@ -93,6 +94,30 @@
                        aria-pressed="@(Scene.MeasureMode ? "true" : "false")"
                        Class="j3d-measure-button"
                        data-testid="measure-button" />
+    </MudTooltip>
+
+    @* The Move tool (M13, D149, D166): W for its arrows, E for its rings; highlighted while it's on. *@
+    <MudTooltip Text="@(Scene.Moving is null ? "Move (W; E rotates)" : "Stop moving (W or E)")">
+        <MudIconButton Icon="@Icons.Material.Filled.OpenWith"
+                       Color="@(Scene.Moving is not null ? Color.Primary : Color.Inherit)"
+                       Variant="@(Scene.Moving is not null ? Variant.Outlined : Variant.Text)"
+                       Disabled="@(!Session.IsReady)"
+                       OnClick="ToggleMove"
+                       aria-label="Move"
+                       aria-pressed="@(Scene.Moving is not null ? "true" : "false")"
+                       data-testid="move-button" />
+    </MudTooltip>
+
+    @* Origin frames at the selected objects (M13, D150, D171). *@
+    <MudTooltip Text="@(Scene.OriginFrames ? "Hide origin frames (O)" : "Origin frames (O)")">
+        <MudIconButton Icon="@Icons.Material.Filled._3dRotation"
+                       Color="@(Scene.OriginFrames ? Color.Primary : Color.Inherit)"
+                       Variant="@(Scene.OriginFrames ? Variant.Outlined : Variant.Text)"
+                       Disabled="@(!Session.IsReady)"
+                       OnClick="Scene.ToggleOriginFrames"
+                       aria-label="Origin frames"
+                       aria-pressed="@(Scene.OriginFrames ? "true" : "false")"
+                       data-testid="origin-frames-button" />
     </MudTooltip>
 
     @* Visibility of the selection, then the undo history (decision D97). *@

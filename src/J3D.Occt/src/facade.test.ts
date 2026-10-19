@@ -50,7 +50,7 @@ describe('BREP', () => {
   it('imports a plain box as one uncoloured part with 12 straight edges', async () => {
     const scene = await load('box.brep', ImportFormat.Brep);
 
-    expect(scene.nodes).toEqual([{ name: 'box.brep', parent: -1, prototype: 0 }]);
+    expect(scene.nodes).toEqual([{ name: 'box.brep', parent: -1, prototype: 0, matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }]);
     expect(scene.instances).toHaveLength(1);
     expect(scene.prototypes).toHaveLength(1);
 
@@ -120,6 +120,27 @@ describe('STEP', () => {
     expect(depth(gripper)).toBe(7);
     expect(scene.nodes.filter((node) => node.name === 'Station 3')).toHaveLength(2);
     expect(scene.nodes.filter((node) => node.name === 'Gripper' && node.prototype >= 0)).toHaveLength(6);
+  });
+
+  it("gives every node its placement in its parent's frame, which chain to each part's world matrix (M13, D150)", async () => {
+    const scene = await load('plant.step', ImportFormat.Step);
+
+    const multiply = (a: readonly number[], b: readonly number[]) =>
+      Array.from({ length: 16 }, (_, i) => {
+        const column = Math.floor(i / 4);
+        const row = i % 4;
+        return [0, 1, 2, 3].reduce((sum, k) => sum + a[k * 4 + row]! * b[column * 4 + k]!, 0);
+      });
+    const world = (node: number): number[] =>
+      node < 0 ? [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] : multiply(world(scene.nodes[node]!.parent), scene.nodes[node]!.matrix!);
+
+    expect(scene.nodes.every((node) => node.matrix?.length === 16)).toBe(true);
+    // Stations stand apart along their line, so their placements aren't all the identity.
+    expect(new Set(scene.nodes.filter((node) => node.name.startsWith('Station')).map((node) => node.matrix!.join(','))).size).toBeGreaterThan(1);
+    for (const instance of scene.instances) {
+      const chained = world(instance.node);
+      instance.matrix.forEach((value, i) => expect(chained[i]).toBeCloseTo(value, 4));
+    }
   });
 
   it('separates translucent faces and keeps their alpha', async () => {

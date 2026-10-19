@@ -15,6 +15,7 @@ import type { Projection } from './view/camera-math';
 import { installDropTarget } from './view/drop-target';
 import { baseName } from './view/export-scene';
 import type { MeshExportFormat } from './view/mesh-export';
+import type { MoveFrame, MoveMode, MoveTarget } from './view/move';
 import { Viewer, type SelectionMode } from './view/viewer';
 
 export { detectFormat, fileInputAccept, kindOf, supportedExtensions } from './formats';
@@ -70,6 +71,15 @@ export interface ViewerHandle {
   setSelectionMode(mode: SelectionMode): void;
   /** Drops the selected features (Esc, D146). */
   clearFeatures(): void;
+  /**
+   * The Move tool (M13, D149): its mode (null: off), the one object it moves (node -1: a whole model,
+   * D169) and the frame its triad and fields use (D148).
+   */
+  setMoveTool(mode: MoveMode | null, target: MoveTarget | null, frame: MoveFrame): void;
+  /** Gives a node (or a model, node -1) a placement in its parent's frame, column-major: a typed move, an undo or a redo (D145). */
+  setPlacement(id: string, node: number, matrix: number[]): void;
+  /** Draws origin frames at these objects (D150), or none. */
+  setOriginFrames(targets: MoveTarget[]): void;
   /** Saves the visible scene, or the selection, as GLB or STL: a download (M9, D119, D120). */
   exportMesh(format: MeshExportFormat, selection: boolean): Promise<ExportOutcome>;
   /** Saves a BREP model as imported, as STEP or BREP, reporting progress to .NET's `OnExportProgress` (D83, D125). */
@@ -106,6 +116,12 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
         onPick: (part, additive) => call(dotnet, 'OnPartPicked', part?.id ?? null, part?.node ?? -1, additive),
         onCommand: (command) => call(dotnet, 'OnViewerCommand', command),
         // The Measure tool's reference and result, and the selected features, go to .NET's panel (D146, D147).
+        // The Move tool's target and its drags go to .NET's fields and undo history; drags are kept (M13, D145).
+        onMoveTarget: (info) => call(dotnet, 'OnMoveTarget', info),
+        onMoved: (target, before, after) => {
+          store.setPlacement(target.id, target.node, after);
+          call(dotnet, 'OnMoved', target.id, target.node, before, after);
+        },
         onMeasureReference: (info) => call(dotnet, 'OnMeasureReference', info),
         onMeasureResult: (info) => call(dotnet, 'OnMeasureResult', info),
         onMeasureError: (message) => call(dotnet, 'OnMeasureFailed', message),
@@ -218,7 +234,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
           : kept
             ? Promise.resolve(kept)
             : Promise.reject(new Error(`${summary.fileName} wasn't kept.`));
-        models.importStored(summary, files, hidden);
+        models.importStored(summary, files, hidden, store.placementsOf(summary.id));
       }
     },
     forgetModel(id) {
@@ -253,6 +269,16 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     },
     clearFeatures() {
       view?.clearFeatures();
+    },
+    setMoveTool(mode, target, frame) {
+      view?.setMoveTool(mode, target ?? undefined, frame);
+    },
+    setPlacement(id, node, matrix) {
+      view?.setPlacement(id, node, matrix);
+      store.setPlacement(id, node, matrix);
+    },
+    setOriginFrames(targets) {
+      view?.setOriginFrames(targets);
     },
     async exportMesh(format, selection) {
       if (!view) {

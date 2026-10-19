@@ -105,7 +105,7 @@ public sealed class NavigationTests(J3DAppFixture app) : ViewerPageTest(app)
 
         await Page.Mouse.MoveAsync((float)under.X, (float)under.Y);
         await Page.Mouse.WheelAsync(0, -300);
-        await WaitForCameraRestAsync();
+        await WaitForWheelAsync(h);
 
         // Orthographic zoom to the cursor keeps what's under the pointer where it was (D74).
         var zoomed = await CameraAsync();
@@ -263,9 +263,23 @@ public sealed class NavigationTests(J3DAppFixture app) : ViewerPageTest(app)
 
     private async Task WheelAsync(float deltaY)
     {
+        var before = (await CameraAsync()).VisibleHeight;
         var centre = await ViewportCentreAsync();
         await Page.Mouse.MoveAsync((float)centre.X, (float)centre.Y);
         await Page.Mouse.WheelAsync(0, deltaY);
+        await WaitForWheelAsync(before);
+    }
+
+    /// <summary>
+    /// Waits until the wheel has changed the view, then until the camera rests. The camera is at rest
+    /// before the wheel, so waiting for rest alone could return before the browser handled it: CI's
+    /// Firefox lost that race (M13), as it did with the projection toggle (M11).
+    /// </summary>
+    private async Task WaitForWheelAsync(double visibleHeightBefore)
+    {
+        await Page.WaitForFunctionAsync(
+            "before => Math.abs(window.__j3dTest.camera().visibleHeight - before) > before * 1e-6",
+            visibleHeightBefore);
         await WaitForCameraRestAsync();
     }
 

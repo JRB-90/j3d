@@ -13,7 +13,8 @@ namespace J3D.Web.Client.State;
 /// and deleting a model is an undoable step (D84): the viewer frees the model, keeping its files, and
 /// an undo imports it again under the same id (D117). Since M12 it holds the selection mode (D146) and
 /// the features the viewer reports selected, the Measure tool's reference and result (D147), which
-/// aren't kept or undoable, and asks for the context menu (D164).
+/// aren't kept or undoable, and asks for the context menu (D164). Since M13 it holds the Move tool, its
+/// frame and target, and the origin frames (D148–D150), and moves are undoable steps (D145).
 /// </summary>
 public sealed class SceneState
 {
@@ -65,6 +66,97 @@ public sealed class SceneState
 
     /// <summary>The Measure tool was asked to start from the entity under the last right click, not yet passed to the viewer.</summary>
     public bool MeasureFromContextRequested { get; private set; }
+
+    /// <summary>The Move tool's mode (M13, D149), or null when it's off.</summary>
+    public MoveMode? Moving { get; private set; }
+
+    /// <summary>The frame the fields and the triad use (D148).</summary>
+    public MoveFrame Frame { get; private set; } = MoveFrame.Local;
+
+    /// <summary>The origin frames are drawn at the selected objects (D150, D171).</summary>
+    public bool OriginFrames { get; private set; }
+
+    /// <summary>Where the viewer says the Move tool's target is, or null (D148).</summary>
+    public MoveTargetInfo? TargetPlacement { get; private set; }
+
+    /// <summary>The most origin frames drawn at once: past it, a selection of thousands of parts would be a cloud of axes.</summary>
+    public const int MaxOriginFrames = 256;
+
+    /// <summary>The part picked in the view, or the node picked in the tree, last: what the Move tool moves while it's still the selection (D167).</summary>
+    private (ModelId Id, int Node)? _anchor;
+
+    /// <summary>
+    /// The one object the Move tool moves (D167): in Model mode a single selected model (node
+    /// <see cref="ModelEntry.ModelFrameNode"/>); in Object mode the node last picked in the tree, or the
+    /// part picked in the view, while the selection is exactly its visible parts, or else a single
+    /// selected part. Nothing in Feature mode, or for any other selection.
+    /// </summary>
+    public (ModelId Id, int Node)? MoveTarget
+    {
+        get
+        {
+            if (Mode == SelectMode.Features || Models.Where(model => !model.Selected.IsEmpty).ToList() is not [var model])
+            {
+                return null;
+            }
+
+            if (Mode == SelectMode.Models)
+            {
+                return IsModelSelected(model) ? (model.Id, ModelEntry.ModelFrameNode) : null;
+            }
+
+            if (_anchor is { } anchor && anchor.Id == model.Id && model.Tree is { } tree && tree.Contains(anchor.Node) &&
+                model.Selected.SetEquals(tree.PartsUnder(anchor.Node).Where(part => !model.Hidden.Contains(part))))
+            {
+                return anchor;
+            }
+
+            return model.Selected.Count == 1 ? (model.Id, model.Selected.Single()) : null;
+        }
+    }
+
+    /// <summary>Why the Move tool has nothing to move, while it's on without a target.</summary>
+    public string? MoveHint => Moving is null || MoveTarget is not null
+        ? null
+        : Mode == SelectMode.Features
+            ? "Feature mode selects faces, edges and vertices: switch to Model or Object mode (1 or 2) to move."
+            : HasSelection
+                ? "Select one part, a sub-assembly in the tree, or one model in Model mode to move it."
+                : "Select a part, a sub-assembly or a model to move it.";
+
+    /// <summary>
+    /// Where the origin frames go (D150): the Move tool's target, or else each selected model (Model
+    /// mode) or part (Object mode), at most <see cref="MaxOriginFrames"/>. None while they're off.
+    /// </summary>
+    public IReadOnlyList<(ModelId Id, int Node)> OriginFrameTargets
+    {
+        get
+        {
+            if (!OriginFrames || Mode == SelectMode.Features)
+            {
+                return [];
+            }
+
+            if (MoveTarget is { } target)
+            {
+                return [target];
+            }
+
+            return Mode == SelectMode.Models
+                ? [.. Models.Where(IsModelSelected).Select(model => (model.Id, ModelEntry.ModelFrameNode))]
+                : [.. Selection.Take(MaxOriginFrames).Select(item => (item.Model.Id, item.Node))];
+        }
+    }
+
+    /// <summary>The target's pose in the chosen frame, as the fields show it (D148): always zero in Local.</summary>
+    public Pose? TargetPose => TargetPlacement is not { } placement || MoveTarget is not { } target || (placement.Id, placement.Node) != target
+        ? null
+        : Frame switch
+        {
+            MoveFrame.Local => Pose.Zero,
+            MoveFrame.Parent => Pose.Of(CurrentLocal(placement), placement.UnitScale),
+            _ => Pose.Of(placement.ParentWorldMatrix * CurrentLocal(placement), placement.UnitScale),
+        };
 
     public bool CanUndo => _history.CanUndo;
 
@@ -227,6 +319,7 @@ public sealed class SceneState
         if (on != MeasureMode)
         {
             MeasureMode = on;
+            Moving = on ? null : Moving;
             MeasureReference = null;
             MeasureResult = null;
             MeasureFromContextRequested = false;
@@ -238,6 +331,7 @@ public sealed class SceneState
     public void MeasureFromHere()
     {
         MeasureMode = true;
+        Moving = null;
         MeasureReference = null;
         MeasureResult = null;
         MeasureFromContextRequested = true;
@@ -276,6 +370,10 @@ public sealed class SceneState
         {
             SetMeasureMode(false);
         }
+        else if (Moving is not null)
+        {
+            StopMoving();
+        }
         else
         {
             ClearSelection();
@@ -304,6 +402,11 @@ public sealed class SceneState
         {
             SelectModel(target, additive);
             return;
+        }
+
+        if (!additive)
+        {
+            _anchor = (target.Id, node);
         }
 
         if (additive)
@@ -350,6 +453,7 @@ public sealed class SceneState
         var parts = tree.PartsUnder(node).Where(part => !target.Hidden.Contains(part)).ToList();
         if (!additive)
         {
+            _anchor = (id, node);
             Set(Models.ConvertAll(model => model.WithParts(model.Hidden, model.Id == id ? parts : [])));
         }
         else if (parts.Count > 0)
@@ -462,6 +566,83 @@ public sealed class SceneState
         ChangeVisibility(model => model.Id == id ? hidden : model.Hidden);
     }
 
+    /// <summary>
+    /// W or E, the toolbar's Move button or the context menu (D166): the Move tool on in that mode, or
+    /// off when it's already in it. It and the Measure tool take turns.
+    /// </summary>
+    public void SetMoveMode(MoveMode mode)
+    {
+        Moving = Moving == mode ? null : mode;
+        if (Moving is not null && MeasureMode)
+        {
+            MeasureMode = false;
+            MeasureReference = null;
+            MeasureResult = null;
+            MeasureFromContextRequested = false;
+        }
+
+        Set(Models, always: true);
+    }
+
+    public void StopMoving()
+    {
+        if (Moving is not null)
+        {
+            Moving = null;
+            Set(Models, always: true);
+        }
+    }
+
+    public void SetMoveFrame(MoveFrame frame)
+    {
+        if (frame != Frame)
+        {
+            Frame = frame;
+            Set(Models, always: true);
+        }
+    }
+
+    /// <summary>The Origin frames button or O (D171).</summary>
+    public void ToggleOriginFrames()
+    {
+        OriginFrames = !OriginFrames;
+        Set(Models, always: true);
+    }
+
+    /// <summary>The viewer's report of the Move tool's target and where it is, or null.</summary>
+    public void ReportMoveTarget(MoveTargetInfo? info)
+    {
+        TargetPlacement = info;
+        Set(Models, always: true);
+    }
+
+    /// <summary>A drag of the triad ended (D149): the viewer has the target there already, so this records the step.</summary>
+    public void RecordMove(ModelId id, int node, Matrix4d before, Matrix4d after) => Move(id, node, before, after);
+
+    /// <summary>
+    /// Values typed in the fields, applied on Enter (D148): in Parent and World they're the target's new
+    /// pose in that frame; in Local, a move and turn by them about its own axes. False when there's no
+    /// target to move.
+    /// </summary>
+    public bool MoveTo(Pose pose)
+    {
+        ArgumentNullException.ThrowIfNull(pose);
+        if (TargetPose is null || TargetPlacement is not { } placement)
+        {
+            return false;
+        }
+
+        var local = CurrentLocal(placement);
+        var parentWorld = placement.ParentWorldMatrix;
+        var after = Frame switch
+        {
+            MoveFrame.Local => local * pose.ToMatrix(placement.UnitScale, (1, 1, 1)),
+            MoveFrame.Parent => pose.ToMatrix(placement.UnitScale, local.Scale()),
+            _ => parentWorld.Inverse() * pose.ToMatrix(placement.UnitScale, (parentWorld * local).Scale()),
+        };
+        return Move(placement.Id, placement.Node, local, after);
+    }
+
     public void Undo()
     {
         if (_history.Undo() is { } step)
@@ -476,6 +657,26 @@ public sealed class SceneState
         {
             Apply(step.Redo(new SceneContent(Models)));
         }
+    }
+
+    /// <summary>
+    /// A target's placement in its parent's frame: the latest move recorded here, which the viewer may
+    /// not have reported back yet (two quick Enters), else what the viewer reported.
+    /// </summary>
+    private Matrix4d CurrentLocal(MoveTargetInfo placement) =>
+        Find(placement.Id) is { } model && model.Placements.TryGetValue(placement.Node, out var moved) ? moved : placement.LocalMatrix;
+
+    /// <summary>Records and applies a move as one step, unless it moves nothing.</summary>
+    private bool Move(ModelId id, int node, Matrix4d before, Matrix4d after)
+    {
+        if (before.Equals(after) || Find(id) is not { Tree: not null })
+        {
+            return false;
+        }
+
+        Record(new MoveStep(id, node, before, after));
+        Update(id, model => model.WithPlacement(node, after));
+        return true;
     }
 
     private static IEnumerable<int> VisibleParts(ModelEntry model) => model.Tree?.Parts.Where(part => !model.Hidden.Contains(part)) ?? [];

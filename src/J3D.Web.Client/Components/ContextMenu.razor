@@ -13,6 +13,7 @@
             {
                 <MudMenuItem Label="Hide" Icon="@Icons.Material.Filled.VisibilityOff" OnClick="Scene.HideSelection" data-testid="context-hide" />
                 <MudMenuItem Label="Isolate" Icon="@Icons.Material.Filled.FilterCenterFocus" Disabled="@(!Scene.CanIsolate)" OnClick="Scene.IsolateSelection" data-testid="context-isolate" />
+                <MudMenuItem Label="Move" Icon="@Icons.Material.Filled.OpenWith" Disabled="@(Scene.MoveTarget is null)" OnClick="StartMoving" data-testid="context-move" />
             }
 
             @if (target.CanMeasure)

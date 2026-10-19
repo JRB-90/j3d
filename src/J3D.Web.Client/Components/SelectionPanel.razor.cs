@@ -26,13 +26,71 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
     private bool _referenceOpen;
     private string? _reference;
 
+    private static readonly MoveFrame[] Frames = [MoveFrame.Local, MoveFrame.Parent, MoveFrame.World];
+    private static readonly string[] FieldNames = ["X", "Y", "Z", "Rx", "Ry", "Rz"];
+    private static readonly string[] FieldLabels = ["X (mm)", "Y (mm)", "Z (mm)", "Rx (degrees)", "Ry (degrees)", "Rz (degrees)"];
+
+    /// <summary>What's been typed in the Move fields since the last Enter: the rest show the pose, following any drag (D149).</summary>
+    private readonly string?[] _drafts = new string?[6];
+
     private SceneState Scene => scene;
 
     private (string Title, string Detail)? Summary => scene.Mode == SelectMode.Models ? DescribeModels(scene) : Describe(scene.Selection);
 
-    private bool IsVisible => scene.MeasureMode || (scene.Mode == SelectMode.Features ? !scene.Features.IsEmpty : Summary is not null);
+    private bool IsVisible => scene.Moving is not null || scene.MeasureMode || (scene.Mode == SelectMode.Features ? !scene.Features.IsEmpty : Summary is not null);
 
     protected override void OnInitialized() => scene.Changed += OnSceneChanged;
+
+    /// <summary>The Move tool's target: a node's name, or a whole model's file name.</summary>
+    private string TargetName((ModelId Id, int Node) target) =>
+        scene.Find(target.Id) is not { } model ? ""
+        : target.Node == ModelEntry.ModelFrameNode || model.Tree is not { } tree ? model.Summary.FileName
+        : NameOf(tree, target.Node);
+
+    /// <summary>A field's text: what's been typed, or the pose's value (millimetres to 3 decimals, degrees to 2; assumption 13).</summary>
+    private string FieldValue(Pose pose, int field) => _drafts[field] ?? (field switch
+    {
+        0 => pose.X,
+        1 => pose.Y,
+        2 => pose.Z,
+        3 => pose.Rx,
+        4 => pose.Ry,
+        _ => pose.Rz,
+    }).ToString(field < 3 ? "0.000" : "0.00", CultureInfo.InvariantCulture);
+
+    /// <summary>Enter applies all six fields as one move (D148); Esc drops what's been typed.</summary>
+    private void OnFieldKey(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args, Pose pose)
+    {
+        if (args.Key == "Escape")
+        {
+            Array.Clear(_drafts);
+            return;
+        }
+
+        if (args.Key != "Enter")
+        {
+            return;
+        }
+
+        var values = new double[6];
+        for (var field = 0; field < 6; field++)
+        {
+            var text = FieldValue(pose, field).Replace(',', '.');
+            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out values[field]) || !double.IsFinite(values[field]))
+            {
+                return; // the field keeps what was typed
+            }
+        }
+
+        Array.Clear(_drafts);
+        scene.MoveTo(new Pose(values[0], values[1], values[2], values[3], values[4], values[5]));
+    }
+
+    private void SetFrame(MoveFrame frame)
+    {
+        Array.Clear(_drafts);
+        scene.SetMoveFrame(frame);
+    }
 
     public void Dispose() => scene.Changed -= OnSceneChanged;
 

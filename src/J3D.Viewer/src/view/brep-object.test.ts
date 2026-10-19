@@ -3,6 +3,7 @@ import { BatchedMesh, Group, InstancedBufferGeometry, InstancedMesh, LineSegment
 import { describe, expect, it } from 'vitest';
 import { buildBrepObject, InstancingThreshold, toUnorm8 } from './brep-object';
 import { MaterialCache } from './materials';
+import { ModelFrame } from './parts';
 
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const translated = (x: number) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1];
@@ -132,6 +133,91 @@ describe('buildBrepObject', () => {
     const { object } = buildBrepObject('m', scene([prototype(), prototype()], [1]), new MaterialCache());
     expect(object.children).toHaveLength(2);
     expect((object.children[0] as BatchedMesh).instanceCount).toBe(1);
+  });
+});
+
+describe('placements (M13, D150)', () => {
+  /**
+   * An assembly placed 10 along x, holding a part at its origin and one 1 further along, and a part
+   * on its own at 5: placed through their nodes' matrices, as the facade gives them.
+   */
+  function assembly(): ImportedScene {
+    return {
+      nodes: [
+        { name: 'assembly', parent: -1, prototype: -1, matrix: translated(10) },
+        { name: 'a', parent: 0, prototype: 0, matrix: identity },
+        { name: 'b', parent: 0, prototype: 0, matrix: translated(1) },
+        { name: 'alone', parent: -1, prototype: 0, matrix: translated(5) },
+      ],
+      instances: [
+        { node: 1, prototype: 0, matrix: translated(10) },
+        { node: 2, prototype: 0, matrix: translated(11) },
+        { node: 3, prototype: 0, matrix: translated(5) },
+      ],
+      prototypes: [prototype()],
+    };
+  }
+
+  const x = (matrix: Matrix4 | readonly number[]) => ('elements' in matrix ? matrix.elements : matrix)[12];
+
+  it("gives each node its placement in its parent's frame and that frame in the world", () => {
+    const { parts } = buildBrepObject('m', assembly(), new MaterialCache());
+
+    expect(x(parts.placement(0).local)).toBe(10);
+    expect(x(parts.placement(0).parentWorld)).toBe(0);
+    expect(x(parts.placement(2).local)).toBe(1);
+    expect(x(parts.placement(2).parentWorld)).toBe(10);
+    expect(parts.placement(ModelFrame).local.equals(new Matrix4())).toBe(true);
+  });
+
+  it('moves everything under a node: instance matrices, batch matrices and merged edges', () => {
+    const scene = assembly();
+    const { object, parts } = buildBrepObject('m', scene, new MaterialCache());
+
+    expect(parts.setPlacement(0, new Matrix4().makeTranslation(20, 0, 0))).toEqual([1, 2]);
+
+    expect(scene.instances.map((instance) => x(instance.matrix))).toEqual([20, 21, 5]);
+    const batch = object.children.find((c): c is BatchedMesh => c instanceof BatchedMesh)!;
+    expect([0, 1, 2].map((id) => x(batch.getMatrixAt(id, new Matrix4())))).toEqual([20, 21, 5]);
+    const edges = object.children.find((c): c is LineSegments => c instanceof LineSegments)!;
+    expect([...edges.geometry.getAttribute('position').array]).toEqual([20, 0, 0, 21, 0, 0, 21, 0, 0, 22, 0, 0, 5, 0, 0, 6, 0, 0]);
+    expect(parts.nodeBounds(2).min.x).toBe(21);
+  });
+
+  it("moves the whole model by its frame (D169): roots' parent frame is the model's", () => {
+    const scene = assembly();
+    const { parts } = buildBrepObject('m', scene, new MaterialCache());
+
+    expect(parts.setPlacement(ModelFrame, new Matrix4().makeTranslation(100, 0, 0))).toEqual([1, 2, 3]);
+
+    expect(scene.instances.map((instance) => x(instance.matrix))).toEqual([110, 111, 105]);
+    expect(x(parts.placement(0).parentWorld)).toBe(100);
+    expect(x(parts.placement(ModelFrame).local)).toBe(100);
+  });
+
+  it('moves instanced copies and their edges, and a hidden copy stays hidden until shown where it now is', () => {
+    const count = InstancingThreshold;
+    const scene: ImportedScene = {
+      nodes: [
+        { name: 'rack', parent: -1, prototype: -1, matrix: identity },
+        ...Array.from({ length: count }, (_, i) => ({ name: `bolt ${i}`, parent: 0, prototype: 0, matrix: translated(i) })),
+      ],
+      instances: Array.from({ length: count }, (_, i) => ({ node: i + 1, prototype: 0, matrix: translated(i) })),
+      prototypes: [prototype()],
+    };
+    const { object, parts } = buildBrepObject('m', scene, new MaterialCache());
+    parts.setHidden(new Set([2]));
+
+    parts.setPlacement(0, new Matrix4().makeTranslation(50, 0, 0));
+
+    const mesh = object.children.find((c): c is InstancedMesh => c instanceof InstancedMesh)!;
+    expect(x(mesh.getMatrixAt(0, new Matrix4()))).toBe(50);
+    expect(mesh.getMatrixAt(1, new Matrix4()).elements[0]).toBe(0); // bolt 1 (node 2) is hidden: a zero matrix
+    const lines = object.children.find((c): c is LineSegments => c instanceof LineSegments)!;
+    expect((lines.geometry.getAttribute('instanceMatrix').array as Float32Array)[16 * 2 + 12]).toBe(52);
+
+    parts.setHidden(new Set());
+    expect(x(mesh.getMatrixAt(1, new Matrix4()))).toBe(51);
   });
 });
 

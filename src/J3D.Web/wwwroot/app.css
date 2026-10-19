@@ -44,6 +44,11 @@ body {
         flex-shrink: 0;
     }
 
+    /* A toggle's short label shows only in a narrow window (M13: the projection toggle). */
+    .j3d-appbar .j3d-toolbar .j3d-label-short {
+        display: none;
+    }
+
     /* Nor does the selection mode switch (M12): shrunk, its icons were cut to 8 px at 966 px. */
     .j3d-appbar .j3d-toolbar .j3d-selection-mode {
         flex-shrink: 0;
@@ -83,6 +88,15 @@ body {
 
     .j3d-appbar .j3d-toolbar .mud-icon-button {
         padding: 8px;
+    }
+
+    /* Since M13's Move and Origin frames buttons, "Ortho" and "Persp". */
+    .j3d-appbar .j3d-toolbar .j3d-label-long {
+        display: none;
+    }
+
+    .j3d-appbar .j3d-toolbar .j3d-label-short {
+        display: inline;
     }
 
     .j3d-appbar .j3d-toolbar .j3d-projection,

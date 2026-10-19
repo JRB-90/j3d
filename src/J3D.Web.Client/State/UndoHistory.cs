@@ -43,6 +43,22 @@ public sealed record VisibilityStep(ImmutableDictionary<ModelId, (PartSet Before
 }
 
 /// <summary>
+/// A move (M13, D145, D149): one node of one model, or the model itself, from one placement in its
+/// parent's frame to another; a drop of the triad, or values typed in the fields.
+/// </summary>
+public sealed record MoveStep(ModelId Id, int Node, Matrix4d Before, Matrix4d After) : ISceneStep
+{
+    public SceneContent Undo(SceneContent scene) => Apply(scene, Before);
+
+    public SceneContent Redo(SceneContent scene) => Apply(scene, After);
+
+    public ISceneStep? Without(ModelId id) => id == Id ? null : this;
+
+    private SceneContent Apply(SceneContent scene, Matrix4d placement) =>
+        scene with { Models = scene.Models.ConvertAll(model => model.Id == Id ? model.WithPlacement(Node, placement) : model) };
+}
+
+/// <summary>
 /// Deleting a model (M8, D84): the model as it was and where it was in the list. Undoing it lists the
 /// model again, queued to be imported from its kept files under the same id (D117); redoing it
 /// deletes the model again, whatever its state.

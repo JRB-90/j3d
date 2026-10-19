@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using J3D.Web.Client.Interop;
 using J3D.Web.Client.Models;
 using J3D.Web.Client.State;
@@ -35,6 +36,13 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
 
     /// <summary>What the viewer was last given for each model, so only changes are sent.</summary>
     private readonly Dictionary<ModelId, (PartSet Hidden, PartSet Selected)> _applied = [];
+
+    /// <summary>Each model's moved nodes as last sent to the viewer, or as the viewer reported them after a drag (M13).</summary>
+    private readonly Dictionary<ModelId, ImmutableDictionary<int, Matrix4d>> _appliedPlacements = [];
+
+    /// <summary>The Move tool and origin frames as last sent, to send them only when they change.</summary>
+    private string _appliedMoveTool = MoveToolKey(null, null, MoveFrame.Local);
+    private string _appliedOriginFrames = "";
 
     /// <summary>Raised once the viewer has started and reported the browser's capabilities.</summary>
     [Parameter]
@@ -141,7 +149,34 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             case "measure":
                 scene.ToggleMeasureMode();
                 break;
+            case "moveTranslate":
+                scene.SetMoveMode(MoveMode.Translate);
+                break;
+            case "moveRotate":
+                scene.SetMoveMode(MoveMode.Rotate);
+                break;
+            case "originFrames":
+                scene.ToggleOriginFrames();
+                break;
         }
+    }
+
+    /// <summary>The Move tool's target and where it is, or null (M13, D148).</summary>
+    [JSInvokable]
+    public void OnMoveTarget(MoveTargetInfo? info) => scene.ReportMoveTarget(info);
+
+    /// <summary>A drag of the triad ended (D149): the viewer shows the target there already, so only the step is recorded.</summary>
+    [JSInvokable]
+    public void OnMoved(string modelId, int node, double[] before, double[] after)
+    {
+        var id = new ModelId(modelId);
+        var placement = new Matrix4d(after);
+        if (scene.Find(id) is { } model)
+        {
+            _appliedPlacements[id] = (_appliedPlacements.TryGetValue(id, out var applied) ? applied : model.Placements).SetItem(node, placement);
+        }
+
+        scene.RecordMove(id, node, new Matrix4d(before), placement);
     }
 
     /// <summary>The Measure tool's reference, or null when it's gone (D147).</summary>
@@ -298,6 +333,35 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             _applied.Remove(id);
         }
 
+        // Moves (M13): each loaded model's nodes whose placements differ from what the viewer has.
+        var moves = new List<(ModelId Id, int Node, Matrix4d Placement)>();
+        foreach (var model in scene.Models.Where(static model => model.Tree is not null))
+        {
+            var applied = _appliedPlacements.TryGetValue(model.Id, out var known) ? known : [];
+            if (!ReferenceEquals(applied, model.Placements))
+            {
+                moves.AddRange(model.Placements
+                    .Where(item => !applied.TryGetValue(item.Key, out var sent) || !sent.Equals(item.Value))
+                    .OrderBy(static item => item.Key)
+                    .Select(item => (model.Id, item.Key, item.Value)));
+                _appliedPlacements[model.Id] = model.Placements;
+            }
+        }
+
+        foreach (var id in _appliedPlacements.Keys.Where(id => scene.Find(id) is not { Tree: not null }).ToList())
+        {
+            _appliedPlacements.Remove(id);
+        }
+
+        var moveTarget = scene.Moving is null ? null : scene.MoveTarget;
+        var moveTool = MoveToolKey(scene.Moving, moveTarget, scene.Frame);
+        var moveToolChanged = moveTool != _appliedMoveTool;
+        _appliedMoveTool = moveTool;
+        var originFrames = scene.OriginFrameTargets;
+        var originFramesKey = string.Join(';', originFrames);
+        var originFramesChanged = originFramesKey != _appliedOriginFrames;
+        _appliedOriginFrames = originFramesKey;
+
         List<ModelId> ids = [.. scene.Models.Select(static model => model.Id)];
         var order = string.Join(',', ids);
         var orderChanged = order != _appliedOrder;
@@ -328,6 +392,21 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
                 await viewer.SetPartStateAsync(model.Id, model.Hidden, model.Selected);
             }
 
+            foreach (var (id, node, placement) in moves)
+            {
+                await viewer.SetPlacementAsync(id, node, placement);
+            }
+
+            if (moveToolChanged)
+            {
+                await viewer.SetMoveToolAsync(scene.Moving, moveTarget, scene.Frame);
+            }
+
+            if (originFramesChanged)
+            {
+                await viewer.SetOriginFramesAsync(originFrames);
+            }
+
             if (modeChanged)
             {
                 await viewer.SetMeasureModeAsync(measureMode, fromContext);
@@ -338,6 +417,8 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             // The page is going away.
         }
     }
+
+    private static string MoveToolKey(MoveMode? mode, (ModelId Id, int Node)? target, MoveFrame frame) => $"{mode} {target} {frame}";
 
     /// <summary>
     /// The viewer reports its capabilities while it starts, so either may be known first. Once both

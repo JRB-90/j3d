@@ -3,6 +3,7 @@ import {
   Box3,
   DirectionalLight,
   Group,
+  MathUtils,
   Matrix4,
   NeutralToneMapping,
   Object3D,
@@ -50,8 +51,18 @@ import { FeatureSelection, type FeatureSelectionInfo } from './features';
 import { MeasureTool, type MeasureModel, type Picked } from './measure';
 import type { MeasureInfo } from './measure-format';
 import type { MeshExportFormat } from './mesh-export';
+import { MoveTool, OriginFrames, type MoveFrame, type MoveMode, type MoveTarget } from './move';
 import { OrderIndependentTransparency, sceneMaterials, type SceneMaterials } from './oit';
-import { HighlightMaterials, MeshParts, type Highlight, type HighlightKind, type ModelParts, type ScreenSpace } from './parts';
+import {
+  HighlightMaterials,
+  MeshParts,
+  ModelFrame,
+  type Highlight,
+  type HighlightKind,
+  type ModelParts,
+  type Placement,
+  type ScreenSpace,
+} from './parts';
 import { ViewCube } from './view-cube';
 import { HomeRegion, regionView, type ViewRegion } from './view-regions';
 
@@ -118,7 +129,25 @@ export type ViewerCommand =
   | 'measure'
   | 'selectModels'
   | 'selectObjects'
-  | 'selectFeatures';
+  | 'selectFeatures'
+  | 'moveTranslate'
+  | 'moveRotate'
+  | 'originFrames';
+
+/**
+ * The Move tool's target and where it is (M13, D148): its placement in its parent's frame and that
+ * frame in the world, column-major, with the model's millimetres per unit (D105).
+ */
+export interface MoveTargetInfo {
+  id: ModelId;
+  node: number;
+  local: number[];
+  parentWorld: number[];
+  unitScale: number;
+}
+
+/** How often the fields hear about a drag (D149: they follow it). */
+const MoveReportInterval = 100;
 
 /** What a click selects (M12, D146): whole models, placed parts, or BREP faces, edges and vertices. */
 export type SelectionMode = 'model' | 'object' | 'feature';
@@ -146,6 +175,10 @@ export interface ViewerOptions {
   onContextMenu?: (target: ContextTarget) => void;
   /** The camera moved, zoomed or changed projection: drawn with a different view (M8, D82). */
   onCameraChange?: () => void;
+  /** The Move tool's target and where it is, or null when there's none (M13, D148). */
+  onMoveTarget?: (info: MoveTargetInfo | null) => void;
+  /** A drag of the triad ended: one undo step (D149), placements in the parent's frame. */
+  onMoved?: (target: MoveTarget, before: number[], after: number[]) => void;
 }
 
 interface SceneModel {
@@ -211,6 +244,10 @@ export class Viewer {
   private selectionMode: SelectionMode = 'object';
   /** The entity under the last right click, for "Measure from here" (D164). */
   private contextEntity: Picked | undefined;
+  /** The object the Move tool moves (M13). */
+  private moveTarget: MoveTarget | undefined;
+  /** A press on the triad's handles: not a click on a part. */
+  private handlePress = false;
   /** The view last drawn, to report camera changes. */
   private drawnView = '';
   /** Weighted blended OIT where the GPU supports it (D90, D130), and whether the last frame used it. */
@@ -219,6 +256,11 @@ export class Viewer {
   private oitUsed = false;
   /** The models' materials, sorted again when a model comes or goes. */
   private sortedMaterials: SceneMaterials | undefined;
+  /** The Move tool (M13, D149) and the origin frames (D150) with the objects they're drawn at. */
+  private readonly moveTool: MoveTool;
+  private readonly originFrames = new OriginFrames();
+  private originTargets: MoveTarget[] = [];
+  private lastMoveReport = 0;
 
   constructor(
     private readonly host: HTMLElement,
@@ -277,6 +319,7 @@ export class Viewer {
 
     this.orthographic = new OrthographicCamera();
     this.perspective = new PerspectiveCamera(PerspectiveFov);
+    this.overlays.add(this.originFrames.object);
     this.orthographic.up.copy(Up);
     this.perspective.up.copy(Up);
 
@@ -303,6 +346,21 @@ export class Viewer {
     this.listen(controls, 'control', () => this.requestFrame());
     this.listen(controls, 'transitionstart', () => this.requestFrame());
 
+    this.moveTool = new MoveTool({
+      camera: () => this.camera,
+      domElement: canvas,
+      overlays: this.overlays,
+      placement: (target) => this.placementOf(target),
+      unitScale: (target) => this.models.get(target.id)?.unitScale ?? 1,
+      preview: (target, local) => this.applyPlacement(target, local, true),
+      commit: (target, before, after) => {
+        this.applyPlacement(target, after, false);
+        this.options.onMoved?.(target, before.toArray(), after.toArray());
+      },
+      setCameraEnabled: (enabled) => (this.controls.enabled = enabled),
+      requestRender: () => this.requestRender(),
+    });
+
     this.resize(host.clientWidth, host.clientHeight);
     const observer = new ResizeObserver(([entry]) => {
       if (entry) {
@@ -314,7 +372,12 @@ export class Viewer {
 
     this.listen(canvas, 'contextmenu', (event) => event.preventDefault());
     this.listen(window, 'keydown', (event) => this.onKeyDown(event));
+    // Ctrl snaps the triad while it's held (D168).
+    this.listen(window, 'keydown', (event) => this.moveTool.setSnapping(event.ctrlKey || event.key === 'Control'));
+    this.listen(window, 'keyup', (event) => this.moveTool.setSnapping(event.ctrlKey && event.key !== 'Control'));
+    this.listen(window, 'blur', () => this.moveTool.setSnapping(false));
     this.installViewCubeInput(canvas);
+    this.installMoveInput(canvas);
     this.installPartInput(canvas);
     this.installHomeButton();
     this.requestRender();
@@ -405,7 +468,7 @@ export class Viewer {
       };
     } else {
       model.content.root.updateMatrixWorld(true);
-      const parts = new MeshParts(model.content.nodes, model.tree);
+      const parts = new MeshParts(model.content.nodes, model.tree, model.content.root);
       entry = {
         object: model.content.root,
         bounds,
@@ -423,6 +486,14 @@ export class Viewer {
     this.models.set(model.summary.id, entry);
     this.scene.add(entry.object);
     this.sortedMaterials = undefined;
+    // A kept model's moves (M13, D145): parents before children, as the tree lists them.
+    for (const { node, matrix } of [...(model.restored?.placements ?? [])].sort((a, b) => a.node - b.node)) {
+      entry.parts.setPlacement(node, new Matrix4().fromArray(matrix));
+    }
+    if (model.restored?.placements?.length) {
+      const moved = entry.parts.addVisibleBounds(new Box3());
+      entry.bounds = moved.isEmpty() ? entry.bounds : moved;
+    }
     if (model.restored?.hidden.length) {
       this.setPartState(model.summary.id, model.restored.hidden, []);
     }
@@ -453,7 +524,119 @@ export class Viewer {
     this.sortedMaterials = undefined;
     entry.dispose?.();
     this.updateSceneBounds();
+    if (this.originTargets.some((target) => target.id === id)) {
+      this.setOriginFrames(this.originTargets.filter((target) => target.id !== id));
+    }
+    this.moveTool.refresh();
+    this.reportMoveTarget(true);
     this.requestRender();
+  }
+
+  /**
+   * The Move tool (M13, D149): .NET turns it on with its mode, the one object it moves and the frame
+   * the triad and fields use (D148, D167), or off with a null mode or no target.
+   */
+  setMoveTool(mode: MoveMode | null, target: MoveTarget | undefined, frame: MoveFrame): void {
+    this.moveTarget = mode && target && this.placementOf(target) ? target : undefined;
+    this.moveTool.set(mode, this.moveTarget, frame);
+    this.reportMoveTarget(true);
+  }
+
+  /** Gives a node (or a model, node -1) a placement in its parent's frame: a typed move, an undo or a redo. */
+  setPlacement(id: ModelId, node: number, matrix: readonly number[]): void {
+    this.applyPlacement({ id, node }, new Matrix4().fromArray(matrix), false);
+  }
+
+  /** Where a node (or a model) is, for .NET's fields and for tests (M13). */
+  placementOf(target: MoveTarget): Placement | undefined {
+    const entry = this.models.get(target.id);
+    if (!entry || (target.node !== ModelFrame && !entry.tree[target.node])) {
+      return undefined;
+    }
+    return entry.parts.placement(target.node);
+  }
+
+  /** Draws the origin frames at these objects (D150), or none. */
+  setOriginFrames(targets: readonly MoveTarget[]): void {
+    this.originTargets = targets.filter((target) => this.placementOf(target));
+    this.originFrames.set(
+      this.originTargets.map((target) => {
+        const { local, parentWorld } = this.placementOf(target)!;
+        return parentWorld.multiply(local);
+      }),
+    );
+    this.requestRender();
+  }
+
+  /** The triad's handle under a client point ('X', 'XY', 'Z', 'E'…), or null: for tests that drag it. */
+  moveHandleAt(clientX: number, clientY: number): string | null {
+    return this.moveTool.handleAt(clientX, clientY);
+  }
+
+  /** The Move tool and the origin frames, for tests. */
+  moveState(): { active: boolean; dragging: boolean; target: MoveTarget | null; originFrames: number } {
+    return {
+      active: this.moveTool.isActive,
+      dragging: this.moveTool.isDragging,
+      target: this.moveTool.isActive && this.moveTarget ? this.moveTarget : null,
+      originFrames: this.originFrames.count,
+    };
+  }
+
+  /**
+   * Moves a target to a placement in its parent's frame. While the triad is dragged only the drawing
+   * follows; afterwards (and for typed moves, undo and redo) the selection overlay, bounds, frames
+   * and anything measured on the moved parts catch up, and .NET hears where the target is.
+   */
+  private applyPlacement(target: MoveTarget, local: Matrix4, dragging: boolean): void {
+    const entry = this.models.get(target.id);
+    if (!entry || !this.placementOf(target)) {
+      return;
+    }
+    const moved = entry.parts.setPlacement(target.node, local);
+    if (dragging) {
+      entry.selection?.object.removeFromParent();
+    } else {
+      const movedSet = new Set(moved);
+      this.measureTool.dropHidden(target.id, movedSet);
+      this.features.dropHidden(target.id, movedSet);
+      if (this.hovered?.id === target.id) {
+        this.setHovered(undefined);
+      }
+      if (entry.selected.length > 0) {
+        this.setSelectionHighlight(entry, entry.parts.highlight(entry.selected, 'selected', this.highlights));
+      }
+      const bounds = entry.parts.addVisibleBounds(new Box3());
+      entry.bounds = bounds.isEmpty() ? entry.bounds : bounds;
+      this.updateSceneBounds();
+      this.moveTool.refresh();
+    }
+    if (this.originTargets.length > 0) {
+      this.setOriginFrames(this.originTargets);
+    }
+    this.reportMoveTarget(!dragging);
+    this.requestRender();
+  }
+
+  /** Tells .NET where the Move tool's target is: at once, or at most every 100 ms during a drag. */
+  private reportMoveTarget(now: boolean): void {
+    const time = performance.now();
+    if (!now && time - this.lastMoveReport < MoveReportInterval) {
+      return;
+    }
+    this.lastMoveReport = time;
+    const target = this.moveTool.isActive ? this.moveTarget : undefined;
+    const placement = target && this.placementOf(target);
+    this.options.onMoveTarget?.(
+      target && placement
+        ? {
+            ...target,
+            local: placement.local.toArray(),
+            parentWorld: placement.parentWorld.toArray(),
+            unitScale: this.models.get(target.id)?.unitScale ?? 1,
+          }
+        : null,
+    );
   }
 
   /**
@@ -764,10 +947,12 @@ export class Viewer {
     this.projectionMode = projection;
     if (projection === 'perspective') {
       this.controls.camera = this.perspective;
+      this.moveTool.setCamera(this.perspective);
       void this.controls.zoomTo(1, false);
       void this.controls.dollyTo(perspectiveDistance(visibleHeight), false);
     } else {
       this.controls.camera = this.orthographic;
+      this.moveTool.setCamera(this.orthographic);
       void this.controls.zoomTo(orthoZoom(visibleHeight), false);
     }
     this.applyInputMapping();
@@ -868,6 +1053,8 @@ export class Viewer {
     this.oit?.dispose();
     this.measureTool.dispose();
     this.features.dispose();
+    this.moveTool.dispose();
+    this.originFrames.dispose();
     this.labels.remove();
     this.materials.dispose();
     this.highlights.dispose();
@@ -921,6 +1108,17 @@ export class Viewer {
       this.oit?.prune(this.sortedMaterials);
     }
     return this.sortedMaterials;
+  }
+
+  /** How long a pixel is in world units at a point, in the current view. */
+  private worldPerPixel(point: Vector3): number {
+    const camera = this.camera;
+    if (this.projectionMode === 'orthographic') {
+      return this.visibleHeight() / this.height;
+    }
+    camera.updateMatrixWorld();
+    const depth = -point.clone().applyMatrix4(camera.matrixWorldInverse).z;
+    return (2 * Math.max(depth, 1e-9) * Math.tan(MathUtils.degToRad(PerspectiveFov / 2))) / this.height;
   }
 
   private updateSceneBounds(): void {
@@ -982,6 +1180,9 @@ export class Viewer {
     this.headlight.position.copy(HeadlightDirection).applyQuaternion(camera.quaternion).add(target);
     this.headlight.target.position.copy(target);
 
+    if (this.originFrames.count > 0) {
+      this.originFrames.scale((point) => this.worldPerPixel(point));
+    }
     this.renderer.setViewport(0, 0, this.width, this.height);
     this.renderer.clear();
     const materials = this.oit && this.oitEnabled ? this.sceneMaterials() : undefined;
@@ -1091,6 +1292,7 @@ export class Viewer {
       press = undefined;
       if (
         !start ||
+        this.handlePress ||
         start.id !== event.pointerId ||
         start.button !== event.button ||
         Math.hypot(event.clientX - start.x, event.clientY - start.y) > ClickTolerance ||
@@ -1110,7 +1312,7 @@ export class Viewer {
       }
     });
     this.listen(canvas, 'pointermove', (event) => {
-      if (event.pointerType !== 'mouse' || event.buttons !== 0 || this.interacting) {
+      if (event.pointerType !== 'mouse' || event.buttons !== 0 || this.interacting || this.moveTool.isDragging) {
         return;
       }
       this.hoverPoint = { x: event.clientX, y: event.clientY };
@@ -1157,6 +1359,32 @@ export class Viewer {
    * Clicks on the view cube turn the view; they must not also start a camera-controls drag, so the
    * host intercepts them in the capture phase, before they reach the canvas.
    */
+  /**
+   * A press on the triad's handles drags it, not the camera, and isn't a click on a part (R26): the
+   * host sees it first, in the capture phase, and pauses camera-controls until the drag ends.
+   */
+  private installMoveInput(canvas: HTMLCanvasElement): void {
+    this.listen(
+      this.host,
+      'pointerdown',
+      (event) => {
+        this.handlePress = event.target === canvas && event.button === 0 && this.moveTool.handleAt(event.clientX, event.clientY) !== null;
+        this.moveTool.setSnapping(event.ctrlKey || event.metaKey);
+        if (this.handlePress) {
+          this.controls.enabled = false;
+        }
+      },
+      { capture: true },
+    );
+    this.listen(canvas, 'pointerup', () => {
+      if (this.handlePress && !this.moveTool.isDragging) {
+        this.controls.enabled = true;
+      }
+    });
+    // Ctrl snaps (D168), as each pointer event says, before TransformControls reads it on the canvas.
+    this.listen(this.host, 'pointermove', (event) => this.moveTool.setSnapping(event.ctrlKey || event.metaKey), { capture: true });
+  }
+
   private installViewCubeInput(canvas: HTMLCanvasElement): void {
     let pressed: ViewRegion | undefined;
     this.listen(
@@ -1226,7 +1454,10 @@ export class Viewer {
   }
 }
 
-/** D99's keys: `F` fits; Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z), and 1, 2 and 3 (D162) go to .NET. */
+/**
+ * D99's keys: `F` fits; Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z), 1, 2 and 3 (D162),
+ * and W, E and O (M13, D166, D171) go to .NET.
+ */
 export function keyCommand(key: string, shift: boolean, control: boolean): ViewerCommand | 'fit' | undefined {
   if (control) {
     if (key === 'z') {
@@ -1251,6 +1482,12 @@ export function keyCommand(key: string, shift: boolean, control: boolean): Viewe
       return 'selectObjects';
     case '3':
       return 'selectFeatures';
+    case 'w':
+      return shift ? undefined : 'moveTranslate';
+    case 'e':
+      return shift ? undefined : 'moveRotate';
+    case 'o':
+      return shift ? undefined : 'originFrames';
     default:
       return undefined;
   }
