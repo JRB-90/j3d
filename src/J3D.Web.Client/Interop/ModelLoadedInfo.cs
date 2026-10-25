@@ -4,17 +4,19 @@ namespace J3D.Web.Client.Interop;
 /// What .NET is told about a loaded model (src/J3D.Viewer/src/model-events.ts). The geometry stays
 /// in the viewer.
 /// </summary>
-/// <param name="Tree">The model's tree, flat, with every parent before its children.</param>
+/// <param name="Tree">The model's tree as the file gives it, flat, with every parent before its children.</param>
 /// <param name="Stats">What the model draws.</param>
 /// <param name="Bounds">Where the model is.</param>
 /// <param name="MemoryBytes">The worker's WASM heap (BREP) or geometry and texture bytes (mesh).</param>
 /// <param name="Warnings">Non-fatal problems, such as textures that weren't supplied.</param>
+/// <param name="Edits">A restored model's kept edits to its tree (M14), which the viewer has applied; null when there are none.</param>
 public sealed record ModelLoadedInfo(
     TreeColumns Tree,
     ModelStats Stats,
     Bounds Bounds,
     long MemoryBytes,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    ModelEditsDto? Edits = null);
 
 /// <summary>
 /// A model's tree as one list per field, node by node, parents before children. It crosses interop

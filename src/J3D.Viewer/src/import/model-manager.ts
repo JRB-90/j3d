@@ -3,7 +3,9 @@ import { ModelImportError, toImportError } from './errors';
 import { throttleProgress, type ProgressListener } from './progress';
 import type { ImportRunner, ImportTask } from './runner';
 import { planBatch, SidecarSet, UnusedSidecarReason, type BatchFile } from './sidecars';
-import type { ImportError, ImportPhase, ImportResult, KeptPlacement, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types';
+import { editedStats } from '../edit/stats';
+import { EditsMismatchError, hasEdits, ModelStructure, type ModelEdits } from '../edit/structure';
+import type { ImportError, ImportPhase, ImportResult, KeptPlacement, KeptState, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types';
 
 /** Model lifecycle events. Progress is limited to 10 reports per second per model. */
 export interface ModelManagerListener {
@@ -40,7 +42,7 @@ interface Entry extends ModelEntry {
   batch: Batch;
   /** The sidecars its import found, which are kept with it (D113). */
   used: Set<BatchFile>;
-  restored?: { hidden: number[]; placements?: KeptPlacement[] };
+  restored?: KeptState;
   task?: ImportTask;
   finished: boolean;
   report: ProgressListener;
@@ -119,6 +121,7 @@ export class ModelManager {
     files: Promise<readonly BatchFile[]>,
     hidden: readonly number[],
     placements: readonly KeptPlacement[] = [],
+    edits?: ModelEdits,
   ): void {
     if (this.entries.has(summary.id)) {
       return;
@@ -128,7 +131,11 @@ export class ModelManager {
       status: 'queued',
       batch: { sidecars: new SidecarSet([]), pending: 1 },
       used: new Set(),
-      restored: { hidden: [...hidden], ...(placements.length > 0 ? { placements: placements.map((kept) => ({ ...kept })) } : {}) },
+      restored: {
+        hidden: [...hidden],
+        ...(placements.length > 0 ? { placements: placements.map((kept) => ({ ...kept })) } : {}),
+        ...(hasEdits(edits) ? { edits } : {}),
+      },
       finished: false,
       report: this.reporter(summary.id),
     };
@@ -242,7 +249,8 @@ export class ModelManager {
 
     this.running--;
     if ('content' in outcome) {
-      const model: LoadedModel = { summary: entry.summary, ...outcome, ...(entry.restored ? { restored: entry.restored } : {}) };
+      const restored = entry.restored && keptStateFor(entry.summary, outcome, entry.restored);
+      const model: LoadedModel = { summary: entry.summary, ...outcome, ...(restored ? { restored } : {}) };
       entry.status = 'loaded';
       entry.model = model;
       this.emit((l) => l.loaded?.(model));
@@ -289,5 +297,31 @@ export class ModelManager {
         console.error('J3D: a model event listener failed.', error);
       }
     }
+  }
+}
+
+/** Shown in a model's item when its kept edits no longer fit it (R25). */
+export const EditsDroppedWarning = "Its edits couldn't be applied again, so it's shown as imported.";
+
+/**
+ * A restored model's kept state, its edits checked against the tree the file gave this time (R25):
+ * when they fit, its counts are the edited model's; when they don't, its edits and moves are dropped
+ * (moves are kept in the edited tree's frames) and it loads as imported, with a warning.
+ */
+function keptStateFor(summary: ModelSummary, result: ImportResult, kept: KeptState): KeptState {
+  if (!kept.edits) {
+    return kept;
+  }
+  try {
+    const structure = new ModelStructure(result.tree, kept.edits);
+    result.stats = editedStats(result.content, structure, result.stats);
+    return kept;
+  } catch (error) {
+    if (!(error instanceof EditsMismatchError)) {
+      throw error;
+    }
+    console.warn(`J3D: ${summary.fileName}'s kept edits don't fit it, so it's shown as imported.`, error);
+    result.warnings = [...result.warnings, EditsDroppedWarning];
+    return { hidden: kept.hidden.filter((node) => node < result.tree.length) };
   }
 }

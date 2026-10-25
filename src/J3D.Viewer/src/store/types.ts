@@ -1,3 +1,4 @@
+import type { ModelEdits } from '../edit/structure';
 import type { KeptPlacement, ModelId, ModelSummary } from '../import/types';
 import type { Projection } from '../view/camera-math';
 
@@ -11,11 +12,15 @@ export interface CameraSnapshot {
   zoom: number;
 }
 
-/** A model the manifest lists, in list order, with its hidden part nodes (D82) and, since M13, its moves (D145). */
+/**
+ * A model the manifest lists, in list order, with its hidden part nodes (D82) and, since M13, its moves
+ * (D145) and since M14 its edits, which the moves are in the frames of.
+ */
 export interface ManifestModel {
   id: ModelId;
   hidden: number[];
   placements?: KeptPlacement[];
+  edits?: ModelEdits;
 }
 
 /**

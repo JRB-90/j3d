@@ -14,6 +14,7 @@ import {
   type Object3D,
 } from 'three';
 import { describe, expect, it } from 'vitest';
+import { ModelStructure, NoEdits } from '../edit/structure';
 import type { TreeNode } from '../import/types';
 import { buildBrepObject, InstancingThreshold } from './brep-object';
 import { EdgeVisibilityAttribute, MaterialCache } from './materials';
@@ -151,8 +152,10 @@ describe('mesh parts', () => {
   it("moves a node with its children, and the whole model by its frame over the import's own root turn (M13, D153, D169)", () => {
     const { root, nodes, tree } = hierarchy();
     root.rotation.x = Math.PI / 2; // as glTF's turn to Z-up
-    root.updateMatrixWorld(true);
-    const parts = new MeshParts(nodes, tree, root);
+    const frame = new Group(); // the viewer's group around the import's root
+    frame.add(root);
+    frame.updateMatrixWorld(true);
+    const parts = new MeshParts(nodes, tree, frame);
 
     expect(parts.placement(ModelFrame).local.equals(new Matrix4())).toBe(true);
     expect(parts.placement(2).local.elements[12]).toBe(3);
@@ -194,6 +197,50 @@ describe('mesh parts', () => {
     expect(parts.addVisibleBounds(new Box3()).min.x).toBe(-0.5);
   });
 
+  it('edits the tree (M14, D153): copies share geometry, moves keep the world, removals hide, and undo puts it back', () => {
+    const { root, nodes, tree } = hierarchy();
+    const frame = new Group();
+    frame.add(root);
+    const parts = new MeshParts(nodes, tree, frame);
+    const [, a, b, c] = nodes as [Object3D, Mesh, Mesh, Group];
+    c.position.x = 10;
+    frame.updateMatrixWorld(true);
+
+    // Copy b into c (node 4), and move b itself into c as well.
+    const kept = parts.setStructure(
+      new ModelStructure(tree, {
+        ...NoEdits,
+        added: [2],
+        children: [
+          { parent: 1, nodes: [] },
+          { parent: 3, nodes: [2, 4] },
+        ],
+      }),
+    );
+    const copy = parts.nodeObjects[4] as Mesh;
+    expect(copy.geometry).toBe(b.geometry);
+    expect([copy.parent, b.parent]).toEqual([c, c]);
+    expect([copy, b].map((object) => object.getWorldPosition(new Vector3()).x)).toEqual([3, 3]);
+    expect(kept.map(({ node, matrix }) => [node, matrix[12]])).toEqual([
+      [2, -7],
+      [4, -7],
+    ]);
+    expect(parts.partNodes).toEqual([1, 2, 4]);
+
+    // Remove a: it's hidden and can't be picked.
+    parts.setStructure(new ModelStructure(tree, { ...NoEdits, added: [2], children: [{ parent: 0, nodes: [3] }, { parent: 1, nodes: [] }, { parent: 3, nodes: [2, 4] }] }));
+    expect(parts.partNodes).toEqual([2, 4]);
+    expect(a.layers.isEnabled(0)).toBe(false);
+    expect(pickDown(frame, (hit) => parts.nodeOf(hit), 0)).toBe(-1);
+
+    parts.setStructure(new ModelStructure(tree));
+    expect(copy.parent).toBeNull();
+    expect(b.parent).toBe(a);
+    expect(b.getWorldPosition(new Vector3()).x).toBeCloseTo(3);
+    expect(a.layers.isEnabled(0)).toBe(true);
+    expect(parts.partNodes).toEqual([1, 2]);
+  });
+
   it('highlights a node by drawing its geometry again where it is', () => {
     const { nodes, tree } = hierarchy();
     const instanced = new InstancedMesh(new BoxGeometry(), new MeshStandardMaterial(), 2);
@@ -231,6 +278,15 @@ describe('keyCommand (D99)', () => {
     expect(keyCommand('o', false, false)).toBe('originFrames');
     expect(keyCommand('w', true, false)).toBeUndefined();
     expect(keyCommand('1', false, true)).toBeUndefined();
+    // Editing (M14, D152, D183).
+    expect(keyCommand('x', false, true)).toBe('cut');
+    expect(keyCommand('c', false, true)).toBe('copy');
+    expect(keyCommand('v', false, true)).toBe('paste');
+    expect(keyCommand('delete', false, false)).toBe('delete');
+    expect(keyCommand('g', false, true)).toBe('group');
+    expect(keyCommand('g', true, true)).toBe('ungroup');
+    expect(keyCommand('f2', false, false)).toBe('rename');
+    expect(keyCommand('c', false, false)).toBeUndefined();
   });
 
   it('ignores everything else, including the letters with Ctrl', () => {

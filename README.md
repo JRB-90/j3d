@@ -27,11 +27,21 @@ drawing all happen in the browser tab.
   ("Position in its parent", "Move by"). Moving one of several copies of a
   part or sub-assembly moves only that one. **Origin frames** (`O`) draws the X, Y and Z axes at the selected
   objects' origins. Moves can be undone and are kept for your next visit; a model's origin is its file's.
+- **Rearrange** a model's assembly (in Object mode): **Cut**, **Copy** and **Paste** objects with the right-click menu
+  or `Ctrl+X`, `Ctrl+C` and `Ctrl+V`; Paste puts copies in the same place, inside a selected assembly, just after a
+  selected part, or else beside the originals, and selects them. Drag a node in the tree onto an assembly to move it
+  there (onto the model's name for the top level), or hold `Ctrl` to copy it. **Delete** removes objects without
+  asking, since **Undo** brings them back; an assembly left empty goes with them. **New assembly** (`Ctrl+G`) groups
+  the selection where its parts are, and opens its name for typing; **Ungroup** (`Ctrl+Shift+G`) does the reverse, and
+  **Rename** (`F2`) renames any node. Nothing moves in 3D. An edit acts on the selection's objects: select all of a
+  sub-assembly's parts and it's the sub-assembly that's copied or deleted. Edits stay within one model, can be undone,
+  and are kept for your next visit; in Model mode `Delete` deletes the selected models, after asking.
 - **Right-click** a part, a tree node or empty space (a click that doesn't drag) for a menu of what you can do there:
-  hide, isolate, move, measure from that point and export the selection, or show all, fit all and export the scene.
-  Each command shows its key; `Esc` closes the menu.
+  hide, isolate, move, measure from that point, edit and export the selection, or show all, fit all, paste and export
+  the scene. Each command shows its key; `Esc` closes the menu.
 - **Hide, isolate and show** parts with the eye beside each model and tree node, or the toolbar buttons and keys
-  below. Isolating fits the view to what's left. **Undo and redo** cover hiding and showing, moving, and deleting a model.
+  below. Isolating fits the view to what's left. **Undo and redo** cover hiding and showing, moving, editing the
+  assembly, and deleting a model.
 - **Measure** CAD models exactly from their BREP geometry: turn on **Measure** (or press `M`) and click a face, edge
   or vertex. That first pick is the **reference**: its own value is drawn on it (an edge's length, a circle's
   diameter, a face's area) and its properties (area, length, radius, normal, axis…) and its part's volume and size
@@ -43,8 +53,8 @@ drawing all happen in the browser tab.
   place, imported again from its kept copy, with its hidden parts and moves.
 - **Your models are kept** for your next visit: each imported file (with its buffers, materials and textures) is
   copied into the browser's private storage for this page, and when you come back the models are imported again in
-  their order, with the parts you hid still hidden, the parts you moved where you put them, and the camera where
-  you left it. **Clear all**, above the list,
+  their order, with the parts you hid still hidden, the parts you moved where you put them, your edits to their
+  assemblies, and the camera where you left it. **Clear all**, above the list,
   removes every model and everything kept. Only one tab keeps models: a second J3D tab says so and keeps nothing.
 - **Export** what you see: the toolbar's **Export** saves every visible part, or only the selection when there is one,
   as **GLB** (with colours, the tree and the BREP edges) or **STL** (binary or ASCII, one uncoloured mesh). A CAD
@@ -95,7 +105,13 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Move the selected part, sub-assembly or model | Drag the triad's arrows or planes; `Ctrl` snaps | | **Move** in the toolbar, or `W`; type X, Y, Z in the panel and press Enter |
 | Turn it | Drag the triad's rings; `Ctrl` snaps to 15° | | `E`; type Rx, Ry, Rz in the panel and press Enter |
 | Show origin frames | | | **Origin frames** in the toolbar, or `O` |
-| Undo, redo (hiding, showing, moving, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
+| Cut, copy, paste the selected objects | | | Right-click menu, or `Ctrl+X`, `Ctrl+C`, `Ctrl+V` |
+| Delete the selected objects (or, in Model mode, models) | | | Right-click menu, or `Delete` |
+| Move a node to another assembly | Drag it in the tree onto the assembly, or the model's name | | Cut, select the assembly, Paste |
+| Copy a node into another assembly | `Ctrl`+drag it in the tree | | Copy, select the assembly, Paste |
+| Group the selection, or ungroup an assembly | | | **New assembly** (`Ctrl+G`), **Ungroup** (`Ctrl+Shift+G`) in the right-click menu |
+| Rename a node | | | **Rename** in the right-click menu, or `F2`; `Enter` keeps it, `Esc` doesn't |
+| Undo, redo (hiding, showing, moving, editing, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
 | Measure | Click a face, edge or vertex (the reference), then others | Tap | **Measure** in the toolbar, or `M`; **Measure from here** in the right-click menu; `Esc` ends it |
 | End the Move or Measure tool | | | `Esc` (again to clear the selection) |
 | Export the scene or the selection | | | **Export** in the toolbar: GLB, STL (binary) or STL (ASCII) |
@@ -125,8 +141,10 @@ and so do models coming back from your last visit or an undo.
   every model that loads also exports: the 200 MB STEP saves as STEP in about 12 seconds and as BREP in 2, and one of
   600 MB, about the largest that loads, as STEP in about half a minute. **Cancel** stops an export at once, although
   the last few seconds of writing a STEP file carry on unseen, and the model's next export waits for them.
-- Moves are kept and drawn, and GLB and STL exports follow them, but a CAD model's STEP and BREP exports still save
-  it as imported until a later version writes the edited assembly.
+- Moves and assembly edits are kept and drawn, and GLB and STL exports follow them, but a CAD model's STEP and BREP
+  exports still save it as imported until a later version writes the edited assembly. Objects can't be moved or
+  copied from one model to another, and a model whose kept edits no longer fit it (if a new version of J3D reads its
+  file differently) comes back as imported, with a warning in the list.
 - Not in this version yet: sections, exploded views, and a phone or tablet layout.
 
 ## Browsers

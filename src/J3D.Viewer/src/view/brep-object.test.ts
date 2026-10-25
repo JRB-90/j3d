@@ -1,6 +1,7 @@
 import type { ImportedScene, PrototypeMesh } from '@j3d/occt/facade';
-import { BatchedMesh, Group, InstancedBufferGeometry, InstancedMesh, LineSegments, Matrix4, type MeshStandardMaterial } from 'three';
+import { BatchedMesh, Box3, Group, InstancedBufferGeometry, InstancedMesh, LineSegments, Matrix4, type MeshStandardMaterial } from 'three';
 import { describe, expect, it } from 'vitest';
+import { ModelStructure, NoEdits, type ModelEdits } from '../edit/structure';
 import { buildBrepObject, InstancingThreshold, toUnorm8 } from './brep-object';
 import { MaterialCache } from './materials';
 import { ModelFrame } from './parts';
@@ -218,6 +219,141 @@ describe('placements (M13, D150)', () => {
 
     parts.setHidden(new Set());
     expect(x(mesh.getMatrixAt(1, new Matrix4()))).toBe(51);
+  });
+});
+
+describe('edits (M14, D151, D152)', () => {
+  /** As in the placements tests: an assembly at 10 holding a (at 10) and b (at 11), and alone at 5. */
+  function assembly(): ImportedScene {
+    return {
+      nodes: [
+        { name: 'assembly', parent: -1, prototype: -1, matrix: translated(10) },
+        { name: 'a', parent: 0, prototype: 0, matrix: identity },
+        { name: 'b', parent: 0, prototype: 0, matrix: translated(1) },
+        { name: 'alone', parent: -1, prototype: 0, matrix: translated(5) },
+      ],
+      instances: [
+        { node: 1, prototype: 0, matrix: translated(10) },
+        { node: 2, prototype: 0, matrix: translated(11) },
+        { node: 3, prototype: 0, matrix: translated(5) },
+      ],
+      prototypes: [prototype()],
+    };
+  }
+
+  const x = (matrix: Matrix4 | readonly number[]) => ('elements' in matrix ? matrix.elements : matrix)[12];
+  const edited = (scene: ImportedScene, edits: Partial<ModelEdits>) => new ModelStructure(scene.nodes, { ...NoEdits, ...edits });
+  const copies = (object: Group) => object.children.find((c): c is InstancedMesh => c instanceof InstancedMesh && c.name.endsWith('copies'));
+
+  it('moves a node to another parent where it is in the world, and says what to keep', () => {
+    const scene = assembly();
+    const { parts } = buildBrepObject('m', scene, new MaterialCache());
+
+    const kept = parts.setStructure(edited(scene, { children: [{ parent: 0, nodes: [1] }, { parent: -1, nodes: [0, 3, 2] }] }));
+
+    expect(kept.map(({ node, matrix }) => [node, x(matrix)])).toEqual([[2, 11]]);
+    expect(x(parts.placement(2).local)).toBe(11);
+    expect(x(parts.placement(2).parentWorld)).toBe(0);
+    expect(scene.instances.map((instance) => x(instance.matrix))).toEqual([10, 11, 5]);
+    // Moving the assembly no longer moves b.
+    expect(parts.setPlacement(0, new Matrix4().makeTranslation(20, 0, 0))).toEqual([1]);
+    expect(x(scene.instances[1]!.matrix)).toBe(11);
+  });
+
+  it('adds a copy where its source is, drawn in its own instanced mesh, which follows its parent and goes on undo', () => {
+    const scene = assembly();
+    const { object, parts } = buildBrepObject('m', scene, new MaterialCache());
+
+    const kept = parts.setStructure(edited(scene, { added: [1], children: [{ parent: 0, nodes: [1, 4, 2] }] }));
+
+    expect(kept.map(({ node, matrix }) => [node, x(matrix)])).toEqual([[4, 0]]);
+    expect(parts.partNodes).toEqual([1, 2, 3, 4]);
+    const mesh = copies(object)!;
+    expect(mesh.count).toBe(1);
+    expect(x(mesh.getMatrixAt(0, new Matrix4()))).toBe(10);
+    expect(parts.nodeBounds(4).min.x).toBe(10);
+    expect(parts.exportScene().instances.map((instance) => instance.node)).toEqual([1, 2, 3, 4]);
+
+    parts.setPlacement(0, new Matrix4().makeTranslation(30, 0, 0));
+    expect(x(mesh.getMatrixAt(0, new Matrix4()))).toBe(30);
+
+    parts.setStructure(new ModelStructure(scene.nodes));
+    expect(mesh.count).toBe(0);
+    expect(parts.partNodes).toEqual([1, 2, 3]);
+    expect(parts.exportScene().instances.map((instance) => instance.node)).toEqual([1, 2, 3]);
+  });
+
+  it('grows the copies in steps, keeping those already drawn, and hides a hidden copy', () => {
+    const scene = assembly();
+    const { object, parts } = buildBrepObject('m', scene, new MaterialCache());
+    const added = Array.from({ length: 10 }, () => 3);
+    const nodes = added.map((_, i) => 4 + i);
+
+    parts.setStructure(edited(scene, { added, children: [{ parent: -1, nodes: [0, 3, ...nodes] }] }));
+
+    const mesh = copies(object)!;
+    expect(mesh.count).toBe(10);
+    expect([0, 9].map((slot) => x(mesh.getMatrixAt(slot, new Matrix4())))).toEqual([5, 5]);
+    parts.setHidden(new Set([13]));
+    expect(mesh.getMatrixAt(9, new Matrix4()).determinant()).toBe(0);
+    parts.setHidden(new Set());
+    expect(x(mesh.getMatrixAt(9, new Matrix4()))).toBe(5);
+  });
+
+  it('hides a removed node with everything under it, and shows it again when it comes back', () => {
+    const scene = assembly();
+    const { object, parts } = buildBrepObject('m', scene, new MaterialCache());
+    const batch = object.children.find((c): c is BatchedMesh => c instanceof BatchedMesh)!;
+
+    parts.setStructure(edited(scene, { children: [{ parent: -1, nodes: [3] }] }));
+    expect([0, 1, 2].map((id) => batch.getVisibleAt(id))).toEqual([false, false, true]);
+    expect(parts.partNodes).toEqual([3]);
+    expect(parts.addVisibleBounds(new Box3()).max.x).toBe(6);
+
+    parts.setStructure(new ModelStructure(scene.nodes));
+    expect([0, 1, 2].map((id) => batch.getVisibleAt(id))).toEqual([true, true, true]);
+  });
+
+  it('undoes a paste, a new assembly holding the copy, a rename and a drop, step by step, with nothing moving', () => {
+    const scene = assembly();
+    const { parts } = buildBrepObject('m', scene, new MaterialCache());
+    const steps: Partial<ModelEdits>[] = [
+      {},
+      { added: [3], children: [{ parent: -1, nodes: [0, 3, 4] }] },
+      { added: [3, -1], children: [{ parent: -1, nodes: [5, 4] }, { parent: 5, nodes: [0, 3] }], names: [{ node: 5, name: 'Assembly 1' }] },
+      { added: [3, -1], children: [{ parent: -1, nodes: [5, 4] }, { parent: 5, nodes: [0, 3] }], names: [{ node: 5, name: 'Fixings' }] },
+      { added: [3, -1], children: [{ parent: -1, nodes: [5] }, { parent: 5, nodes: [0, 3, 4] }], names: [{ node: 5, name: 'Fixings' }] },
+    ];
+    const worlds = () => scene.instances.filter((instance) => instance.node >= 0).map((instance) => [instance.node, x(instance.matrix)]);
+
+    for (const step of [1, 2, 3, 4, 3, 2, 1, 0]) {
+      parts.setStructure(edited(scene, steps[step]!));
+      expect(worlds()).toEqual([[1, 10], [2, 11], [3, 5], ...(step > 0 ? [[4, 5]] : [])]);
+    }
+    expect(parts.partNodes).toEqual([1, 2, 3]);
+    expect(x(parts.placement(0).local)).toBe(10);
+  });
+
+  it("puts a new assembly at its parent's origin (D184), and its children stay where they are", () => {
+    const scene = assembly();
+    const { parts } = buildBrepObject('m', scene, new MaterialCache());
+
+    const kept = parts.setStructure(
+      edited(scene, {
+        added: [-1],
+        children: [
+          { parent: 0, nodes: [1, 4] },
+          { parent: 4, nodes: [2] },
+        ],
+      }),
+    );
+
+    expect(kept.map(({ node, matrix }) => [node, x(matrix)])).toEqual([
+      [4, 0],
+      [2, 1],
+    ]);
+    expect(x(parts.placement(4).parentWorld)).toBe(10);
+    expect(x(scene.instances[1]!.matrix)).toBe(11);
   });
 });
 

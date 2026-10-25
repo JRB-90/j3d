@@ -17,7 +17,10 @@ namespace J3D.Web.Client.Components;
 /// selects its parts (Ctrl+click adds or removes, D77), and a part picked in 3D opens the tree down to
 /// it and scrolls it into view. Since M9 a BREP model's download icon saves it as STEP or BREP, with
 /// the export's progress and Cancel in the item (D125). Since M12 a right click on a node opens the
-/// context menu (D164), and in Model mode a selected model's item is highlighted (D146).
+/// context menu (D164), and in Model mode a selected model's item is highlighted (D146). Since M14 the
+/// tree follows the model's edits, its nodes drag onto assemblies and the model's name in Object mode
+/// (the viewer's tree-drag.ts handles the drag, D182), a node's name is edited in place (D183), and cut
+/// nodes are dimmed (assumption 20).
 /// </summary>
 public sealed partial class ModelListItem(SceneState scene, ViewerSession session, ISnackbar snackbar) : IDisposable
 {
@@ -47,11 +50,18 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     private readonly Dictionary<int, List<TreeItemData<int?>>> _levels = [];
     private bool _treeOpen;
 
+
     /// <summary>The tree items made so far, by node, so a reveal can expand them.</summary>
     private readonly Dictionary<int, TreeItemData<int?>> _items = [];
 
     /// <summary>A node to scroll into view once the tree has rendered it.</summary>
     private int? _pendingScroll;
+
+    /// <summary>The name field while a node is renamed (M14, D183): its text, and whether it still needs focus.</summary>
+    private ElementReference _renameInput;
+    private string _renameText = "";
+    private Renaming? _renaming;
+    private bool _focusRename;
 
     [Parameter, EditorRequired]
     public required ModelEntry Model { get; set; }
@@ -87,14 +97,43 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         ? $"Exporting {export.Format.DisplayName} · {Math.Floor(fraction * 100).ToString(CultureInfo.InvariantCulture)}%"
         : $"Exporting {export.Format.DisplayName}…";
 
-    /// <summary>The memory the model takes in the browser (its worker's heap for a CAD model), then its counts.</summary>
-    private static string StatsText(ModelLoadedInfo info) => string.Join(
+    /// <summary>The memory the model takes in the browser (its worker's heap for a CAD model), then its counts, as edited (M14).</summary>
+    private static string StatsText(ModelLoadedInfo info, ModelStats stats) => string.Join(
         " · ",
         $"{DisplayFormat.Bytes(info.MemoryBytes)} in memory",
-        DisplayFormat.Counted(info.Stats.Triangles, "triangle"),
-        DisplayFormat.Counted(info.Stats.Instances, "part"));
+        DisplayFormat.Counted(stats.Triangles, "triangle"),
+        DisplayFormat.Counted(stats.Instances, "part"));
+
+    /// <summary>Tree nodes drag in Object mode, where edits act on objects (D182, D187).</summary>
+    private bool CanDrag => scene.Mode == SelectMode.Objects;
 
     protected override void OnInitialized() => scene.RevealRequested += OnRevealRequested;
+
+    /// <summary>An edit made a new tree (M14): the open tree shows it, with the same nodes open; and a rename may have started.</summary>
+    protected override void OnParametersSet()
+    {
+        if (_treeOpen && Model.Tree is { } tree && !ReferenceEquals(tree, _tree))
+        {
+            Refresh(tree);
+        }
+
+        var renaming = scene.Renaming is { } current && current.Id == Model.Id ? current : null;
+        if (renaming != _renaming)
+        {
+            _renaming = renaming;
+            if (renaming is not null && Model.Tree is { } named && named.Contains(renaming.Node))
+            {
+                _renameText = named.NameOf(renaming.Node);
+                _focusRename = true;
+                // A new assembly opens, showing what it holds (D185).
+                if (renaming.IsNew && named.HasChildren(renaming.Node) && _items.TryGetValue(renaming.Node, out var item))
+                {
+                    item.Children = Level(renaming.Node);
+                    item.Expanded = true;
+                }
+            }
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -102,6 +141,75 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         {
             _pendingScroll = null;
             await session.ScrollIntoViewAsync($"[data-tree-node=\"{NodeKey(node)}\"]");
+        }
+
+        if (_focusRename && _renaming is not null && _renameInput.Context is not null)
+        {
+            _focusRename = false;
+            await _renameInput.FocusAsync();
+        }
+    }
+
+    private bool IsRenaming(int node) => _renaming is { } renaming && renaming.Node == node;
+
+    /// <summary>Enter keeps the name typed; Esc keeps the one it had (D186).</summary>
+    private void OnRenameKey(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            scene.EndRename(_renameText);
+        }
+        else if (args.Key == "Escape")
+        {
+            scene.EndRename(null);
+        }
+    }
+
+    /// <summary>
+    /// Shows a new tree after an edit, in place: each level shown so far is filled again from the new
+    /// tree, as long as it was, reusing its nodes' items, so open nodes stay open and the tree view's rows
+    /// stay as they were apart from those that changed. Making every row again took the large generated
+    /// plant's tree a quarter of a second per edit.
+    /// </summary>
+    private void Refresh(ModelTree tree)
+    {
+        _tree = tree;
+        foreach (var node in _items.Keys.Where(node => !tree.Contains(node)).ToList())
+        {
+            _items.Remove(node);
+        }
+
+        foreach (var (parent, level) in _levels.ToList())
+        {
+            if (parent != RootLevel && !tree.Contains(parent))
+            {
+                _levels.Remove(parent);
+                continue;
+            }
+
+            var shown = level.Count(static item => item.Value >= 0);
+            level.Clear();
+            AppendPage(parent, level);
+            while (level.Count(static item => item.Value >= 0) < shown && level.Count > 0 && IsShowMore(level[^1]))
+            {
+                level.RemoveAt(level.Count - 1);
+                AppendPage(parent, level);
+            }
+        }
+
+        // Each loaded level is its item's children, which the row shows as updated; a node left with no
+        // children closes.
+        foreach (var (node, item) in _items)
+        {
+            if (_levels.TryGetValue(node, out var level))
+            {
+                item.Children = level;
+            }
+
+            if (item.Expanded && !item.Expandable)
+            {
+                item.Expanded = false;
+            }
         }
     }
 
@@ -158,7 +266,8 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         ' ',
         "j3d-tree-node",
         Model.IsSelected(node) ? "j3d-tree-node--selected" : "",
-        visibility == PartVisibility.Hidden ? "j3d-tree-node--hidden" : "").TrimEnd();
+        visibility == PartVisibility.Hidden ? "j3d-tree-node--hidden" : "",
+        scene.IsCut(Model.Id, node) ? "j3d-tree-node--cut" : "").TrimEnd();
 
     private static string EyeIcon(PartVisibility visibility) =>
         visibility == PartVisibility.Hidden ? Icons.Material.Outlined.VisibilityOff : Icons.Material.Outlined.Visibility;
@@ -175,13 +284,15 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     };
 
     /// <summary>Opening the tree starts it collapsed again: the tree view is new each time.</summary>
-    private void ToggleTree()
+    private void ToggleTree() => ToggleTree(Model.Tree);
+
+    private void ToggleTree(ModelTree? tree)
     {
         _treeOpen = !_treeOpen;
         _levels.Clear();
         _items.Clear();
         _roots = null;
-        if (_treeOpen && Model.Tree is { } tree)
+        if (_treeOpen && tree is not null)
         {
             _tree = tree;
             _roots = Level(RootLevel);
@@ -191,14 +302,19 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     /// <summary>A part picked in 3D (D96): open the tree, expand its ancestors, page to it, then scroll to it.</summary>
     private void OnRevealRequested(ModelId id, int node)
     {
-        if (id != Model.Id || Model.Tree is not { } tree || !tree.Contains(node))
+        // The scene's tree, which an edit may have changed since this item last rendered (New assembly's, M14).
+        if (id != Model.Id || scene.Find(id)?.Tree is not { } tree || !tree.Contains(node))
         {
             return;
         }
 
         if (!_treeOpen)
         {
-            ToggleTree();
+            ToggleTree(tree);
+        }
+        else if (!ReferenceEquals(tree, _tree))
+        {
+            Refresh(tree);
         }
 
         var parent = RootLevel;
@@ -235,8 +351,20 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     }
 
     /// <summary>The tree view asks for a node's children the first time it's expanded.</summary>
-    private Task<IReadOnlyCollection<TreeItemData<int?>>> LoadChildrenAsync(int? parent) =>
-        Task.FromResult<IReadOnlyCollection<TreeItemData<int?>>>(Level(parent ?? RootLevel));
+    /// <remarks>
+    /// The level is also its item's children: the tree view keeps what it loaded in the row's own state,
+    /// and an edit (M14) updates the level in place, which the row then shows.
+    /// </remarks>
+    private Task<IReadOnlyCollection<TreeItemData<int?>>> LoadChildrenAsync(int? parent)
+    {
+        var level = Level(parent ?? RootLevel);
+        if (parent is { } node && _items.TryGetValue(node, out var item))
+        {
+            item.Children = level;
+        }
+
+        return Task.FromResult<IReadOnlyCollection<TreeItemData<int?>>>(level);
+    }
 
     private static bool IsShowMore(ITreeItemData<int?> item) => item.Value < 0;
 
@@ -248,13 +376,19 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         AppendPage(parent, level);
     }
 
-    /// <summary>A level's nodes, created with its first page the first time it's asked for.</summary>
-    private List<TreeItemData<int?>> Level(int parent)
+    /// <summary>A level's nodes, created with its first page (or pages up to <paramref name="minimum"/> nodes) the first time it's asked for.</summary>
+    private List<TreeItemData<int?>> Level(int parent, int minimum = 0)
     {
         if (!_levels.TryGetValue(parent, out var level))
         {
             level = [];
             AppendPage(parent, level);
+            while (level.Count(static item => item.Value >= 0) < minimum && level.Count > 0 && IsShowMore(level[^1]))
+            {
+                level.RemoveAt(level.Count - 1);
+                AppendPage(parent, level);
+            }
+
             _levels[parent] = level;
         }
 
@@ -284,17 +418,19 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         }
     }
 
+    /// <summary>A node's item, made once and brought up to date after an edit (M14).</summary>
     private TreeItemData<int?> ToItem(int index)
     {
         var node = _tree![index];
-        var item = new TreeItemData<int?>
+        if (!_items.TryGetValue(index, out var item))
         {
-            Value = index,
-            Text = string.IsNullOrWhiteSpace(node.Name) ? "(unnamed)" : node.Name,
-            Icon = node.IsPart ? Icons.Material.Outlined.Category : Icons.Material.Outlined.AccountTree,
-            Expandable = _tree.HasChildren(index),
-        };
-        _items[index] = item;
+            item = new TreeItemData<int?> { Value = index };
+            _items[index] = item;
+        }
+
+        item.Text = string.IsNullOrWhiteSpace(node.Name) ? "(unnamed)" : node.Name;
+        item.Icon = node.IsPart ? Icons.Material.Outlined.Category : Icons.Material.Outlined.AccountTree;
+        item.Expandable = _tree.HasChildren(index);
         return item;
     }
 }

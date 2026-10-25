@@ -114,6 +114,36 @@
     opacity: 0.5;
 }
 
+/* A cut node, until it's pasted (M14, assumption 20): dimmed, as a file manager dims cut files. */
+.j3d-model ::deep .j3d-tree-node--cut > .mud-treeview-item-content .j3d-tree-node-name {
+    opacity: 0.5;
+}
+
+/* Where a dragged node would go (D182): DESIGN.md's dashed "drop here" outline. */
+.j3d-model ::deep .j3d-drop-target > .mud-treeview-item-content,
+.j3d-model-header.j3d-drop-target {
+    outline: 1px dashed var(--mud-palette-primary);
+    outline-offset: -1px;
+    border-radius: 4px;
+}
+
+/* A name being edited in place (D183), styled as the move fields are. */
+.j3d-model ::deep .j3d-tree-rename {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 1px 6px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--mud-palette-text-primary);
+    font: inherit;
+}
+
+.j3d-model ::deep .j3d-tree-rename:focus {
+    outline: none;
+    border-color: var(--mud-palette-primary);
+}
+
 .j3d-model ::deep .j3d-tree-node-name {
     flex: 1 1 auto;
     min-width: 0;

@@ -37,6 +37,9 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     /// <summary>What the viewer was last given for each model, so only changes are sent.</summary>
     private readonly Dictionary<ModelId, (PartSet Hidden, PartSet Selected)> _applied = [];
 
+    /// <summary>Each model's edits as last sent to the viewer (M14).</summary>
+    private readonly Dictionary<ModelId, ModelEdits> _appliedEdits = [];
+
     /// <summary>Each model's moved nodes as last sent to the viewer, or as the viewer reported them after a drag (M13).</summary>
     private readonly Dictionary<ModelId, ImmutableDictionary<int, Matrix4d>> _appliedPlacements = [];
 
@@ -113,7 +116,10 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     public void OnPartPicked(string? modelId, int node, bool additive) =>
         scene.Pick(modelId is null ? null : new ModelId(modelId), node, additive);
 
-    /// <summary>A key the viewer caught (D99, D162): Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y, 1, 2 and 3.</summary>
+    /// <summary>
+    /// A key the viewer caught (D99, D162): Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y, 1, 2 and 3; W, E and O
+    /// (M13); Ctrl+X, Ctrl+C, Ctrl+V, Delete, Ctrl+G, Ctrl+Shift+G and F2 (M14).
+    /// </summary>
     [JSInvokable]
     public void OnViewerCommand(string command)
     {
@@ -158,6 +164,38 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             case "originFrames":
                 scene.ToggleOriginFrames();
                 break;
+            case "cut":
+                scene.Cut();
+                break;
+            case "copy":
+                scene.Copy();
+                break;
+            case "paste":
+                scene.Paste();
+                break;
+            case "delete":
+                scene.DeleteSelection();
+                break;
+            case "group":
+                scene.Group();
+                break;
+            case "ungroup":
+                scene.Ungroup();
+                break;
+            case "rename":
+                scene.BeginRename();
+                break;
+        }
+    }
+
+    /// <summary>A tree node (<c>model:node</c>) dropped on an assembly or its model's name (M14, D182): moved there, or copied with Ctrl.</summary>
+    [JSInvokable]
+    public void OnTreeDrop(string source, string modelId, int target, bool copy)
+    {
+        var colon = source.LastIndexOf(':');
+        if (colon > 0 && int.TryParse(source.AsSpan(colon + 1), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var node))
+        {
+            scene.Drop(new ModelId(modelId), node, target, copy);
         }
     }
 
@@ -333,6 +371,24 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             _applied.Remove(id);
         }
 
+        // Edits (M14): sent before the parts, since the selection may hold new nodes. A restored model's
+        // kept edits are the viewer's already, so a first look sends only edits made since.
+        var edits = new List<(ModelId Id, ModelEdits Edits)>();
+        foreach (var model in scene.Models.Where(static model => model.Tree is not null))
+        {
+            if (_appliedEdits.TryGetValue(model.Id, out var sent) ? !ReferenceEquals(sent, model.Edits) : !model.Edits.IsEmpty && model.Info?.Edits is null)
+            {
+                edits.Add((model.Id, model.Edits));
+            }
+
+            _appliedEdits[model.Id] = model.Edits;
+        }
+
+        foreach (var id in _appliedEdits.Keys.Where(id => scene.Find(id) is not { Tree: not null }).ToList())
+        {
+            _appliedEdits.Remove(id);
+        }
+
         // Moves (M13): each loaded model's nodes whose placements differ from what the viewer has.
         var moves = new List<(ModelId Id, int Node, Matrix4d Placement)>();
         foreach (var model in scene.Models.Where(static model => model.Tree is not null))
@@ -388,6 +444,14 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
                 await viewer.SetSelectionModeAsync(selectionMode);
             }
 
+            foreach (var (id, modelEdits) in edits)
+            {
+                if (await viewer.SetStructureAsync(id, modelEdits.ToDto()) is { } stats)
+                {
+                    scene.ReportStats(id, stats);
+                }
+            }
+
             foreach (var model in pending)
             {
                 await viewer.SetPartStateAsync(model.Id, model.Hidden, model.Selected);
@@ -421,6 +485,11 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         catch (JSDisconnectedException)
         {
             // The page is going away.
+        }
+        catch (JSException exception)
+        {
+            // Nothing awaits this, so a failure would otherwise go unseen (M14 found one).
+            Console.Error.WriteLine($"J3D: the viewer couldn't apply a change to the scene: {exception.Message}");
         }
     }
 

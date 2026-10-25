@@ -1,3 +1,4 @@
+import { hasEdits, type ModelEdits } from '../edit/structure';
 import { basename, type BatchFile } from '../import/sidecars';
 import type { KeptPlacement, ModelId, ModelSummary } from '../import/types';
 import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol';
@@ -57,6 +58,8 @@ export class ModelStore {
   private readonly hidden = new Map<ModelId, number[]>();
   /** Each model's moved nodes and their placements in their parents' frames (M13, D145). */
   private readonly placements = new Map<ModelId, Map<number, number[]>>();
+  /** Each model's edits to its tree (M14, D145). */
+  private readonly edits = new Map<ModelId, ModelEdits>();
   /** Models whose copies are complete, so the manifest may list them. */
   private readonly complete = new Set<ModelId>();
   /** Models being copied; a delete meanwhile takes them out, so the finished copy isn't listed. */
@@ -130,6 +133,7 @@ export class ModelStore {
     this.saving.delete(id);
     this.hidden.delete(id);
     this.placements.delete(id);
+    this.edits.delete(id);
     if (this.status === 'kept') {
       this.request({ type: 'delete', id }).catch((error: unknown) => console.warn('J3D: a kept model could not be deleted.', error));
       if (listed) {
@@ -144,6 +148,7 @@ export class ModelStore {
     this.saving.clear();
     this.hidden.clear();
     this.placements.clear();
+    this.edits.clear();
     this.order = [];
     clearTimeout(this.manifestTimer);
     this.manifestTimer = undefined;
@@ -186,6 +191,32 @@ export class ModelStore {
   /** A model's kept moves, to apply when it's imported again. */
   placementsOf(id: ModelId): KeptPlacement[] {
     return [...(this.placements.get(id) ?? [])].map(([node, matrix]) => ({ node, matrix }));
+  }
+
+  /** A model's tree as edited (M14), kept as a whole: .NET sends all its edits each time. */
+  setEdits(id: ModelId, edits: ModelEdits): void {
+    if (hasEdits(edits)) {
+      this.edits.set(id, edits);
+    } else if (!this.edits.delete(id)) {
+      return;
+    }
+    if (this.complete.has(id)) {
+      this.scheduleManifest();
+    }
+  }
+
+  /** A model's kept edits, to apply when it's imported again. */
+  editsOf(id: ModelId): ModelEdits | undefined {
+    return this.edits.get(id);
+  }
+
+  /** Forgets a model's edits and moves: they no longer fit it (R25), so it's kept as imported. */
+  forgetEdits(id: ModelId): void {
+    const edited = this.edits.delete(id);
+    const moved = this.placements.delete(id);
+    if ((edited || moved) && this.complete.has(id)) {
+      this.scheduleManifest();
+    }
   }
 
   setCamera(camera: CameraSnapshot): void {
@@ -236,11 +267,14 @@ export class ModelStore {
 
     const { manifest, metas } = await this.request<{ manifest: Manifest | null; metas: Record<ModelId, StoredMeta> }>({ type: 'open' });
     this.status = 'kept';
-    const models = (manifest?.models ?? []).map(({ id, hidden, placements }) => {
+    const models = (manifest?.models ?? []).map(({ id, hidden, placements, edits }) => {
       this.complete.add(id);
       this.hidden.set(id, hidden);
       if (placements?.length) {
         this.placements.set(id, new Map(placements.map(({ node, matrix }) => [node, matrix])));
+      }
+      if (hasEdits(edits)) {
+        this.edits.set(id, edits);
       }
       return { summary: metas[id]!.summary, hidden };
     });
@@ -320,7 +354,8 @@ export class ModelStore {
       .filter((id) => this.complete.has(id))
       .map((id) => {
         const placements = this.placementsOf(id);
-        return { id, hidden: this.hidden.get(id) ?? [], ...(placements.length > 0 ? { placements } : {}) };
+        const edits = this.edits.get(id);
+        return { id, hidden: this.hidden.get(id) ?? [], ...(placements.length > 0 ? { placements } : {}), ...(edits ? { edits } : {}) };
       });
     this.request({ type: 'manifest', manifest: { version: 1, models, camera: this.camera } }).catch((error: unknown) =>
       console.warn("J3D: the scene couldn't be kept.", error),

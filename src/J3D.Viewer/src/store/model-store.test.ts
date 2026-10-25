@@ -151,6 +151,33 @@ describe('ModelStore', () => {
     expect(reopened.store.placementsOf('b')).toEqual([]);
   });
 
+  it("keeps each model's edits with it, and forgets them with its moves when they no longer fit (M14, R25)", async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const first = openTab(disk, locks);
+    await first.store.opened;
+    first.store.setOrder(['a', 'b']);
+    await first.store.save(summary('a'), [source('a.step')]);
+    await first.store.save(summary('b'), [source('b.step')]);
+    const edits = { added: [1], children: [{ parent: 0, nodes: [1, 3] }], names: [{ node: 3, name: 'copy' }] };
+    first.store.setEdits('a', edits);
+    first.store.setEdits('b', edits);
+    first.store.setPlacement('b', 3, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, 0, 1]);
+    first.store.forgetEdits('b');
+    await first.store.idle();
+    first.store.dispose();
+    await first.store.idle();
+
+    const reopened = openTab(disk, locks);
+    await reopened.store.opened;
+    expect(reopened.store.editsOf('a')).toEqual(edits);
+    expect(reopened.store.editsOf('b')).toBeUndefined();
+    expect(reopened.store.placementsOf('b')).toEqual([]);
+
+    reopened.store.setEdits('a', { added: [], children: [], names: [] }); // every edit undone
+    expect(reopened.store.editsOf('a')).toBeUndefined();
+  });
+
   it('gathers changes into one manifest write', async () => {
     const tab = openTab(new FakeDisk(), new FakeLocks());
     await tab.store.opened;

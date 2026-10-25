@@ -1,5 +1,6 @@
 import type { EntityMeasure, EntityRef, ImportedScene, PairMeasure } from '@j3d/occt/facade';
 import type { Object3D } from 'three';
+import type { ModelEdits } from '../edit/structure';
 import type { ModelFormat, ModelKind } from '../formats';
 import type { BrepExportFormat } from './protocol';
 
@@ -123,7 +124,15 @@ export interface LoadedModel extends ImportResult {
   summary: ModelSummary;
   /**
    * Imported again from its kept files, after a reload or an undone delete (M8): the hidden parts to
-   * apply as it's added. The view doesn't fit to it (D111).
+   * apply as it's added, its moves (M13) and its edits (M14), which have been checked against its tree
+   * (R25). The view doesn't fit to it (D111).
    */
-  restored?: { hidden: number[]; placements?: KeptPlacement[] };
+  restored?: KeptState;
+}
+
+/** What's kept of a model besides its files: hidden parts (D82), moves (M13) and edits (M14). */
+export interface KeptState {
+  hidden: number[];
+  placements?: KeptPlacement[];
+  edits?: ModelEdits;
 }

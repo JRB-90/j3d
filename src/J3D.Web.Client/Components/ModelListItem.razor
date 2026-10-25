@@ -1,5 +1,5 @@
 <div class="@ItemClass" data-testid="model-item" data-status="@StatusName" data-selected="@(ModelSelected ? "true" : "false")">
-    <div class="j3d-model-header">
+    <div class="j3d-model-header" data-model-drop="@(Model.Tree is not null ? Model.Id.Value : null)">
         <span class="j3d-model-name" title="@Model.Summary.FileName" data-testid="model-name">@Model.Summary.FileName</span>
         <span class="j3d-model-format" data-testid="model-format">@Model.Summary.Format.DisplayName</span>
         @if (KindLabel != Model.Summary.Format.DisplayName)
@@ -82,7 +82,7 @@
 
         case ModelStatus.Loaded when Model.Info is { } info:
             <div class="j3d-model-detail" data-testid="model-status">
-                <span>@StatsText(info)</span>
+                <span>@StatsText(info, Model.Stats ?? info.Stats)</span>
                 @if (info.Warnings.Count > 0)
                 {
                     <MudTooltip>
@@ -160,7 +160,10 @@
                         {
                             var node = context.Value!.Value;
                             var visibility = Model.VisibilityOf(node);
-                            <MudTreeViewItem Value="@context.Value"
+                            var renaming = IsRenaming(node);
+                            @* Keyed by node: after an edit (M14) a row mustn't show another node's children. *@
+                            <MudTreeViewItem @key="@node"
+                                             Value="@context.Value"
                                              Text="@context.Text"
                                              Icon="@context.Icon"
                                              CanExpand="@context.Expandable"
@@ -169,14 +172,32 @@
                                              ReadOnly="true"
                                              OnClick="@(args => SelectNode(node, args))"
                                              Class="@NodeClass(node, visibility)"
+                                             draggable="@(CanDrag && !renaming ? "true" : "false")"
                                              data-tree-node="@NodeKey(node)"
+                                             data-tree-assembly="@(_tree!.IsAssembly(node) ? "true" : "false")"
                                              data-selected="@(Model.IsSelected(node) ? "true" : "false")"
                                              data-testid="model-tree-node">
                                 <BodyContent Context="item">
-                                    <span class="j3d-tree-node-name"
-                                          @oncontextmenu="@(args => OpenNodeMenu(node, args))"
-                                          @oncontextmenu:preventDefault="true"
-                                          @oncontextmenu:stopPropagation="true">@context.Text</span>
+                                    @if (renaming)
+                                    {
+                                        <input @ref="_renameInput"
+                                               class="j3d-tree-rename"
+                                               aria-label="@($"Name of {context.Text}")"
+                                               value="@_renameText"
+                                               @oninput="@(args => _renameText = args.Value?.ToString() ?? "")"
+                                               @onkeydown="OnRenameKey"
+                                               @onblur="@(() => Scene.EndRename(_renameText))"
+                                               @onclick:stopPropagation="true"
+                                               onfocus="this.select()"
+                                               data-testid="tree-rename" />
+                                    }
+                                    else
+                                    {
+                                        <span class="j3d-tree-node-name"
+                                              @oncontextmenu="@(args => OpenNodeMenu(node, args))"
+                                              @oncontextmenu:preventDefault="true"
+                                              @oncontextmenu:stopPropagation="true">@context.Text</span>
+                                    }
                                     <span class="j3d-tree-node-eye" @onclick:stopPropagation="true">
                                         <MudIconButton Icon="@EyeIcon(visibility)"
                                                        Size="Size.Small"

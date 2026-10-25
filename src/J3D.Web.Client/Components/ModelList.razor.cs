@@ -1,4 +1,5 @@
 using J3D.Web.Client.Interop;
+using J3D.Web.Client.Models;
 using J3D.Web.Client.State;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
@@ -15,11 +16,35 @@ public sealed partial class ModelList(SceneState scene, ViewerSession session, I
 {
     private SceneState Scene => scene;
 
-    protected override void OnInitialized() => scene.Changed += OnSceneChanged;
+    protected override void OnInitialized()
+    {
+        scene.Changed += OnSceneChanged;
+        scene.DeleteModelsRequested += OnDeleteModelsRequested;
+    }
 
-    public void Dispose() => scene.Changed -= OnSceneChanged;
+    public void Dispose()
+    {
+        scene.Changed -= OnSceneChanged;
+        scene.DeleteModelsRequested -= OnDeleteModelsRequested;
+    }
 
     private void OnSceneChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>Delete in Model mode (D187): the selected models go after one question, as one model's delete does (D29).</summary>
+    private void OnDeleteModelsRequested(IReadOnlyList<ModelId> ids) => _ = InvokeAsync(async () =>
+    {
+        if (ids is [var only] && scene.Find(only) is { } model)
+        {
+            await RemoveAsync(model);
+            return;
+        }
+
+        RenderFragment message = builder => builder.AddContent(0, $"Delete the {ids.Count} selected models? Undo brings each back.");
+        if (await ConfirmDialog.AskAsync(dialogs, "Delete models", message, "Delete", Icons.Material.Outlined.Delete, "confirm-delete"))
+        {
+            scene.DeleteModels(ids);
+        }
+    });
 
     private async Task RemoveAsync(ModelEntry model)
     {

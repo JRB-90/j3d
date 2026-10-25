@@ -7,6 +7,7 @@ import type { ImportedScene, PrototypeMesh } from '@j3d/occt/facade';
 import { readFileSync } from 'node:fs';
 import { Box3, Group, LineSegments, Matrix4, Mesh, type MeshStandardMaterial, type Object3D } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { ModelStructure } from '../edit/structure';
 import type { ModelFormat } from '../formats';
 import { describeMeshModel } from '../import/mesh/describe';
 import { importGltf } from '../import/mesh/gltf-import';
@@ -119,6 +120,42 @@ describe('buildExportScene', () => {
 
     expect(top.matrixWorld.elements.slice(12, 15)).toEqual([100, 0, 35]);
     expect(pin.matrixWorld.elements.slice(12, 15)).toEqual([110, 20, 0]);
+    built.dispose();
+  });
+
+  it('exports the tree as edited (M14): a copy, a new assembly holding a moved part, and nothing removed', () => {
+    const scene = bracket();
+    const placements = [translated(0), translated(0), translated(0, 0, 35), translated(10, 20, 0)];
+    scene.nodes.forEach((node, index) => (node.matrix = placements[index]!));
+    const { parts } = buildBrepObject('bracket.step', scene, new MaterialCache());
+    // Copy the pin (4), group it with the top plate under "Fixings" (5), and remove the bottom plate.
+    const structure = new ModelStructure(scene.nodes, {
+      added: [3, -1],
+      children: [
+        { parent: 0, nodes: [3, 5] },
+        { parent: 5, nodes: [2, 4] },
+      ],
+      names: [{ node: 5, name: 'Fixings' }],
+    });
+    parts.setStructure(structure);
+
+    const built = buildExportScene([brepSource({ tree: structure.nodes, order: structure.order(), content: { kind: 'brep', scene: parts.exportScene() } })], false, 'gltf');
+
+    expect(names(built.scene.children[0]!)).toEqual({
+      name: 'Bracket assembly',
+      children: [
+        { name: 'Pin', children: [] },
+        {
+          name: 'Fixings',
+          children: [
+            { name: 'Plate (top)', children: [] },
+            { name: 'Pin', children: [] },
+          ],
+        },
+      ],
+    });
+    const [pin, fixings] = (built.scene.children[0] as Group).children as [Mesh, Group];
+    expect((fixings.children[1] as Mesh).matrixWorld.elements.slice(12, 15)).toEqual(pin.matrixWorld.elements.slice(12, 15));
     built.dispose();
   });
 

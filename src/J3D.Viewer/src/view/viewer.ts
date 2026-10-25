@@ -26,7 +26,9 @@ import {
   type Texture,
 } from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import type { BrepMeasurer, LoadedModel, ModelId, TreeNode, Vector3Tuple } from '../import/types';
+import { editedStats } from '../edit/stats';
+import { ModelStructure, sameEdits, type ModelEdits } from '../edit/structure';
+import type { BrepMeasurer, KeptPlacement, LoadedModel, ModelId, ModelStats, Vector3Tuple } from '../import/types';
 import type { CameraSnapshot } from '../store/types';
 import { buildBrepObject } from './brep-object';
 import { buildExportScene, exportFileName, type ExportSource } from './export-scene';
@@ -132,7 +134,14 @@ export type ViewerCommand =
   | 'selectFeatures'
   | 'moveTranslate'
   | 'moveRotate'
-  | 'originFrames';
+  | 'originFrames'
+  | 'cut'
+  | 'copy'
+  | 'paste'
+  | 'delete'
+  | 'group'
+  | 'ungroup'
+  | 'rename';
 
 /**
  * The Move tool's target and where it is (M13, D148): its placement in its parent's frame and that
@@ -188,10 +197,15 @@ interface SceneModel {
   hidden: Set<number>;
   selected: number[];
   selection?: Highlight | undefined;
-  tree: readonly TreeNode[];
-  /** Its file name and geometry, for exports (M9). */
+  /** Its tree as edited (M14). */
+  structure: ModelStructure;
+  /** Its file name and geometry as edited, for exports (M9). */
   name: string;
-  content: ExportSource['content'];
+  content: () => ExportSource['content'];
+  /** What it draws as imported, which edits change (M14). */
+  stats: ModelStats;
+  /** Its import's content, for its counts once edited. */
+  imported: LoadedModel['content'];
   /** BREP models' measurement channel (M7). */
   measure?: BrepMeasurer | undefined;
   prototypes?: MeasureModel['prototypes'];
@@ -450,6 +464,7 @@ export class Viewer {
     const wasEmpty = this.models.size === 0;
     const bounds = new Box3(new Vector3(...model.bounds.min), new Vector3(...model.bounds.max));
     let entry: SceneModel;
+    const structure = new ModelStructure(model.tree);
     if (model.content.kind === 'brep') {
       const built = buildBrepObject(model.summary.fileName, model.content.scene, this.materials);
       entry = {
@@ -458,26 +473,36 @@ export class Viewer {
         parts: built.parts,
         hidden: new Set(),
         selected: [],
-        tree: model.tree,
+        structure,
         name: model.summary.fileName,
-        content: { kind: 'brep', scene: model.content.scene },
+        content: () => ({ kind: 'brep', scene: built.parts.exportScene() }),
+        stats: model.stats,
+        imported: model.content,
         measure: model.content.measure,
         prototypes: model.content.scene.prototypes,
         unitScale: 1,
         dispose: built.dispose,
       };
     } else {
-      model.content.root.updateMatrixWorld(true);
-      const parts = new MeshParts(model.content.nodes, model.tree, model.content.root);
+      // The model's frame (D169) is a group around the import's root, which keeps its own placement
+      // (glTF's turn to Z-up); an STL's or OBJ's root is its first node, so copies of it go beside it here.
+      const frame = new Group();
+      frame.name = model.summary.fileName;
+      frame.add(model.content.root);
+      frame.updateMatrixWorld(true);
+      const parts = new MeshParts(model.content.nodes, model.tree, frame);
+      const sceneRoot = model.summary.format === 'gltf';
       entry = {
-        object: model.content.root,
+        object: frame,
         bounds,
         parts,
         hidden: new Set(),
         selected: [],
-        tree: model.tree,
+        structure,
         name: model.summary.fileName,
-        content: { kind: 'mesh', nodes: model.content.nodes, sceneRoot: model.summary.format === 'gltf' },
+        content: () => ({ kind: 'mesh', nodes: parts.nodeObjects, sceneRoot }),
+        stats: model.stats,
+        imported: model.content,
         // glTF is in metres by its specification, unless it's J3D's own (D123); STL and OBJ are taken as
         // millimetres (D105, assumption 13).
         unitScale: model.content.unitScale ?? 1,
@@ -486,11 +511,16 @@ export class Viewer {
     this.models.set(model.summary.id, entry);
     this.scene.add(entry.object);
     this.sortedMaterials = undefined;
-    // A kept model's moves (M13, D145): parents before children, as the tree lists them.
+    // A kept model's edits (M14), checked as it loaded (R25), then its moves (M13, D145), which since
+    // M14 include the placements its edits worked out.
+    if (model.restored?.edits) {
+      entry.structure = new ModelStructure(model.tree, model.restored.edits);
+      entry.parts.setStructure(entry.structure);
+    }
     for (const { node, matrix } of [...(model.restored?.placements ?? [])].sort((a, b) => a.node - b.node)) {
       entry.parts.setPlacement(node, new Matrix4().fromArray(matrix));
     }
-    if (model.restored?.placements?.length) {
+    if (model.restored?.placements?.length || model.restored?.edits) {
       const moved = entry.parts.addVisibleBounds(new Box3());
       entry.bounds = moved.isEmpty() ? entry.bounds : moved;
     }
@@ -550,10 +580,54 @@ export class Viewer {
   /** Where a node (or a model) is, for .NET's fields and for tests (M13). */
   placementOf(target: MoveTarget): Placement | undefined {
     const entry = this.models.get(target.id);
-    if (!entry || (target.node !== ModelFrame && !entry.tree[target.node])) {
+    if (!entry || (target.node !== ModelFrame && !entry.structure.isLive(target.node))) {
       return undefined;
     }
     return entry.parts.placement(target.node);
+  }
+
+  /**
+   * A model's tree as edited (M14), as .NET holds it: copies and new assemblies are added, moved nodes
+   * stay where they are in the world, removed ones go from view, and the selection, measurements and
+   * tools let go of what's gone. Returns the placements worked out again, to keep, and what the model
+   * now draws; undefined when the edits don't fit the model or nothing changed.
+   */
+  setStructure(id: ModelId, edits: ModelEdits): { placements: KeptPlacement[]; stats: ModelStats } | undefined {
+    const entry = this.models.get(id);
+    if (!entry || sameEdits(entry.structure.edits, edits)) {
+      return undefined;
+    }
+    let structure: ModelStructure;
+    try {
+      structure = new ModelStructure(entry.structure.fileTree, edits);
+    } catch (error) {
+      console.error(`J3D: ${entry.name}'s edits don't fit its tree.`, error);
+      return undefined;
+    }
+    entry.structure = structure;
+    const placements = entry.parts.setStructure(structure);
+    const gone = new Set(structure.nodes.flatMap((_, node) => (structure.isLive(node) ? [] : [node])));
+    this.measureTool.dropHidden(id, gone);
+    this.features.dropHidden(id, gone);
+    if (this.hovered?.id === id) {
+      this.setHovered(undefined);
+    }
+    // Nothing selected moves in an edit, so the overlay changes only when a selected part went.
+    const selected = entry.selected.filter((node) => structure.isLive(node));
+    if (selected.length !== entry.selected.length) {
+      entry.selected = selected;
+      this.setSelectionHighlight(entry, selected.length > 0 ? entry.parts.highlight(selected, 'selected', this.highlights) : undefined);
+    }
+    const bounds = entry.parts.addVisibleBounds(new Box3());
+    entry.bounds = bounds.isEmpty() ? entry.bounds : bounds;
+    this.updateSceneBounds();
+    if (this.originTargets.length > 0) {
+      this.setOriginFrames(this.originTargets);
+    }
+    this.moveTool.refresh();
+    this.reportMoveTarget(true);
+    this.requestRender();
+    return { placements, stats: editedStats(entry.imported, structure, entry.stats) };
   }
 
   /** Draws the origin frames at these objects (D150), or none. */
@@ -672,10 +746,11 @@ export class Viewer {
    * there's nothing to save.
    */
   async exportMesh(format: MeshExportFormat, selection: boolean): Promise<{ fileName: string; bytes: Uint8Array<ArrayBuffer> }> {
-    const sources: ExportSource[] = [...this.models.values()].map(({ name, tree, content, hidden, selected, unitScale }) => ({
+    const sources: ExportSource[] = [...this.models.values()].map(({ name, structure, content, hidden, selected, unitScale }) => ({
       name,
-      tree,
-      content,
+      tree: structure.nodes,
+      order: structure.order(),
+      content: content(),
       hidden,
       selected,
       unitScale,
@@ -859,7 +934,7 @@ export class Viewer {
       measure: entry.measure,
       prototypes: entry.prototypes,
       unitScale: entry.unitScale,
-      nameOf: (node) => entry.tree[node]?.name || '(unnamed)',
+      nameOf: (node) => entry.structure.nodes[node]?.name || '(unnamed)',
     };
   }
 
@@ -1226,6 +1301,9 @@ export class Viewer {
     }
     const key = event.key.toLowerCase();
     const command = event.ctrlKey || event.metaKey ? keyCommand(key, event.shiftKey, true) : keyCommand(key, event.shiftKey, false);
+    if ((command === 'copy' || command === 'cut') && !(window.getSelection()?.isCollapsed ?? true)) {
+      return; // text selected on the page: the browser's own copy
+    }
     if (command === 'fit') {
       this.fitAll();
     } else if (command) {
@@ -1464,16 +1542,33 @@ export class Viewer {
 
 /**
  * D99's keys: `F` fits; Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z), 1, 2 and 3 (D162),
- * and W, E and O (M13, D166, D171) go to .NET.
+ * W, E and O (M13, D166, D171), and Ctrl+X, Ctrl+C, Ctrl+V, Delete, Ctrl+G, Ctrl+Shift+G and F2 (M14,
+ * D152, D183) go to .NET.
  */
 export function keyCommand(key: string, shift: boolean, control: boolean): ViewerCommand | 'fit' | undefined {
   if (control) {
-    if (key === 'z') {
-      return shift ? 'redo' : 'undo';
+    switch (key) {
+      case 'z':
+        return shift ? 'redo' : 'undo';
+      case 'y':
+        return 'redo';
+      case 'x':
+        return shift ? undefined : 'cut';
+      case 'c':
+        return shift ? undefined : 'copy';
+      case 'v':
+        return shift ? undefined : 'paste';
+      case 'g':
+        return shift ? 'ungroup' : 'group';
+      default:
+        return undefined;
     }
-    return key === 'y' ? 'redo' : undefined;
   }
   switch (key) {
+    case 'delete':
+      return 'delete';
+    case 'f2':
+      return 'rename';
     case 'f':
       return 'fit';
     case 'escape':

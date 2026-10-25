@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ModelImportError } from './errors';
-import { ModelManager, type ModelManagerListener } from './model-manager';
+import { EditsDroppedWarning, ModelManager, type ModelManagerListener } from './model-manager';
 import type { ImportRequest, ImportRunner, ImportTask } from './runner';
 import { UnusedSidecarReason, type BatchFile } from './sidecars';
 import type { ImportResult } from './types';
@@ -222,6 +222,56 @@ describe('ModelManager', () => {
     expect(events).toContain('removed cancelled');
     expect(tasks).toHaveLength(0);
     expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it("restores a kept model's edits that fit its tree, with the edited model's counts, and drops those that don't (M14, R25)", async () => {
+    const { manager, tasks } = setup();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = (): ImportResult => ({
+      ...loadedResult(),
+      content: {
+        kind: 'brep',
+        scene: {
+          nodes: [
+            { name: 'assembly', parent: -1, prototype: -1 },
+            { name: 'bolt', parent: 0, prototype: 0 },
+          ],
+          instances: [{ node: 1, prototype: 0, matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }],
+          prototypes: [{ indices: new Uint32Array(6), edges: new Float32Array(12) } as never],
+        },
+      },
+      tree: [
+        { name: 'assembly', parent: -1, prototype: -1 },
+        { name: 'bolt', parent: 0, prototype: 0 },
+      ],
+      stats: { nodes: 2, prototypes: 1, instances: 1, triangles: 2, edges: 2, textures: 0 },
+    });
+    const summary = (id: string) => ({ id, fileName: `${id}.step`, format: 'step', kind: 'brep', sizeBytes: 4 }) as const;
+    const copied = { added: [1, 1], children: [{ parent: 0, nodes: [1, 2, 3] }], names: [] };
+    const loaded: { id: string; restored: unknown; stats: unknown; warnings: string[] }[] = [];
+    manager.subscribe({ loaded: (model) => loaded.push({ id: model.summary.id, restored: model.restored, stats: model.stats, warnings: model.warnings }) });
+
+    manager.importStored(summary('fits'), Promise.resolve(files('fits.step')), [3], [{ node: 2, matrix: [] }], copied);
+    manager.importStored(summary('changed'), Promise.resolve(files('changed.step')), [1, 3], [{ node: 2, matrix: [] }], { ...copied, added: [5] });
+    await flush();
+    tasks.forEach((task) => task.resolve(result()));
+    await flush();
+
+    expect(loaded).toEqual([
+      {
+        id: 'fits',
+        restored: { hidden: [3], placements: [{ node: 2, matrix: [] }], edits: copied },
+        stats: { nodes: 4, prototypes: 1, instances: 3, triangles: 6, edges: 6, textures: 0 },
+        warnings: [],
+      },
+      {
+        id: 'changed',
+        restored: { hidden: [1] },
+        stats: { nodes: 2, prototypes: 1, instances: 1, triangles: 2, edges: 2, textures: 0 },
+        warnings: [EditsDroppedWarning],
+      },
+    ]);
     warn.mockRestore();
   });
 

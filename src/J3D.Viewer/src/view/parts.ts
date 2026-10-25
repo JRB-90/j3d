@@ -18,8 +18,9 @@ import {
   type Material,
   type Object3D,
 } from 'three';
+import { ModelStructure, TopLevel } from '../edit/structure';
 import { isJ3dEdges } from '../import/mesh/j3d-gltf';
-import type { TreeNode, Vector3Tuple } from '../import/types';
+import type { KeptPlacement, TreeNode, Vector3Tuple } from '../import/types';
 
 /** The accent colour (docs/plan.md §6.6), used for the selection and, fainter, for hover (assumption 8). */
 export const AccentColour = new Color(0x4f9dff);
@@ -97,6 +98,13 @@ export interface ModelParts {
    * under it moves with it. Returns the part nodes that moved.
    */
   setPlacement(node: number, local: Matrix4): number[];
+  /**
+   * Applies the model's tree as edited (M14, D151, D152): copies and new assemblies are added, nodes
+   * that changed parents keep where they are in the world, and removed nodes are dropped from view
+   * and from picking. Returns the nodes whose placements in their parents' frames were worked out
+   * again, to be kept as moves are.
+   */
+  setStructure(structure: ModelStructure): KeptPlacement[];
 }
 
 /** The node number that stands for a whole model (M13, D169). */
@@ -181,42 +189,160 @@ export class HighlightMaterials {
  * The parts of a mesh model: each tree node whose object has geometry (a glTF node's mesh, an OBJ
  * object, an STL's single mesh; D81). Hiding moves the object to {@link HiddenLayer}, which hides it
  * but not its children; the highlight draws the same geometry again with the accent material.
+ *
+ * Since M14 its tree can change (D153): a copy is a shallow clone of its source's object, sharing its
+ * geometry and materials; a new assembly is an empty group; a node that changes parents is attached to
+ * its new parent's object where it is in the world; and a removed part is hidden as a hidden one is.
  */
 export class MeshParts implements ModelParts {
-  readonly partNodes: readonly number[];
+  partNodes: readonly number[];
+  /** Each node's object, the file's and then the added ones'. */
+  private readonly objects: Object3D[];
   private readonly nodeOfObject = new Map<Object3D, number>();
   private readonly hidden = new Set<number>();
+  private hiddenNodes: ReadonlySet<number> = new Set();
   private boxes: Map<number, Box3> | undefined;
-  /** The model's frame (M13, D169), and the root's own placement as imported (glTF's turn to Z-up, say). */
+  /** The model's frame (M13, D169), which the frame object (a group around the import's root) is placed by. */
   private readonly frame = new Matrix4();
-  private readonly rootStart: Matrix4 | undefined;
+  /** Where the model's top-level nodes hang: the file's own root's parent (glTF's turn to Z-up, or the frame). */
+  private readonly topParent: Object3D | undefined;
+  private structure: ModelStructure;
 
   constructor(
-    private readonly objects: readonly Object3D[],
+    objects: readonly Object3D[],
     tree: readonly TreeNode[],
-    private readonly root?: Object3D,
+    private readonly frameObject?: Object3D,
   ) {
-    this.rootStart = root?.matrix.clone();
-    const parts: number[] = [];
-    tree.forEach((node, index) => {
-      const object = objects[index];
-      if (node.prototype >= 0 && object) {
-        parts.push(index);
-        this.nodeOfObject.set(object, index);
-      }
-    });
-    this.partNodes = parts;
+    this.objects = [...objects];
+    this.topParent = objects[0]?.parent ?? frameObject;
+    this.structure = new ModelStructure(tree);
+    this.partNodes = this.liveParts();
+  }
+
+  /** Each node's object, by node, for exports (M9). */
+  get nodeObjects(): readonly Object3D[] {
+    return this.objects;
   }
 
   nodeOf(hit: Intersection): number {
-    return this.nodeOfObject.get(hit.object) ?? -1;
+    const node = this.nodeOfObject.get(hit.object);
+    return node !== undefined && this.structure.isLive(node) ? node : -1;
   }
 
   setHidden(hidden: ReadonlySet<number>): void {
-    for (const node of this.partNodes) {
-      const hide = hidden.has(node);
+    this.hiddenNodes = hidden;
+    this.applyVisibility();
+  }
+
+  /**
+   * The tree as edited (M14), as BREP models apply it (see BrepParts.setStructure): copies dropped by
+   * an undo go, new nodes are made where their sources are (a new assembly at its parent's origin,
+   * D184), each node whose parent changed is attached to its new parent keeping its place in the world
+   * (D151), and removed parts are hidden.
+   */
+  setStructure(next: ModelStructure): KeptPlacement[] {
+    const previous = this.structure;
+    const fileCount = previous.fileTree.length;
+    let kept = fileCount;
+    while (kept < Math.min(previous.count, next.count) && previous.sources[kept] === next.sources[kept]) {
+      kept++;
+    }
+    const discarded = this.objects.splice(kept);
+    this.topParent?.updateWorldMatrix(true, true);
+    this.objects.slice(0, kept).forEach((object) => object.updateWorldMatrix(true, false));
+
+    // Where each new node goes in the world: a copy where its source is, a new assembly at its parent's origin.
+    const worlds = new Map<number, Matrix4>();
+    const worldOf = (node: number): Matrix4 => {
+      if (node === TopLevel) {
+        return this.topParent?.matrixWorld.clone() ?? new Matrix4();
+      }
+      if (node < kept) {
+        return this.objects[node]!.matrixWorld.clone();
+      }
+      let world = worlds.get(node);
+      if (!world) {
+        const source = next.sources[node]!;
+        world = source >= 0 ? worldOf(source) : worldOf(next.nodes[node]!.parent);
+        worlds.set(node, world);
+      }
+      return world;
+    };
+    for (let node = kept; node < next.count; node++) {
+      worldOf(node);
+    }
+    for (let node = kept; node < next.count; node++) {
+      const source = next.sources[node]!;
+      const object = source >= 0 ? cloneNode(this.objects[source]!) : new Group();
+      object.name = next.nodes[node]!.name;
+      this.objects.push(object);
+    }
+
+    const changed: KeptPlacement[] = [];
+    const place = (node: number, parent: number) => {
+      const object = this.objects[node]!;
+      const target = parent === TopLevel ? this.topParent : this.objects[parent];
+      if (!target) {
+        return;
+      }
+      const world = node >= kept ? worldOf(node) : object.matrixWorld.clone();
+      target.updateWorldMatrix(true, false);
+      target.add(object);
+      setObjectMatrix(object, target.matrixWorld.clone().invert().multiply(world));
+      object.updateMatrixWorld(true);
+      changed.push({ node, matrix: object.matrix.toArray() });
+    };
+    for (const node of next.order()) {
+      const parent = next.nodes[node]!.parent;
+      const target = parent === TopLevel ? this.topParent : this.objects[parent];
+      if (node >= kept || this.objects[node]!.parent !== target) {
+        place(node, parent);
+      }
+    }
+    for (let node = kept; node < next.count; node++) {
+      if (!next.isLive(node)) {
+        place(node, next.nodes[node]!.parent); // added, and removed again since (restoring kept edits)
+      }
+    }
+    for (const object of discarded) {
+      // Anything of the file's still under a dropped copy stays where it is in the world.
+      for (const child of [...object.children]) {
+        if (this.objects.includes(child)) {
+          (object.parent ?? this.topParent)?.attach(child);
+        }
+      }
+      object.removeFromParent();
+    }
+
+    this.structure = next;
+    this.nodeOfObject.clear();
+    this.partNodes = this.liveParts();
+    this.boxes = undefined;
+    this.applyVisibility();
+    return changed;
+  }
+
+  /** The live part nodes, which can be picked by their objects. */
+  private liveParts(): number[] {
+    const parts = this.structure.parts().filter((node) => this.objects[node]);
+    this.nodeOfObject.clear();
+    this.structure.nodes.forEach((node, index) => {
+      if (node.prototype >= 0 && this.objects[index]) {
+        this.nodeOfObject.set(this.objects[index]!, index);
+      }
+    });
+    return parts;
+  }
+
+  /** Hides hidden parts and removed ones (M14), and shows the rest. */
+  private applyVisibility(): void {
+    this.structure.nodes.forEach((treeNode, node) => {
+      const object = this.objects[node];
+      if (treeNode.prototype < 0 || !object) {
+        return;
+      }
+      const hide = this.hiddenNodes.has(node) || !this.structure.isLive(node);
       if (hide !== this.hidden.has(node)) {
-        const object = this.objects[node]!;
         object.layers.set(hide ? HiddenLayer : 0);
         // J3D's own GLB: a BREP part's edges go with it (D124).
         object.children.filter(isJ3dEdges).forEach((edges) => edges.layers.set(hide ? HiddenLayer : 0));
@@ -226,7 +352,7 @@ export class MeshParts implements ModelParts {
           this.hidden.delete(node);
         }
       }
-    }
+    });
   }
 
   addVisibleBounds(target: Box3): Box3 {
@@ -325,12 +451,12 @@ export class MeshParts implements ModelParts {
   setPlacement(node: number, local: Matrix4): number[] {
     let object: Object3D | undefined;
     if (node === ModelFrame) {
-      if (!this.root || !this.rootStart) {
+      if (!this.frameObject) {
         return [];
       }
       this.frame.copy(local);
-      object = this.root;
-      setObjectMatrix(object, local.clone().multiply(this.rootStart));
+      object = this.frameObject;
+      setObjectMatrix(object, local);
     } else {
       object = this.objects[node];
       if (!object) {
@@ -344,6 +470,18 @@ export class MeshParts implements ModelParts {
     object.traverse((child) => moved.add(child));
     return this.partNodes.filter((part) => moved.has(this.objects[part]!));
   }
+}
+
+/** A copy of a node's own object (M14): its geometry, materials and J3D's BREP edges, not its child nodes. */
+function cloneNode(source: Object3D): Object3D {
+  const copy = source.clone(false);
+  copy.layers.set(0);
+  for (const edges of source.children.filter(isJ3dEdges)) {
+    const lines = edges.clone(false);
+    lines.layers.set(0);
+    copy.add(lines);
+  }
+  return copy;
 }
 
 function setObjectMatrix(object: Object3D, matrix: Matrix4): void {
