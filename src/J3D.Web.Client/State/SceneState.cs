@@ -14,9 +14,10 @@ namespace J3D.Web.Client.State;
 /// an undo imports it again under the same id (D117). Since M12 it holds the selection mode (D146) and
 /// the features the viewer reports selected, the Measure tool's reference and result (D147), which
 /// aren't kept or undoable, and asks for the context menu (D164). Since M13 it holds the Move tool, its
-/// frame and target, and the origin frames (D148–D150), and moves are undoable steps (D145).
+/// frame and target, and the origin frames (D148–D150), and moves are undoable steps (D145). Since M14
+/// it edits models' trees, with a clipboard of its own (SceneState.Editing.cs).
 /// </summary>
-public sealed class SceneState
+public sealed partial class SceneState
 {
     private readonly UndoHistory _history = new();
 
@@ -627,6 +628,11 @@ public sealed class SceneState
     /// <summary>The viewer's report of the Move tool's target and where it is, or null.</summary>
     public void ReportMoveTarget(MoveTargetInfo? info)
     {
+        if (info is null && TargetPlacement is null)
+        {
+            return; // the viewer says so after each edit (M14); redrawing the page for it cost a large tree 45 ms
+        }
+
         TargetPlacement = info;
         Set(Models, always: true);
     }

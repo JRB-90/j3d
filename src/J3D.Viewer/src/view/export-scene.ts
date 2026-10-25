@@ -25,7 +25,13 @@ import { SurfaceMetalness, SurfaceRoughness } from './surface';
 export interface ExportSource {
   /** The model's file name. */
   name: string;
+  /** Its nodes by id, with their parents as edited (M14). */
   tree: readonly TreeNode[];
+  /**
+   * The nodes in the model, each before its children (M14: an edited tree's ids aren't in that order,
+   * and removed nodes are left out). The ids in order when absent.
+   */
+  order?: readonly number[];
   content:
     | { kind: 'brep'; scene: ImportedScene }
     /** `sceneRoot`: node 0 is a glTF file's scene, so its children are the model's top-level nodes. */
@@ -62,15 +68,16 @@ export function buildExportScene(sources: readonly ExportSource[], selection: bo
   const parts: { source: ExportSource; roots: Object3D[] }[] = [];
 
   for (const source of sources) {
-    const chosen = chosenParts(source, selection);
+    const order = source.order ?? source.tree.map((_, index) => index);
+    const chosen = chosenParts(source, order, selection);
     if (!chosen.some(Boolean)) {
       continue;
     }
-    const kept = withAncestors(source.tree, chosen);
+    const kept = withAncestors(source.tree, order, chosen);
     const roots =
       source.content.kind === 'brep'
-        ? brepObjects(source.content.scene, source.tree, kept, target, materials, owned)
-        : meshObjects(source.content.nodes, source.content.sceneRoot, source.tree, chosen, kept, target);
+        ? brepObjects(source.content.scene, source.tree, order, kept, target, materials, owned)
+        : meshObjects(source.content.nodes, source.content.sceneRoot, source.tree, order, chosen, kept, target);
     if (source.unitScale !== 1) {
       const scale = new Matrix4().makeScale(source.unitScale, source.unitScale, source.unitScale);
       roots.forEach((root) => root.matrix.premultiply(scale));
@@ -122,15 +129,20 @@ export function exportFileName(models: readonly string[], selection: boolean, ex
 }
 
 /** The part nodes an export takes from a model: the visible ones, or the selected ones (never hidden, D98). */
-function chosenParts({ tree, hidden, selected }: ExportSource, selection: boolean): boolean[] {
+function chosenParts({ tree, hidden, selected }: ExportSource, order: readonly number[], selection: boolean): boolean[] {
   const picked = selection ? new Set(selected) : undefined;
-  return tree.map((node, index) => node.prototype >= 0 && !hidden.has(index) && (picked?.has(index) ?? true));
+  const chosen = tree.map(() => false);
+  for (const index of order) {
+    chosen[index] = tree[index]!.prototype >= 0 && !hidden.has(index) && (picked?.has(index) ?? true);
+  }
+  return chosen;
 }
 
-/** The chosen nodes and every node above them, which keep the hierarchy. Parents come before their children. */
-function withAncestors(tree: readonly TreeNode[], chosen: readonly boolean[]): boolean[] {
+/** The chosen nodes and every node above them, which keep the hierarchy. */
+function withAncestors(tree: readonly TreeNode[], order: readonly number[], chosen: readonly boolean[]): boolean[] {
   const kept = [...chosen];
-  for (let index = tree.length - 1; index > 0; index--) {
+  for (let position = order.length - 1; position >= 0; position--) {
+    const index = order[position]!;
     const parent = tree[index]!.parent;
     if (kept[index] && parent >= 0) {
       kept[parent] = true;
@@ -146,6 +158,7 @@ function withAncestors(tree: readonly TreeNode[], chosen: readonly boolean[]): b
 function brepObjects(
   scene: ImportedScene,
   tree: readonly TreeNode[],
+  order: readonly number[],
   kept: readonly boolean[],
   target: ExportTarget,
   materials: ExportMaterials,
@@ -192,7 +205,7 @@ function brepObjects(
     return object;
   };
 
-  return buildTree(tree, kept, (node, index) => {
+  return buildTree(tree, order, kept, (node, index) => {
     const placements = node.prototype >= 0 ? (placementsOf.get(index) ?? []) : [];
     if (placements.length === 1) {
       return part(node.name, scene.instances[placements[0]!]!.prototype, scene.instances[placements[0]!]!.matrix);
@@ -215,6 +228,7 @@ function meshObjects(
   nodes: readonly Object3D[],
   sceneRoot: boolean,
   tree: readonly TreeNode[],
+  order: readonly number[],
   chosen: readonly boolean[],
   kept: readonly boolean[],
   target: ExportTarget,
@@ -226,6 +240,7 @@ function meshObjects(
   const emitted = sceneRoot ? kept.map((keep, index) => keep && index !== 0) : kept;
   return buildTree(
     tree,
+    order,
     emitted,
     (node, index) => {
       const original = nodes[index]!;
@@ -272,13 +287,15 @@ function copyPart(original: Object3D, target: ExportTarget): Object3D {
  */
 function buildTree(
   tree: readonly TreeNode[],
+  order: readonly number[],
   kept: readonly boolean[],
   create: (node: TreeNode, index: number) => Object3D,
   topLevel: (index: number) => boolean = (index) => tree[index]!.parent < 0,
 ): Object3D[] {
   const objects: (Object3D | undefined)[] = [];
   const roots: Object3D[] = [];
-  tree.forEach((node, index) => {
+  order.forEach((index) => {
+    const node = tree[index]!;
     if (!kept[index]) {
       return;
     }

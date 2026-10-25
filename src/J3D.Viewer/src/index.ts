@@ -1,16 +1,18 @@
 import { afterPaint, saveFile } from './download';
+import type { ModelEdits } from './edit/structure';
 import { fileInputAccept, kindOf } from './formats';
 import { filesFromDataTransfer, filesFromInput } from './import/batch-files';
 import { ModelManager } from './import/model-manager';
 import type { BrepExportFormat } from './import/protocol';
 import { createRunners } from './import/runners';
 import type { BatchFile } from './import/sidecars';
-import { ExportCancelledError, type ModelId } from './import/types';
+import { ExportCancelledError, type ModelId, type ModelStats } from './import/types';
 import type { DotNetObjectReference } from './interop';
 import { forwardModelEvents } from './model-events';
 import { ModelStore } from './store/model-store';
 import type { StoredModel, StoredScene } from './store/types';
 import { createTestHookControls, installTestHook, isTestHookEnabled } from './test-hook';
+import { installTreeDrag } from './tree-drag';
 import type { Projection } from './view/camera-math';
 import { installDropTarget } from './view/drop-target';
 import { baseName } from './view/export-scene';
@@ -25,6 +27,7 @@ export type { StoredModel, StoredScene } from './store/types';
 export type { BrepExportFormat } from './import/protocol';
 export type { MeshExportFormat } from './view/mesh-export';
 export type { SelectionMode } from './view/viewer';
+export type { ModelEdits } from './edit/structure';
 
 /** How an export ended (M9): the file saved, cancelled, or why it failed. Mirrors J3D.Web.Client/Interop/ExportOutcome.cs. */
 export interface ExportOutcome {
@@ -80,6 +83,11 @@ export interface ViewerHandle {
   setPlacement(id: string, node: number, matrix: number[]): void;
   /** Draws origin frames at these objects (D150), or none. */
   setOriginFrames(targets: MoveTarget[]): void;
+  /**
+   * A model's tree as edited (M14): applies all its edits, which are kept with it, and returns what it
+   * now draws, or null when nothing changed.
+   */
+  setStructure(id: string, edits: ModelEdits): ModelStats | null;
   /** Saves the visible scene, or the selection, as GLB or STL: a download (M9, D119, D120). */
   exportMesh(format: MeshExportFormat, selection: boolean): Promise<ExportOutcome>;
   /** Saves a BREP model as imported, as STEP or BREP, reporting progress to .NET's `OnExportProgress` (D83, D125). */
@@ -154,6 +162,9 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     : undefined;
   const unsubscribeStore = models.subscribe({
     loaded: ({ summary, restored }) => {
+      if (restored && !restored.edits && store.editsOf(summary.id)) {
+        store.forgetEdits(summary.id); // they no longer fit it (R25): it's kept as imported
+      }
       const sources = restored ? undefined : models.sourcesOf(summary.id);
       if (sources) {
         void store.save(summary, sources).then((outcome) => {
@@ -199,6 +210,8 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   const removeDropTarget = installDropTarget(host, (dataTransfer) => {
     importDrop(dataTransfer).catch((error: unknown) => console.error('J3D: the dropped files could not be read.', error));
   });
+  // Nodes dragged in the model list's trees go to .NET, which owns the tree and its edits (M14, D182).
+  const removeTreeDrag = installTreeDrag(document, ({ source, model, target, copy }) => call(dotnet, 'OnTreeDrop', source, model, target, copy));
   const removeTestHook = testControls ? installTestHook(models, testControls, attachFileInput, view, store) : undefined;
 
   host.dataset['viewerReady'] = 'true';
@@ -234,7 +247,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
           : kept
             ? Promise.resolve(kept)
             : Promise.reject(new Error(`${summary.fileName} wasn't kept.`));
-        models.importStored(summary, files, hidden, store.placementsOf(summary.id));
+        models.importStored(summary, files, hidden, store.placementsOf(summary.id), store.editsOf(summary.id));
       }
     },
     forgetModel(id) {
@@ -279,6 +292,13 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     },
     setOriginFrames(targets) {
       view?.setOriginFrames(targets);
+    },
+    setStructure(id, edits) {
+      store.setEdits(id, edits);
+      const applied = view?.setStructure(id, edits);
+      // Nodes that changed parents, and copies, are kept where they now are, in their parents' frames.
+      applied?.placements.forEach(({ node, matrix }) => store.setPlacement(id, node, matrix));
+      return applied?.stats ?? null;
     },
     async exportMesh(format, selection) {
       if (!view) {
@@ -332,6 +352,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     dispose() {
       exports.forEach((controller) => controller.abort());
       removeTestHook?.();
+      removeTreeDrag();
       removeDropTarget();
       for (const detach of [...inputs.values()]) {
         detach();

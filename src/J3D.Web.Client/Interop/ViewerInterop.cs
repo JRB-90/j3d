@@ -107,6 +107,13 @@ public sealed class ViewerInterop : IAsyncDisposable
         return _viewer.InvokeVoidAsync("setOriginFrames", (object)array); // one argument, not one per target
     }
 
+    /// <summary>
+    /// A model's tree as edited (M14): the viewer applies all of its edits and keeps them, and answers
+    /// what the model now draws, or null when nothing changed.
+    /// </summary>
+    public ValueTask<ModelStats?> SetStructureAsync(ModelId id, ModelEditsDto edits) =>
+        _viewer.InvokeAsync<ModelStats?>("setStructure", id.Value, edits);
+
     /// <summary>Saves the visible scene, or only the selection, as GLB or STL: a browser download (M9, D119, D120).</summary>
     public ValueTask<ExportOutcome> ExportMeshAsync(MeshExportFormat format, bool selection) =>
         _viewer.InvokeAsync<ExportOutcome>("exportMesh", format, selection);

@@ -78,6 +78,7 @@ describe('forwardModelEvents', () => {
         'm1',
         {
           tree: { names: ['assembly', 'part'], parents: [-1, 0], prototypes: [-1, 0] },
+          edits: null,
           stats: model.stats,
           bounds: model.bounds,
           memoryBytes: 4096,

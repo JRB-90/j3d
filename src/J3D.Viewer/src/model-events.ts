@@ -1,3 +1,4 @@
+import type { ModelEdits } from './edit/structure';
 import type { ModelManager } from './import/model-manager';
 import type { Bounds, ModelStats, TreeNode } from './import/types';
 import type { DotNetObjectReference } from './interop';
@@ -15,7 +16,10 @@ export interface TreeColumns {
 
 /** What .NET is told about a loaded model (mirrors J3D.Web.Client/Interop/ModelLoadedInfo.cs). */
 export interface ModelLoadedInfo {
+  /** The tree as the file gives it; `edits` change it. */
   tree: TreeColumns;
+  /** A restored model's kept edits (M14), already applied in the view; null when it has none. */
+  edits: ModelEdits | null;
   stats: ModelStats;
   bounds: Bounds;
   memoryBytes: number;
@@ -59,8 +63,8 @@ export function forwardModelEvents(models: Pick<ModelManager, 'subscribe'>, dotn
   const unsubscribe = models.subscribe({
     queued: (summary) => send('OnModelQueued', summary),
     progress: (id, phase, fraction) => send('OnModelProgress', id, phase, fraction),
-    loaded: ({ summary, tree, stats, bounds, memoryBytes, warnings }) => {
-      const info: ModelLoadedInfo = { tree: toColumns(tree), stats, bounds, memoryBytes, warnings };
+    loaded: ({ summary, tree, stats, bounds, memoryBytes, warnings, restored }) => {
+      const info: ModelLoadedInfo = { tree: toColumns(tree), edits: restored?.edits ?? null, stats, bounds, memoryBytes, warnings };
       sendInOwnTask('OnModelLoaded', summary.id, info);
     },
     failed: (id, error) => send('OnModelFailed', id, error),

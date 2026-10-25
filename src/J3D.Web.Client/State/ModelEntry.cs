@@ -20,6 +20,16 @@ public enum PartVisibility
     Mixed,
 }
 
+/// <summary>
+/// What an edit changes in a model (M14): its tree's edits, and the hidden parts, selection and moves
+/// that go with them, which an undo puts back together.
+/// </summary>
+public sealed record ModelEdit(ModelEdits Edits, PartSet Hidden, PartSet Selected, ImmutableDictionary<int, Matrix4d> Placements)
+{
+    /// <summary>The tree these edits make, when it's been built already: building one of 10,000 nodes takes a while under WebAssembly.</summary>
+    public ModelTree? Tree { get; init; }
+}
+
 /// <summary>A STEP or BREP export of a loaded model in progress (D125): the format, and how far it is (0–1), or null when OCCT can't tell.</summary>
 public sealed record ModelExport(BrepExportFormat Format, double? Fraction);
 
@@ -89,10 +99,13 @@ public sealed record ModelEntry(ModelSummary Summary)
     public ModelEntry WithProgress(ImportPhase phase, double? fraction) =>
         IsPending ? this with { Status = ModelStatus.Importing, Phase = phase, Fraction = fraction } : this;
 
-    /// <summary>Loaded, keeping only those hidden parts (set while it was restored) that are parts of its tree.</summary>
+    /// <summary>
+    /// Loaded, with its kept edits applied to its tree (M14), keeping only those hidden parts (set while
+    /// it was restored) that are parts of it.
+    /// </summary>
     public ModelEntry AsLoaded(ModelLoadedInfo info)
     {
-        var tree = new ModelTree(info.Tree);
+        var tree = new ModelTree(info.Tree, ModelEdits.From(info.Edits));
         return this with
         {
             Status = ModelStatus.Loaded,
@@ -102,8 +115,48 @@ public sealed record ModelEntry(ModelSummary Summary)
             Error = null,
             Tree = tree,
             Hidden = Hidden.IsEmpty ? Hidden : Hidden.Where(tree.IsPart),
+            EditedStats = null,
         };
     }
+
+    /// <summary>What the model draws: as the viewer last counted it after an edit (M14), else as imported.</summary>
+    public ModelStats? Stats => EditedStats ?? Info?.Stats;
+
+    /// <summary>The viewer's count of what the model draws since its last edit, or null.</summary>
+    public ModelStats? EditedStats { get; private init; }
+
+    /// <summary>The model's edits to its tree (M14); none until it has loaded.</summary>
+    public ModelEdits Edits => Tree?.Edits ?? ModelEdits.None;
+
+    /// <summary>
+    /// The model's tree, parts and moves as an edit leaves them, or as an undo or redo brings them back
+    /// (M14). Hidden and selected parts the tree no longer has are dropped (D98). Only a loaded model edits.
+    /// </summary>
+    public ModelEntry WithEdit(ModelEdit edit)
+    {
+        if (Tree is not { } current)
+        {
+            return this;
+        }
+
+        var tree = edit.Tree is { } built && ReferenceEquals(built.Edits, edit.Edits) ? built
+            : ReferenceEquals(current.Edits, edit.Edits) ? current
+            : new ModelTree(current.File, edit.Edits);
+        var hidden = edit.Hidden.Where(tree.IsPart);
+        return this with
+        {
+            Tree = tree,
+            Hidden = hidden,
+            Selected = edit.Selected.Where(node => tree.IsPart(node) && !hidden.Contains(node)),
+            Placements = edit.Placements,
+        };
+    }
+
+    /// <summary>What the model draws after an edit, as the viewer counted it.</summary>
+    public ModelEntry WithStats(ModelStats stats) => Status != ModelStatus.Loaded || stats.Equals(Stats) ? this : this with { EditedStats = stats };
+
+    /// <summary>The model's edit state, to undo or redo to (M14).</summary>
+    public ModelEdit EditState => new(Edits, Hidden, Selected, Placements) { Tree = Tree };
 
     /// <summary>A node (or the model) moved to a placement in its parent's frame. Only a loaded model, or one coming back, moves.</summary>
     public ModelEntry WithPlacement(int node, Matrix4d placement) =>

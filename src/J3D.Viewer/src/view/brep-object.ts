@@ -17,6 +17,8 @@ import {
   type MeshStandardMaterial,
   type Object3D,
 } from 'three';
+import { ModelStructure, TopLevel } from '../edit/structure';
+import type { KeptPlacement } from '../import/types';
 import { EdgeVisibilityAttribute, type LinearRgba, type MaterialCache } from './materials';
 import {
   EdgePickRadius,
@@ -37,8 +39,11 @@ export const InstancingThreshold = 16;
 
 export interface BrepObject {
   object: Group;
-  /** Picking, visibility and highlighting by tree node (D93–D95). */
-  parts: ModelParts;
+  /** Picking, visibility and highlighting by tree node (D93–D95), and the tree's edits (M14). */
+  parts: ModelParts & {
+    /** The scene as edited, for exports: the live nodes' placements, on the imported prototypes. */
+    exportScene(): ImportedScene;
+  };
   /** Frees the geometry and releases the materials. The object is left empty. */
   dispose(): void;
 }
@@ -57,6 +62,15 @@ interface PlacementSlots {
   edges?:
     | { geometry: BufferGeometry; visibility: BufferAttribute; start: number; count: number }
     | { matrices: InstancedBufferAttribute; index: number };
+}
+
+/** What the parts need to draw placements added after the build: copies (M14). */
+interface Drawing {
+  root: Group;
+  name: string;
+  materials: MaterialCache;
+  owned: { dispose(): void }[];
+  used: Material[];
 }
 
 /**
@@ -171,7 +185,7 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
     root.add(lines);
   }
 
-  const parts = new BrepParts(scene, slots, pickedPlacement, indexOffsets);
+  const parts = new BrepParts(scene, slots, pickedPlacement, indexOffsets, { root, name, materials, owned, used });
   return {
     object: root,
     parts,
@@ -191,47 +205,69 @@ export function buildBrepObject(name: string, scene: ImportedScene, materials: M
 }
 
 /**
+ * Copies of one prototype added after the build (M14): one InstancedMesh and one instanced edge set,
+ * grown in steps (R23) rather than growing the batches they'd otherwise have joined.
+ */
+interface Addition {
+  mesh: InstancedMesh | undefined;
+  edges: { geometry: InstancedBufferGeometry; matrices: InstancedBufferAttribute } | undefined;
+  /** The placement drawn in each slot, in slot order. */
+  placements: number[];
+  capacity: number;
+}
+
+/**
  * A BREP model's parts: each scene instance's tree node. Keeps the imported prototypes, which the
- * highlight draws again (D93), and works out a placement's bounds from its prototype's.
+ * highlight draws again (D93), and works out a placement's bounds from its prototype's. Since M14 its
+ * tree can change: copies get placements of their own, drawn as {@link Addition}s, and removed nodes'
+ * placements are hidden as hidden parts are, so an undo can bring them back.
  */
 class BrepParts implements ModelParts {
-  readonly partNodes: readonly number[];
+  partNodes: readonly number[];
+  /** The scene's placements, then the copies' (M14); a copy dropped again keeps its slot with node -1. */
+  private readonly instances: SceneInstance[];
   private readonly placementsOf = new Map<number, number[]>();
-  private readonly hiddenPlacements: Uint8Array;
+  /** Each file node's own placements, which its copies repeat. */
+  private readonly filePlacements = new Map<number, number[]>();
+  private hiddenPlacements: Uint8Array;
+  private hiddenNodes: ReadonlySet<number> = new Set();
   private readonly zero = new Matrix4().makeScale(0, 0, 0);
   private overlayGeometries = new Map<number, BufferGeometry>();
   private placementBoxes: Float64Array | undefined;
   /** Each tree node's placement in its parent's frame, 16 numbers each, and the model's frame (M13, D169). */
-  private readonly locals: Float64Array;
+  private locals: Float64Array;
+  /** Each node's parent now; a removed node keeps the one it had, so its place in the world is known. */
+  private readonly parents: number[];
   private readonly frame = new Matrix4();
-  private childrenOf: number[][] | undefined;
+  private structure: ModelStructure;
+  private readonly additions = new Map<number, Addition>();
 
   constructor(
     private readonly scene: ImportedScene,
-    private readonly slots: readonly PlacementSlots[],
-    private readonly pickedPlacement: ReadonlyMap<Object3D, Int32Array>,
+    private readonly slots: PlacementSlots[],
+    private readonly pickedPlacement: Map<Object3D, Int32Array>,
     private readonly indexOffsets: ReadonlyMap<BatchedMesh, readonly number[]>,
+    private readonly drawing: Drawing,
   ) {
-    scene.instances.forEach((instance, index) => {
-      const list = this.placementsOf.get(instance.node);
-      if (list) {
-        list.push(index);
-      } else {
-        this.placementsOf.set(instance.node, [index]);
-      }
+    this.instances = scene.instances;
+    this.instances.forEach((instance, index) => {
+      this.listOf(this.placementsOf, instance.node).push(index);
+      this.listOf(this.filePlacements, instance.node).push(index);
     });
     this.partNodes = [...this.placementsOf.keys()].sort((a, b) => a - b);
-    this.hiddenPlacements = new Uint8Array(scene.instances.length);
+    this.hiddenPlacements = new Uint8Array(this.instances.length);
     this.locals = new Float64Array(scene.nodes.length * 16);
     const identity = new Matrix4().elements;
     scene.nodes.forEach((node, index) => this.locals.set(node.matrix ?? identity, index * 16));
+    this.parents = scene.nodes.map((node, index) => (node.parent >= 0 && node.parent < index ? node.parent : TopLevel));
+    this.structure = new ModelStructure(scene.nodes);
   }
 
   placement(node: number): Placement {
-    if (node === ModelFrame || !this.scene.nodes[node]) {
+    if (node === ModelFrame || !this.structure.nodes[node]) {
       return { local: node === ModelFrame ? this.frame.clone() : new Matrix4(), parentWorld: new Matrix4() };
     }
-    return { local: new Matrix4().fromArray(this.locals, node * 16), parentWorld: this.worldOf(this.scene.nodes[node]!.parent) };
+    return { local: new Matrix4().fromArray(this.locals, node * 16), parentWorld: this.worldOf(this.parents[node]!) };
   }
 
   /**
@@ -239,17 +275,16 @@ class BrepParts implements ModelParts {
    * its world matrix again from the chain of placements above it, and is drawn there (R23).
    */
   setPlacement(node: number, local: Matrix4): number[] {
-    let tops: number[];
+    let tops: readonly number[];
     if (node === ModelFrame) {
       this.frame.copy(local);
-      tops = this.scene.nodes.flatMap((item, index) => (item.parent < 0 ? [index] : []));
-    } else if (this.scene.nodes[node]) {
+      tops = this.structure.childrenOf(TopLevel);
+    } else if (this.structure.nodes[node]) {
       local.toArray(this.locals, node * 16);
       tops = [node];
     } else {
       return [];
     }
-    const children = (this.childrenOf ??= this.computeChildren());
     const parts: number[] = [];
     const placements: number[] = [];
     const visit = (current: number, parentWorld: Matrix4) => {
@@ -258,37 +293,125 @@ class BrepParts implements ModelParts {
       if (own) {
         parts.push(current);
         for (const placement of own) {
-          world.toArray(this.scene.instances[placement]!.matrix);
+          world.toArray(this.instances[placement]!.matrix);
           placements.push(placement);
         }
       }
-      children[current]!.forEach((child) => visit(child, world));
+      this.structure.childrenOf(current).forEach((child) => visit(child, world));
     };
     for (const top of tops) {
-      visit(top, this.worldOf(this.scene.nodes[top]!.parent));
+      visit(top, this.worldOf(this.parents[top]!));
     }
     this.drawPlacements(placements);
     return parts;
+  }
+
+  /**
+   * The tree as edited (M14). Copies dropped by an undo go first, with every added node after them,
+   * since the ids that follow were added later. Then each node that's new or has a new parent gets its
+   * placement in that parent's frame worked out so it stays where it was in the world (D151), a copy
+   * where its source is (D152) and a new assembly at its parent's origin (D184); copies of parts get
+   * placements of their own. Removed nodes are hidden, and shown again when an undo brings them back.
+   */
+  setStructure(next: ModelStructure): KeptPlacement[] {
+    const fileCount = this.scene.nodes.length;
+    const previous = this.structure;
+    let kept = fileCount;
+    while (kept < Math.min(previous.count, next.count) && previous.sources[kept] === next.sources[kept]) {
+      kept++;
+    }
+    for (let node = previous.count - 1; node >= kept; node--) {
+      for (const placement of this.placementsOf.get(node) ?? []) {
+        this.dropPlacement(placement);
+      }
+      this.placementsOf.delete(node);
+    }
+
+    // Worlds before are read through the dropped nodes too: an undone New assembly's children were in it.
+    const before = new Map<number, Matrix4>();
+    const worldBefore = (node: number): Matrix4 => {
+      let world = before.get(node);
+      if (!world) {
+        world = node === TopLevel ? this.frame.clone() : worldBefore(this.parents[node]!).clone().multiply(new Matrix4().fromArray(this.locals, node * 16));
+        before.set(node, world);
+      }
+      return world;
+    };
+    const after = new Map<number, Matrix4>();
+    const worldAfter = (node: number): Matrix4 => {
+      if (node < kept) {
+        return worldBefore(node); // existing nodes stay where they are
+      }
+      let world = after.get(node);
+      if (!world) {
+        const source = next.sources[node]!;
+        world = source >= 0 ? worldAfter(source) : worldAfter(next.nodes[node]!.parent);
+        after.set(node, world);
+      }
+      return world;
+    };
+
+    if (next.count * 16 > this.locals.length) {
+      const grown = new Float64Array(next.count * 16);
+      grown.set(this.locals);
+      this.locals = grown;
+    }
+    // Worked out first and written after, since the worlds before are read from the parents and placements.
+    const changed: (KeptPlacement & { parent: number })[] = [];
+    const place = (node: number, parent: number) => {
+      changed.push({ node, parent, matrix: worldAfter(parent).clone().invert().multiply(worldAfter(node)).toArray() });
+    };
+    for (const node of next.order()) {
+      const parent = next.nodes[node]!.parent;
+      if (node >= kept || parent !== this.parents[node]) {
+        place(node, parent);
+      }
+    }
+    for (let node = kept; node < next.count; node++) {
+      if (!next.isLive(node)) {
+        place(node, next.nodes[node]!.parent); // added, and removed again since (restoring kept edits)
+      }
+    }
+    const worlds = Array.from({ length: next.count - kept }, (_, offset) => worldAfter(kept + offset).toArray());
+    this.parents.length = kept;
+    for (const { node, parent, matrix } of changed) {
+      this.locals.set(matrix, node * 16);
+      this.parents[node] = parent;
+    }
+
+    for (let node = kept; node < next.count; node++) {
+      const world = worlds[node - kept]!;
+      for (const filePlacement of this.filePlacements.get(next.fileNodes[node]!) ?? []) {
+        this.addPlacement(node, this.instances[filePlacement]!.prototype, world);
+      }
+    }
+
+    this.structure = next;
+    this.partNodes = [...this.placementsOf.keys()].filter((node) => next.isLive(node)).sort((a, b) => a - b);
+    this.placementBoxes = undefined;
+    this.applyVisibility();
+    // Once for all the copies made or dropped: per copy, a pasted line of hundreds of parts took quadratic time.
+    this.additions.forEach((addition) => addition.mesh?.computeBoundingSphere());
+    return changed.map(({ node, matrix }) => ({ node, matrix }));
+  }
+
+  /** The scene as edited, for exports: live nodes' placements only. */
+  exportScene(): ImportedScene {
+    return {
+      nodes: this.structure.nodes,
+      instances: this.instances.filter((instance) => instance.node >= 0 && this.structure.isLive(instance.node)),
+      prototypes: this.scene.prototypes,
+    };
   }
 
   /** A node's world placement; {@link ModelFrame}'s is the model's frame. */
   private worldOf(node: number): Matrix4 {
     const world = new Matrix4();
     const local = new Matrix4();
-    for (let current = node; current >= 0; current = this.scene.nodes[current]!.parent) {
+    for (let current = node; current >= 0; current = this.parents[current]!) {
       world.premultiply(local.fromArray(this.locals, current * 16));
     }
     return world.premultiply(this.frame);
-  }
-
-  private computeChildren(): number[][] {
-    const children: number[][] = this.scene.nodes.map(() => []);
-    this.scene.nodes.forEach((node, index) => {
-      if (node.parent >= 0) {
-        children[node.parent]!.push(index);
-      }
-    });
-    return children;
   }
 
   /** Draws these placements where their instance matrices now say: a hidden instanced copy stays zeroed (D94). */
@@ -300,7 +423,7 @@ class BrepParts implements ModelParts {
     const attributes = new Set<BufferAttribute | InstancedBufferAttribute>();
     const edgeGeometries = new Set<BufferGeometry>();
     for (const placement of placements) {
-      const instance = this.scene.instances[placement]!;
+      const instance = this.instances[placement]!;
       const hidden = this.hiddenPlacements[placement] === 1;
       matrix.fromArray(instance.matrix);
       const slot = this.slots[placement]!;
@@ -337,9 +460,163 @@ class BrepParts implements ModelParts {
     this.placementBoxes = undefined;
   }
 
+  /** A copy's placement of a prototype, drawn in that prototype's {@link Addition}. */
+  private addPlacement(node: number, prototype: number, matrix: number[]): void {
+    const placement = this.instances.push({ node, prototype, matrix }) - 1;
+    this.slots[placement] = { surfaces: [] };
+    if (placement >= this.hiddenPlacements.length) {
+      const grown = new Uint8Array(Math.max(16, this.hiddenPlacements.length * 2));
+      grown.set(this.hiddenPlacements);
+      this.hiddenPlacements = grown;
+    }
+    this.hiddenPlacements[placement] = 0;
+    this.listOf(this.placementsOf, node).push(placement);
+
+    const addition = this.additionOf(prototype);
+    const slot = addition.placements.length;
+    if (slot === addition.capacity) {
+      this.grow(addition, Math.max(4, addition.capacity * 2));
+    }
+    addition.placements.push(placement);
+    const transform = new Matrix4().fromArray(matrix);
+    if (addition.mesh) {
+      addition.mesh.setMatrixAt(slot, transform);
+      addition.mesh.count = addition.placements.length;
+      addition.mesh.instanceMatrix.needsUpdate = true;
+      this.pickedPlacement.get(addition.mesh)![slot] = placement;
+      this.slots[placement]!.surfaces.push({ mesh: addition.mesh, index: slot });
+    }
+    if (addition.edges) {
+      transform.toArray(addition.edges.matrices.array, slot * 16);
+      addition.edges.matrices.needsUpdate = true;
+      addition.edges.geometry.instanceCount = addition.placements.length;
+      this.slots[placement]!.edges = { matrices: addition.edges.matrices, index: slot };
+    }
+  }
+
+  /** Drops a copy's placement: its slot goes to the addition's last placement, so the drawn ones stay together. */
+  private dropPlacement(placement: number): void {
+    const instance = this.instances[placement]!;
+    const addition = this.additions.get(instance.prototype);
+    instance.node = -1;
+    this.hiddenPlacements[placement] = 1;
+    this.slots[placement] = { surfaces: [] };
+    if (!addition) {
+      return;
+    }
+    const slot = addition.placements.indexOf(placement);
+    const last = addition.placements.length - 1;
+    if (slot < 0) {
+      return;
+    }
+    if (slot !== last) {
+      const moved = addition.placements[last]!;
+      addition.placements[slot] = moved;
+      const matrix = new Matrix4();
+      if (addition.mesh) {
+        addition.mesh.getMatrixAt(last, matrix);
+        addition.mesh.setMatrixAt(slot, matrix);
+        this.pickedPlacement.get(addition.mesh)![slot] = moved;
+      }
+      if (addition.edges) {
+        addition.edges.matrices.array.copyWithin(slot * 16, last * 16, last * 16 + 16);
+      }
+      const movedSlots = this.slots[moved]!;
+      movedSlots.surfaces = addition.mesh ? [{ mesh: addition.mesh, index: slot }] : [];
+      if (addition.edges) {
+        movedSlots.edges = { matrices: addition.edges.matrices, index: slot };
+      }
+    }
+    addition.placements.pop();
+    if (addition.mesh) {
+      addition.mesh.count = addition.placements.length;
+      addition.mesh.instanceMatrix.needsUpdate = true;
+    }
+    if (addition.edges) {
+      addition.edges.geometry.instanceCount = addition.placements.length;
+      addition.edges.matrices.needsUpdate = true;
+    }
+  }
+
+  private additionOf(prototype: number): Addition {
+    let addition = this.additions.get(prototype);
+    if (!addition) {
+      addition = { mesh: undefined, edges: undefined, placements: [], capacity: 0 };
+      this.additions.set(prototype, addition);
+      const mesh = this.scene.prototypes[prototype]!;
+      const { root, name, materials, owned, used } = this.drawing;
+      if (mesh.indices.length > 0) {
+        const geometry = surfaceGeometry(mesh);
+        owned.push(geometry);
+        const material = surfaceMaterials(mesh, materials);
+        used.push(...(Array.isArray(material) ? material : [material]));
+        addition.mesh = new InstancedMesh(geometry, material, 0);
+        addition.mesh.name = `${name} copies`;
+        addition.mesh.count = 0;
+        this.pickedPlacement.set(addition.mesh, new Int32Array(0));
+        root.add(addition.mesh);
+      }
+      if (mesh.edges.length > 0) {
+        const material = materials.edges(true);
+        used.push(material);
+        const geometry = new InstancedBufferGeometry();
+        geometry.setAttribute('position', new BufferAttribute(mesh.edges, 3));
+        const matrices = new InstancedBufferAttribute(new Float32Array(0), 16);
+        geometry.setAttribute('instanceMatrix', matrices);
+        geometry.instanceCount = 0;
+        owned.push(geometry);
+        const lines = new LineSegments(geometry, material);
+        lines.name = `${name} copies' edges`;
+        lines.frustumCulled = false;
+        lines.raycast = noRaycast;
+        root.add(lines);
+        addition.edges = { geometry, matrices };
+      }
+    }
+    return addition;
+  }
+
+  /** A bigger InstancedMesh and edge matrices for an addition, its placements copied across. */
+  private grow(addition: Addition, capacity: number): void {
+    if (addition.mesh) {
+      const old = addition.mesh;
+      const mesh = new InstancedMesh(old.geometry, old.material, capacity);
+      mesh.name = old.name;
+      (mesh.instanceMatrix.array as Float32Array).set(old.instanceMatrix.array);
+      mesh.count = old.count;
+      const picked = new Int32Array(capacity);
+      picked.set(this.pickedPlacement.get(old)!);
+      this.pickedPlacement.delete(old);
+      this.pickedPlacement.set(mesh, picked);
+      this.drawing.root.remove(old);
+      this.drawing.root.add(mesh);
+      old.dispose();
+      addition.mesh = mesh;
+      addition.placements.forEach((placement, slot) => (this.slots[placement]!.surfaces = [{ mesh, index: slot }]));
+    }
+    if (addition.edges) {
+      const array = new Float32Array(capacity * 16);
+      array.set(addition.edges.matrices.array);
+      const matrices = new InstancedBufferAttribute(array, 16);
+      addition.edges.geometry.setAttribute('instanceMatrix', matrices);
+      addition.edges.matrices = matrices;
+      addition.placements.forEach((placement, slot) => (this.slots[placement]!.edges = { matrices, index: slot }));
+    }
+    addition.capacity = capacity;
+  }
+
+  private listOf(map: Map<number, number[]>, key: number): number[] {
+    let list = map.get(key);
+    if (!list) {
+      list = [];
+      map.set(key, list);
+    }
+    return list;
+  }
+
   nodeOf(hit: Intersection): number {
     const placement = this.placementOf(hit);
-    return placement === undefined ? -1 : (this.scene.instances[placement]?.node ?? -1);
+    return placement === undefined ? -1 : (this.instances[placement]?.node ?? -1);
   }
 
   /**
@@ -351,7 +628,7 @@ class BrepParts implements ModelParts {
     if (placement === undefined) {
       return undefined;
     }
-    const instance = this.scene.instances[placement]!;
+    const instance = this.instances[placement]!;
     const mesh = this.scene.prototypes[instance.prototype]!;
     const matrix = new Matrix4().fromArray(instance.matrix);
     const boxes = (this.placementBoxes ??= this.computePlacementBoxes());
@@ -471,10 +748,19 @@ class BrepParts implements ModelParts {
   }
 
   setHidden(hidden: ReadonlySet<number>): void {
+    this.hiddenNodes = hidden;
+    this.applyVisibility();
+  }
+
+  /** Hides the placements of hidden parts and of removed nodes (M14), and shows the rest. */
+  private applyVisibility(): void {
     const changed = new Set<BufferAttribute | InstancedBufferAttribute>();
     const instanced = new Set<InstancedMesh>();
-    this.scene.instances.forEach((instance, placement) => {
-      const hide = hidden.has(instance.node) ? 1 : 0;
+    this.instances.forEach((instance, placement) => {
+      if (instance.node < 0) {
+        return; // a copy dropped again
+      }
+      const hide = this.hiddenNodes.has(instance.node) || !this.structure.isLive(instance.node) ? 1 : 0;
       if (hide === this.hiddenPlacements[placement]) {
         return;
       }
@@ -498,14 +784,17 @@ class BrepParts implements ModelParts {
         changed.add(edges.matrices);
       }
     });
-    instanced.forEach((mesh) => (mesh.instanceMatrix.needsUpdate = true));
+    instanced.forEach((mesh) => {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    });
     changed.forEach((attribute) => (attribute.needsUpdate = true));
   }
 
   addVisibleBounds(target: Box3): Box3 {
     const boxes = (this.placementBoxes ??= this.computePlacementBoxes());
     const box = new Box3();
-    for (let placement = 0; placement < this.hiddenPlacements.length; placement++) {
+    for (let placement = 0; placement < this.instances.length; placement++) {
       if (!this.hiddenPlacements[placement] && boxes[placement * 6]! <= boxes[placement * 6 + 3]!) {
         box.min.fromArray(boxes, placement * 6);
         box.max.fromArray(boxes, placement * 6 + 3);
@@ -533,13 +822,13 @@ class BrepParts implements ModelParts {
    */
   highlight(nodes: readonly number[], kind: HighlightKind, materials: HighlightMaterials): Highlight | undefined {
     const placements = nodes.flatMap((node) => this.placementsOf.get(node) ?? []);
-    const surfaced = placements.filter((placement) => this.scene.prototypes[this.scene.instances[placement]!.prototype]!.indices.length > 0);
+    const surfaced = placements.filter((placement) => this.scene.prototypes[this.instances[placement]!.prototype]!.indices.length > 0);
     const group = new Group();
     const disposables: { dispose(): void }[] = [];
     const order = materials.renderOrder(kind);
 
     if (surfaced.length > 0) {
-      const prototypes = [...new Set(surfaced.map((placement) => this.scene.instances[placement]!.prototype))];
+      const prototypes = [...new Set(surfaced.map((placement) => this.instances[placement]!.prototype))];
       const geometries = prototypes.map((prototype) => this.overlayGeometry(prototype));
       const vertices = geometries.reduce((sum, g) => sum + g.getAttribute('position').count, 0);
       const indices = geometries.reduce((sum, g) => sum + g.index!.count, 0);
@@ -547,7 +836,7 @@ class BrepParts implements ModelParts {
       const ids = new Map(prototypes.map((prototype, i) => [prototype, batch.addGeometry(geometries[i]!)]));
       const matrix = new Matrix4();
       for (const placement of surfaced) {
-        const instance = this.scene.instances[placement]!;
+        const instance = this.instances[placement]!;
         batch.setMatrixAt(batch.addInstance(ids.get(instance.prototype)!), matrix.fromArray(instance.matrix));
       }
       batch.computeBoundingSphere();
@@ -558,7 +847,7 @@ class BrepParts implements ModelParts {
     }
 
     const edges = placements
-      .map((placement) => this.scene.instances[placement]!)
+      .map((placement) => this.instances[placement]!)
       .filter((instance) => this.scene.prototypes[instance.prototype]!.edges.length > 0)
       .map((instance) => ({ edges: this.scene.prototypes[instance.prototype]!.edges, matrix: instance.matrix }));
     if (edges.length > 0) {
@@ -586,6 +875,8 @@ class BrepParts implements ModelParts {
   dispose(): void {
     this.overlayGeometries.forEach((geometry) => geometry.dispose());
     this.overlayGeometries = new Map();
+    this.additions.forEach((addition) => addition.mesh?.dispose());
+    this.additions.clear();
   }
 
   /** A prototype's whole index range over its positions only: what the overlay material needs. */
@@ -604,10 +895,10 @@ class BrepParts implements ModelParts {
   /** Each placement's world bounds as min xyz, max xyz (min > max when it has no vertices). */
   private computePlacementBoxes(): Float64Array {
     const prototypeBoxes = this.scene.prototypes.map((prototype) => new Box3().setFromArray(prototype.positions));
-    const boxes = new Float64Array(this.scene.instances.length * 6);
+    const boxes = new Float64Array(this.instances.length * 6);
     const box = new Box3();
     const matrix = new Matrix4();
-    this.scene.instances.forEach((instance, placement) => {
+    this.instances.forEach((instance, placement) => {
       box.copy(prototypeBoxes[instance.prototype]!);
       if (!box.isEmpty()) {
         box.applyMatrix4(matrix.fromArray(instance.matrix));

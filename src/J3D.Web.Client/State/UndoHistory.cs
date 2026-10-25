@@ -59,6 +59,37 @@ public sealed record MoveStep(ModelId Id, int Node, Matrix4d Before, Matrix4d Af
 }
 
 /// <summary>
+/// An edit of one model's tree (M14, D145): a move in the hierarchy, a paste, a delete, a new assembly,
+/// an ungroup or a rename, with the hidden parts, selection and moves before and after it. Undoing it
+/// selects what was selected before (the deleted objects come back selected).
+/// </summary>
+public sealed record EditStep(ModelId Id, ModelEdit Before, ModelEdit After) : ISceneStep
+{
+    public SceneContent Undo(SceneContent scene) => Apply(scene, Before);
+
+    public SceneContent Redo(SceneContent scene) => Apply(scene, After);
+
+    public ISceneStep? Without(ModelId id) => id == Id ? null : this;
+
+    private SceneContent Apply(SceneContent scene, ModelEdit edit) =>
+        scene with { Models = scene.Models.ConvertAll(model => model.Id == Id ? model.WithEdit(edit) : model) };
+}
+
+/// <summary>Several models' edits made as one (M14): a Delete of objects in more than one model. Undone last first.</summary>
+public sealed record StepGroup(ImmutableList<ISceneStep> Steps) : ISceneStep
+{
+    public SceneContent Undo(SceneContent scene) => Steps.Reverse().Aggregate(scene, static (content, step) => step.Undo(content));
+
+    public SceneContent Redo(SceneContent scene) => Steps.Aggregate(scene, static (content, step) => step.Redo(content));
+
+    public ISceneStep? Without(ModelId id)
+    {
+        var steps = Steps.Select(step => step.Without(id)).OfType<ISceneStep>().ToImmutableList();
+        return steps.IsEmpty ? null : this with { Steps = steps };
+    }
+}
+
+/// <summary>
 /// Deleting a model (M8, D84): the model as it was and where it was in the list. Undoing it lists the
 /// model again, queued to be imported from its kept files under the same id (D117); redoing it
 /// deletes the model again, whatever its state.
