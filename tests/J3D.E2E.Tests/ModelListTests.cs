@@ -120,6 +120,6 @@ public sealed partial class ModelListTests(J3DAppFixture app) : ViewerPageTest(a
     private static partial Regex PendingPattern();
 
     /// <summary>coloured-part.step is one 12-triangle block.</summary>
-    [GeneratedRegex(@"^[\d.]+ [KMG]?B · 12 triangles · 1 part$")]
+    [GeneratedRegex(@"^[\d.]+ [KMG]?B in memory · 12 triangles · 1 part$")]
     private static partial Regex StatsPattern();
 }

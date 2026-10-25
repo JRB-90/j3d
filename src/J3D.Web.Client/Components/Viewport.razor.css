@@ -97,3 +97,8 @@
     .j3d-viewport ::deep .j3d-measure-label--reference {
         border-style: dashed;
     }
+
+    /* The empty view's hint gives way to the drop overlay while files are dragged over. */
+    .j3d-viewport.j3d-viewport--drop ::deep .j3d-viewport-hint {
+        display: none;
+    }

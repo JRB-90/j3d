@@ -87,9 +87,10 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         ? $"Exporting {export.Format.DisplayName} · {Math.Floor(fraction * 100).ToString(CultureInfo.InvariantCulture)}%"
         : $"Exporting {export.Format.DisplayName}…";
 
+    /// <summary>The memory the model takes in the browser (its worker's heap for a CAD model), then its counts.</summary>
     private static string StatsText(ModelLoadedInfo info) => string.Join(
         " · ",
-        DisplayFormat.Bytes(info.MemoryBytes),
+        $"{DisplayFormat.Bytes(info.MemoryBytes)} in memory",
         DisplayFormat.Counted(info.Stats.Triangles, "triangle"),
         DisplayFormat.Counted(info.Stats.Instances, "part"));
 

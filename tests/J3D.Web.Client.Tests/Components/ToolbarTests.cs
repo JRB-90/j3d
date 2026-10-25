@@ -1,5 +1,4 @@
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Interop;
 
 namespace J3D.Web.Client.Tests.Components;
 
@@ -12,7 +11,6 @@ public sealed class ToolbarTests : BunitTestBase
         _viewer = SetupViewerModule();
         _viewer.SetupVoid("attachFileInput", static _ => true).SetVoidResult();
         _viewer.SetupVoid("fitAll").SetVoidResult();
-        _viewer.SetupVoid("setProjection", static _ => true).SetVoidResult();
     }
 
     [Fact]
@@ -50,19 +48,28 @@ public sealed class ToolbarTests : BunitTestBase
     }
 
     [Fact]
-    public async Task Switches_the_projection_and_shows_the_choice()
+    public async Task Labels_each_tool_and_mode_and_groups_them()
     {
         var cut = Render<Toolbar>();
         await StartViewerAsync();
-        Assert.Equal(Projection.Orthographic, Session.Projection);
 
-        cut.WaitForAssertion(() => Assert.False(ProjectionItem(cut, "Perspective").HasAttribute("disabled")));
-        ProjectionItem(cut, "Perspective").Click();
+        Assert.Equal(["Files and view", "Select", "Tools", "Visibility", "History"], cut.FindAll(".j3d-toolbar-group").Select(static g => g.GetAttribute("aria-label")));
+        Assert.Equal(["Import", "Fit all", "Model", "Object", "Feature", "Measure", "Move", "Origin frames"], cut.FindAll(".j3d-tool-label").Select(static l => l.TextContent));
+        Assert.Empty(cut.FindAll("[data-testid=projection]")); // by the view cube now
+    }
 
-        var invocation = Assert.Single(_viewer.Invocations, static i => i.Identifier == "setProjection");
-        Assert.Equal(Projection.Perspective, Assert.Single(invocation.Arguments));
-        Assert.Equal(Projection.Perspective, Session.Projection);
-        cut.WaitForAssertion(() => Assert.Contains("mud-toggle-item-selected", ProjectionItem(cut, "Perspective").ClassName, StringComparison.Ordinal));
+    [Fact]
+    public async Task A_tool_that_is_on_is_marked_without_changing_its_shape()
+    {
+        var cut = Render<Toolbar>();
+        await StartViewerAsync();
+        cut.WaitForAssertion(() => Assert.False(cut.Find("[data-testid=measure-button]").HasAttribute("disabled")));
+        Assert.DoesNotContain("j3d-tool--on", cut.Find("[data-testid=measure-button]").ClassName, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=measure-button]").Click();
+
+        Assert.Contains("j3d-tool--on", cut.Find("[data-testid=measure-button]").ClassName, StringComparison.Ordinal);
+        Assert.Contains("mud-button-text", cut.Find("[data-testid=measure-button]").ClassName, StringComparison.Ordinal); // not outlined
     }
 
     [Fact]
@@ -77,6 +84,4 @@ public sealed class ToolbarTests : BunitTestBase
         Assert.DoesNotContain(_viewer.Invocations, static i => i.Identifier is "fitAll" or "attachFileInput");
     }
 
-    private static AngleSharp.Dom.IElement ProjectionItem(IRenderedComponent<Toolbar> cut, string text) =>
-        cut.FindAll("[data-testid=projection] button").Single(button => button.TextContent.Contains(text, StringComparison.Ordinal));
 }

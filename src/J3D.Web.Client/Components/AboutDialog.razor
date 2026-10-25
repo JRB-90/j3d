@@ -3,13 +3,13 @@
         <MudText Typo="Typo.h6">About J3D</MudText>
     </TitleContent>
     <DialogContent>
-        <div data-testid="about-dialog">
+        <div class="j3d-about-body" data-testid="about-dialog">
             <MudText Typo="Typo.body1" Class="mb-2">
                 A CAD viewer that runs entirely in your browser. CAD files never leave your machine.
             </MudText>
             <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
                 Open source under the MIT License:
-                <MudLink Href="@RepositoryUrl" Target="_blank" Typo="Typo.body2">github.com/JRB-90/j3d</MudLink>
+                <MudLink Color="Color.Inherit" Underline="Underline.Always" Href="@RepositoryUrl" Target="_blank" Typo="Typo.body2">github.com/JRB-90/j3d</MudLink>
                 @if (Build is not null)
                 {
                     <span data-testid="about-build"> · Build @Build</span>
@@ -29,7 +29,7 @@
                     @foreach (var component in ThirdParty.Components)
                     {
                         <tr>
-                            <td><MudLink Href="@component.Url" Target="_blank" Typo="Typo.body2">@component.Name</MudLink></td>
+                            <td><MudLink Color="Color.Inherit" Underline="Underline.Always" Href="@component.Url" Target="_blank" Typo="Typo.body2">@component.Name</MudLink></td>
                             <td>@component.Version</td>
                             <td>@component.Licence</td>
                         </tr>
@@ -41,9 +41,9 @@
             <MudText Typo="Typo.body2" Class="mt-4 mud-text-secondary">
                 J3D makes use of facilities provided by the Open CASCADE Technology software. Its WebAssembly build can be
                 rebuilt, including from a modified OCCT, with the recipe in
-                <MudLink Href="@OcctRecipeUrl" Target="_blank" Typo="Typo.body2">src/J3D.Occt</MudLink>.
+                <MudLink Color="Color.Inherit" Underline="Underline.Always" Href="@OcctRecipeUrl" Target="_blank" Typo="Typo.body2">src/J3D.Occt</MudLink>.
                 The full licence texts are in
-                <MudLink Href="@NoticesUrl" Target="_blank" Typo="Typo.body2">THIRD-PARTY-NOTICES.md</MudLink>.
+                <MudLink Color="Color.Inherit" Underline="Underline.Always" Href="@NoticesUrl" Target="_blank" Typo="Typo.body2">THIRD-PARTY-NOTICES.md</MudLink>.
             </MudText>
         </div>
     </DialogContent>

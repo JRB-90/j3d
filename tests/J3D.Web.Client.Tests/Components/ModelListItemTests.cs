@@ -56,7 +56,7 @@ public sealed class ModelListItemTests : BunitTestBase
     {
         var cut = RenderItem(Loaded());
 
-        Assert.Equal("64 MB · 1.2M triangles · 3 parts", Text(cut, "model-status"));
+        Assert.Equal("64 MB in memory · 1.2M triangles · 3 parts", Text(cut, "model-status"));
         Assert.NotNull(cut.Find("[data-testid=delete-model]"));
         Assert.Empty(cut.FindAll("[data-testid=model-progress]"));
         Assert.Empty(cut.FindAll("[data-testid=model-warnings]"));

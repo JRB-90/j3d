@@ -132,6 +132,21 @@
     grid-template-columns: minmax(90px, auto) 1fr;
     gap: 8px;
     align-items: center;
+    min-height: 24px;
+}
+
+/* A part's rows sit under its name (D104), indented a step. */
+.j3d-measure-group {
+    margin-top: 6px;
+    color: var(--mud-palette-text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.j3d-measure-row--grouped dt {
+    padding-left: 10px;
 }
 
 .j3d-measure-row dt {
@@ -139,21 +154,85 @@
     white-space: nowrap;
 }
 
+/* Values right-aligned in tabular figures, so digits line up down the panel (Tabular Figures Rule). */
 .j3d-measure-row dd {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 4px;
+    justify-content: flex-end;
+    gap: 2px;
     margin: 0;
+    min-width: 0;
     font-variant-numeric: tabular-nums;
+    text-align: right;
 }
 
+.j3d-measure-value {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Copy is there when it's wanted: on the row under the pointer, or when the button has focus. */
 .j3d-measure ::deep .j3d-measure-copy {
     padding: 2px;
-    opacity: 0.6;
+    border-radius: 4px;
+    opacity: 0;
+}
+
+.j3d-measure-row:hover ::deep .j3d-measure-copy,
+.j3d-measure ::deep .j3d-measure-copy:focus-visible {
+    opacity: 0.7;
+}
+
+.j3d-measure ::deep .j3d-measure-copy:hover {
+    opacity: 1;
+}
+
+.j3d-measure ::deep .j3d-measure-copy .mud-icon-root {
+    font-size: 1rem;
+}
+
+/* Feature cards are numbered in the order they were picked, so two faces of one part can be told apart. */
+.j3d-card-number {
+    flex: none;
+    min-width: 18px;
+    height: 18px;
+    margin-right: 6px;
+    padding: 0 4px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 4px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 16px;
+    text-align: center;
 }
 
 .j3d-measure ::deep .j3d-measure-clear {
     margin-top: 6px;
-    text-transform: none;
+}
+
+/* What the Move fields hold in this frame: a move or a position (D148). */
+.j3d-move-heading {
+    margin-bottom: 4px;
+    color: var(--mud-palette-text-primary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.j3d-move-actions {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.j3d-move-actions .j3d-measure-hint {
+    flex: 1 1 auto;
+}
+
+.j3d-move-actions ::deep .j3d-move-apply {
+    flex: none;
+    min-width: 0;
+    padding: 2px 12px;
+    border-color: var(--mud-palette-divider);
+    border-radius: 6px;
 }

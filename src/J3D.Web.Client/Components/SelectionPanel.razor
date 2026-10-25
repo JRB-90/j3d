@@ -12,8 +12,7 @@
                                     Value="Scene.Frame"
                                     ValueChanged="SetFrame"
                                     Size="Size.Small"
-                                    Color="Color.Primary"
-                                    Class="j3d-move-frame"
+                                    Class="j3d-segmented j3d-move-frame"
                                     aria-label="Frame"
                                     data-testid="move-frame">
                         @foreach (var frame in Frames)
@@ -21,6 +20,7 @@
                             <MudToggleItem Value="frame" Text="@frame.ToString()" data-testid="@($"move-frame-{frame.ToString().ToLowerInvariant()}")" />
                         }
                     </MudToggleGroup>
+                    <div class="j3d-move-heading" data-testid="move-heading">@FieldsHeading</div>
                     <div class="j3d-move-fields">
                         @for (var i = 0; i < FieldNames.Length; i++)
                         {
@@ -38,10 +38,20 @@
                             </label>
                         }
                     </div>
-                    <div class="j3d-measure-hint" data-testid="move-hint">
-                        @(Scene.Frame == MoveFrame.Local
-                            ? "Type a move about the object's own axes and press Enter. Drag the arrows (W) or rings (E); Ctrl snaps."
-                            : "Type a pose and press Enter. Drag the arrows (W) or rings (E); Ctrl snaps.")
+                    <div class="j3d-move-actions">
+                        <div class="j3d-measure-hint" data-testid="move-hint">
+                            @(Scene.Frame == MoveFrame.Local
+                                ? "Type how far to move or turn it about its own axes, then Apply or press Enter. Or drag the arrows (W) or rings (E); Ctrl snaps."
+                                : "Type where to put it, then Apply or press Enter. Or drag the arrows (W) or rings (E); Ctrl snaps.")
+                        </div>
+                        <MudButton Variant="Variant.Outlined"
+                                   Size="Size.Small"
+                                   Color="Color.Inherit"
+                                   OnClick="@(() => Apply(pose))"
+                                   Class="j3d-move-apply"
+                                   data-testid="move-apply">
+                            Apply
+                        </MudButton>
                     </div>
                 }
                 else
@@ -94,7 +104,7 @@
         else if (Scene.Mode == SelectMode.Features)
         {
             <div class="j3d-measure" data-testid="feature-panel">
-                @foreach (var feature in Scene.Features.Features.Reverse())
+                @foreach (var (feature, number) in Scene.Features.Features.Select(static (feature, index) => (feature, index + 1)).Reverse())
                 {
                     var expanded = _expanded.Contains(feature.Id);
                     <div class="j3d-measure-card" data-testid="feature" data-feature-id="@feature.Id">
@@ -105,6 +115,7 @@
                                            aria-expanded="@(expanded ? "true" : "false")"
                                            OnClick="@(() => Toggle(feature.Id))"
                                            data-testid="feature-toggle" />
+                            <span class="j3d-card-number" aria-hidden="true">@number</span>
                             <span class="j3d-measure-card-title" title="@feature.Title" data-testid="feature-title">@feature.Title</span>
                         </div>
                         @if (expanded)
@@ -133,20 +144,34 @@
 @code {
     private RenderFragment Rows(MeasureInfo info) => Rows(info.Rows);
 
+    /// <summary>
+    /// The rows as a definition list: a part's rows under its name (D104), values right-aligned in tabular
+    /// figures and grouped in thousands for reading, and a copy button, shown on hover or focus, that
+    /// copies the value as it was formatted, without the grouping.
+    /// </summary>
     private RenderFragment Rows(IReadOnlyList<MeasureRow> rows) =>
         @<dl class="j3d-measure-rows">
-            @foreach (var row in rows)
+            @for (var i = 0; i < rows.Count; i++)
             {
-                <div class="j3d-measure-row" data-testid="measure-row">
+                var row = rows[i];
+                @if (row.Group is { } group && (i == 0 || rows[i - 1].Group != group))
+                {
+                    <div class="j3d-measure-group" data-testid="measure-group">@group</div>
+                }
+                <div class="@(row.Group is null ? "j3d-measure-row" : "j3d-measure-row j3d-measure-row--grouped")" data-testid="measure-row">
                     <dt>@row.Name</dt>
                     <dd>
-                        <span data-testid="measure-value">@row.Value</span>
-                        <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy"
-                                       Size="Size.Small"
-                                       aria-label="@($"Copy {row.Name}")"
-                                       OnClick="@(() => CopyAsync(row.Value))"
-                                       Class="j3d-measure-copy"
-                                       data-testid="measure-copy" />
+                        <span class="j3d-measure-value" data-testid="measure-value">@DisplayFormat.Grouped(row.Value)</span>
+                        @if (DisplayFormat.HasNumber(row.Value))
+                        {
+                            <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy"
+                                           Size="Size.Small"
+                                           aria-label="@($"Copy {row.Name}")"
+                                           title="Copy"
+                                           OnClick="@(() => CopyAsync(row.Value))"
+                                           Class="j3d-measure-copy"
+                                           data-testid="measure-copy" />
+                        }
                     </dd>
                 </div>
             }

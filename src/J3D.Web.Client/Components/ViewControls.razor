@@ -1,0 +1,15 @@
+@* The projection (D19), beside the view it changes: under the view cube, not in the app bar, since it's
+   a setting of the view rather than a tool. *@
+<div class="j3d-view-controls" data-testid="view-controls">
+    <MudToggleGroup T="Projection"
+                    Value="Session.Projection"
+                    ValueChanged="SetProjectionAsync"
+                    Size="Size.Small"
+                    Disabled="@(!Session.IsReady)"
+                    Class="j3d-segmented j3d-projection"
+                    aria-label="Projection"
+                    data-testid="projection">
+        <MudToggleItem Value="Projection.Orthographic" aria-pressed="@Pressed(Projection.Orthographic)" data-testid="projection-orthographic">Orthographic</MudToggleItem>
+        <MudToggleItem Value="Projection.Perspective" aria-pressed="@Pressed(Projection.Perspective)" data-testid="projection-perspective">Perspective</MudToggleItem>
+    </MudToggleGroup>
+</div>

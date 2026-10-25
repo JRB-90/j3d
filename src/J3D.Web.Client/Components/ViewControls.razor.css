@@ -1,0 +1,18 @@
+/* Under the view cube (110 px, 12 px from the corner), right-aligned with it: the cube's corner owns the
+   view's own settings (DESIGN.md, Fixed Corners). */
+.j3d-view-controls {
+    position: absolute;
+    top: 128px;
+    right: 12px;
+    z-index: 1;
+}
+
+.j3d-view-controls ::deep .mud-toggle-group.j3d-segmented {
+    background: rgba(27, 30, 35, 0.92);
+}
+
+.j3d-view-controls ::deep .mud-toggle-group.j3d-segmented .mud-toggle-item {
+    height: 26px;
+    padding: 0 8px;
+    font-size: 0.75rem;
+}

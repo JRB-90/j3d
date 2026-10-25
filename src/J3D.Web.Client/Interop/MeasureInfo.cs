@@ -20,7 +20,8 @@ public sealed record MeasureInfo(
     public bool Touches(ModelId id) => Parts.Any(part => part.ModelId == id);
 }
 
-public sealed record MeasureRow(string Name, string Value);
+/// <summary>One row: its name and formatted value, and the part it describes when it's one of a part's (D104).</summary>
+public sealed record MeasureRow(string Name, string Value, string? Group = null);
 
 /// <summary>A part a measurement touches: its model and tree node.</summary>
 public sealed record MeasurePart(string Id, int Node)

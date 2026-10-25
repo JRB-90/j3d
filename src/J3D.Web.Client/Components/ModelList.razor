@@ -5,7 +5,8 @@
         <MudButton Variant="Variant.Text"
                    Size="Size.Small"
                    Color="Color.Inherit"
-                   StartIcon="@Icons.Material.Filled.DeleteSweep"
+                   StartIcon="@Icons.Material.Outlined.DeleteSweep"
+                   Class="j3d-clear-all"
                    Disabled="@(!Scene.CanClearAll)"
                    OnClick="ClearAllAsync"
                    data-testid="clear-all">
@@ -14,7 +15,7 @@
     </div>
     @if (Scene.Models.IsEmpty)
     {
-        <MudText Typo="Typo.body2" Class="px-4 mud-text-disabled" data-testid="model-list-empty">No models imported.</MudText>
+        <MudText Typo="Typo.body2" Class="px-4 mud-text-secondary" data-testid="model-list-empty">No models yet. Import files, or drop them on the view.</MudText>
     }
     else
     {
@@ -24,29 +25,3 @@
         }
     }
 </section>
-
-@* MessageBoxOptions can't colour the buttons, so the confirmation is an inline message box whose Yes
-   button is the red Delete (D29). *@
-<MudMessageBox @ref="_confirmDelete" Title="Delete model" CancelText="Cancel">
-    <MessageContent>Delete <strong>@_deleteName</strong>?</MessageContent>
-    <YesButton>
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Error"
-                   StartIcon="@Icons.Material.Filled.Delete"
-                   data-testid="confirm-delete">
-            Delete
-        </MudButton>
-    </YesButton>
-</MudMessageBox>
-
-<MudMessageBox @ref="_confirmClearAll" Title="Clear all" CancelText="Cancel">
-    <MessageContent>Remove every model, and everything kept for your next visit? This can't be undone.</MessageContent>
-    <YesButton>
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Error"
-                   StartIcon="@Icons.Material.Filled.DeleteSweep"
-                   data-testid="confirm-clear-all">
-            Clear all
-        </MudButton>
-    </YesButton>
-</MudMessageBox>

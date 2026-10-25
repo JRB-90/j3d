@@ -8,10 +8,11 @@ using MudBlazor;
 namespace J3D.Web.Client.Components;
 
 /// <summary>
-/// Import, Export (M9, D119), Fit all and the projection toggle, in the app bar (decision D48), then
-/// Hide, Isolate, Show all, Undo and Redo (D97), each enabled when it would do something. Enabled once
-/// the viewer is running with WebGL2. Since M12 the selection mode's switch (D146) sits before Measure,
-/// and the toolbar also runs the exports the context menu asks for (D164).
+/// The app bar's tools in labelled groups (decision D48): Import, Export (M9, D119) and Fit all; the
+/// selection mode (D146); Measure, Move and Origin frames; Hide, Isolate and Show all; Undo and Redo
+/// (D97). Each is enabled when it would do something, once the viewer is running with WebGL2. The
+/// toolbar also runs the exports the context menu asks for (D164). The projection toggle lives by the
+/// view cube (<see cref="ViewControls"/>).
 /// </summary>
 public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISnackbar snackbar) : IDisposable
 {
@@ -77,12 +78,30 @@ public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISn
         _ => "feature",
     };
 
+    private static string ModeName(SelectMode mode) => mode switch
+    {
+        SelectMode.Models => "Model",
+        SelectMode.Objects => "Object",
+        _ => "Feature",
+    };
+
     private static string ModeTooltip(SelectMode mode) => mode switch
     {
-        SelectMode.Models => "Select models (1)",
-        SelectMode.Objects => "Select objects (2)",
-        _ => "Select faces, edges and vertices (3)",
+        SelectMode.Models => "Clicks select whole models (1)",
+        SelectMode.Objects => "Clicks select parts; the tree selects sub-assemblies too (2)",
+        _ => "Clicks select faces, edges and vertices (3)",
     };
+
+    /// <summary>A tool button, tinted while its tool is on.</summary>
+    private static string ToolClass(bool on) => on ? "j3d-tool j3d-collapsible j3d-tool--on" : "j3d-tool j3d-collapsible";
+
+    /// <summary>
+    /// X, Y and Z axes from one corner, for Origin frames: Material has no axes icon, and its "3D rotation"
+    /// read as rotating. Drawn as strokes on Material's 24 px grid, at its 2 px weight.
+    /// </summary>
+    internal const string OriginFramesIcon =
+        "<g fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" +
+        "<path d=\"M6 18V4M3.5 6.5 6 4l2.5 2.5\"/><path d=\"M6 18h14M17.5 15.5 20 18l-2.5 2.5\"/><path d=\"M6 18l-3 3\"/></g>";
 
     private static string ModeIcon(SelectMode mode) => mode switch
     {
@@ -148,6 +167,4 @@ public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISn
     }
 
     private Task FitAllAsync() => session.FitAllAsync();
-
-    private Task SetProjectionAsync(Projection projection) => session.SetProjectionAsync(projection);
 }

@@ -1,0 +1,15 @@
+/* Clear all removes everything, after asking: present but quieter than the heading beside it. */
+.j3d-model-list ::deep .j3d-clear-all {
+    padding: 2px 8px;
+    border-radius: 6px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+}
+
+.j3d-model-list ::deep .j3d-clear-all:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+.j3d-model-list ::deep .j3d-clear-all.mud-button-disabled {
+    color: var(--mud-palette-action-disabled);
+}

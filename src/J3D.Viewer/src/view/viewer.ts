@@ -1216,6 +1216,14 @@ export class Viewer {
     if (event.altKey || isEditable(event.target)) {
       return;
     }
+    // A menu is open over the page: its keys are the menu's, and Escape closes it rather than
+    // clearing the selection or ending a tool behind it.
+    if (openMenu()) {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+      return;
+    }
     const key = event.key.toLowerCase();
     const command = event.ctrlKey || event.metaKey ? keyCommand(key, event.shiftKey, true) : keyCommand(key, event.shiftKey, false);
     if (command === 'fit') {
@@ -1522,6 +1530,22 @@ function sameSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
 /** Fractions across a range, from the middle outwards: 0.5, then nearer the edges. */
 function gridFractions(steps: number): number[] {
   return Array.from({ length: steps }, (_, i) => (i + 0.5) / steps).sort((a, b) => Math.abs(a - 0.5) - Math.abs(b - 0.5));
+}
+
+/**
+ * A menu open in the page's popover layer (the page's UI library draws menus there, with an overlay that
+ * closes them when it's clicked). Tooltips use the same layer, so only a list counts.
+ */
+function openMenu(): Element | null {
+  return document.querySelector('.mud-popover-open .mud-list');
+}
+
+/** Closes the open menu as a click beside it would. */
+function closeMenu(): void {
+  const overlay = document.querySelector('.mud-overlay');
+  if (overlay instanceof HTMLElement) {
+    overlay.click();
+  }
 }
 
 function isEditable(target: EventTarget | null): boolean {

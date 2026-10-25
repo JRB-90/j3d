@@ -64,10 +64,12 @@ public sealed class MoveUiTests : BunitTestBase
         await Act(() => Scene.ReportMoveTarget(new MoveTargetInfo(Id, 2, Translated(5, 0, 0), Translated(100, 0, 0), 1)));
         Assert.Equal("Top", cut.Find("[data-testid=move-title]").TextContent);
         Assert.Equal("0.000", cut.Find("[data-testid=move-x]").GetAttribute("value")); // Local: always zero
+        Assert.Equal("Move by", cut.Find("[data-testid=move-heading]").TextContent);
 
         cut.Find("[data-testid=move-frame-world]").Click();
         Assert.Equal(MoveFrame.World, Scene.Frame);
         Assert.Equal("105.000", cut.Find("[data-testid=move-x]").GetAttribute("value"));
+        Assert.Equal("Position in the world", cut.Find("[data-testid=move-heading]").TextContent);
 
         cut.Find("[data-testid=move-y]").Input("2,5"); // a comma works as the decimal point
         cut.Find("[data-testid=move-z]").Input("abc");
@@ -79,6 +81,28 @@ public sealed class MoveUiTests : BunitTestBase
         cut.Find("[data-testid=move-z]").KeyDown(new KeyboardEventArgs { Key = "Enter" });
         var placed = Scene.Find(Id)!.Placements[2];
         Assert.Equal((5, 2.5, -1), (placed[0, 3], placed[1, 3], placed[2, 3]));
+        Assert.True(Scene.CanUndo);
+    }
+
+    [Fact]
+    public async Task Apply_applies_the_fields_as_enter_does()
+    {
+        await StartViewerAsync();
+        var cut = Render<SelectionPanel>();
+        await Act(() =>
+        {
+            Scene.SelectNode(Id, 2, additive: false);
+            Scene.SetMoveMode(MoveMode.Translate);
+        });
+        await Act(() => Scene.ReportMoveTarget(new MoveTargetInfo(Id, 2, Translated(5, 0, 0), Translated(100, 0, 0), 1)));
+        cut.Find("[data-testid=move-frame-parent]").Click();
+        Assert.Equal("Position in its parent", cut.Find("[data-testid=move-heading]").TextContent);
+
+        cut.Find("[data-testid=move-z]").Input("7");
+        cut.Find("[data-testid=move-apply]").Click();
+
+        var placed = Scene.Find(Id)!.Placements[2];
+        Assert.Equal((5, 0, 7), (placed[0, 3], placed[1, 3], placed[2, 3]));
         Assert.True(Scene.CanUndo);
     }
 

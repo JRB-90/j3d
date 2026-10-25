@@ -24,7 +24,7 @@ public sealed class ModelListTests : BunitTestBase
     {
         var cut = Render<ModelList>();
 
-        Assert.Equal("No models imported.", cut.Find("[data-testid=model-list-empty]").TextContent);
+        Assert.Equal("No models yet. Import files, or drop them on the view.", cut.Find("[data-testid=model-list-empty]").TextContent);
         Assert.Empty(cut.FindAll("[data-testid=model-item]"));
     }
 

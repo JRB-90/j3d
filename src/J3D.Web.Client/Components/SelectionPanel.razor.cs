@@ -58,7 +58,7 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
         _ => pose.Rz,
     }).ToString(field < 3 ? "0.000" : "0.00", CultureInfo.InvariantCulture);
 
-    /// <summary>Enter applies all six fields as one move (D148); Esc drops what's been typed.</summary>
+    /// <summary>Enter applies all six fields as one move (D148), as Apply does; Esc drops what's been typed.</summary>
     private void OnFieldKey(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args, Pose pose)
     {
         if (args.Key == "Escape")
@@ -67,11 +67,27 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
             return;
         }
 
-        if (args.Key != "Enter")
+        if (args.Key == "Enter")
         {
-            return;
+            Apply(pose);
         }
+    }
 
+    /// <summary>
+    /// What the fields hold in this frame: in Local a move by the values about the object's own axes,
+    /// otherwise its position in the parent's or the world's frame (D148). Said above them, since the same
+    /// six fields mean a move in one frame and a place in the others.
+    /// </summary>
+    private string FieldsHeading => scene.Frame switch
+    {
+        MoveFrame.Local => "Move by",
+        MoveFrame.Parent => "Position in its parent",
+        _ => "Position in the world",
+    };
+
+    /// <summary>Applies all six fields as one move, from Enter or the Apply button; a field that isn't a number keeps what was typed.</summary>
+    private void Apply(Pose pose)
+    {
         var values = new double[6];
         for (var field = 0; field < 6; field++)
         {
