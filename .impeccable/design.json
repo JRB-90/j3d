@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T00:00:00Z",
+  "title": "Design System: J3D",
+  "extensions": {
+    "colorMeta": {
+      "selection-blue": { "role": "primary", "displayName": "Selection Blue", "canonical": "oklch(69.3% 0.164 255)", "tonalRamp": ["oklch(15% 0.041 255)", "oklch(26% 0.087 255)", "oklch(37% 0.148 255)", "oklch(48% 0.164 255)", "oklch(60% 0.164 255)", "oklch(71% 0.159 255)", "oklch(83% 0.093 255)", "oklch(95% 0.041 255)"] },
+      "warning-amber": { "role": "status", "displayName": "Warning Amber", "canonical": "oklch(82.4% 0.149 73)", "tonalRamp": ["oklch(15% 0.037 73)", "oklch(26% 0.079 73)", "oklch(37% 0.134 73)", "oklch(48% 0.149 73)", "oklch(60% 0.149 73)", "oklch(71% 0.144 73)", "oklch(83% 0.084 73)", "oklch(95% 0.037 73)"] },
+      "error-coral": { "role": "status", "displayName": "Error Coral", "canonical": "oklch(71.2% 0.181 23)", "tonalRamp": ["oklch(15% 0.045 23)", "oklch(26% 0.097 23)", "oklch(37% 0.163 23)", "oklch(48% 0.181 23)", "oklch(60% 0.181 23)", "oklch(71% 0.175 23)", "oklch(83% 0.103 23)", "oklch(95% 0.045 23)"] },
+      "page-black": { "role": "neutral", "displayName": "Page Black", "canonical": "oklch(19% 0.007 258)", "tonalRamp": ["oklch(15% 0.002 258)", "oklch(26% 0.004 258)", "oklch(37% 0.006 258)", "oklch(48% 0.007 258)", "oklch(60% 0.007 258)", "oklch(71% 0.007 258)", "oklch(83% 0.004 258)", "oklch(95% 0.002 258)"] },
+      "chrome-graphite": { "role": "neutral", "displayName": "Chrome Graphite", "canonical": "oklch(21.2% 0.009 256)", "tonalRamp": ["oklch(15% 0.002 256)", "oklch(26% 0.005 256)", "oklch(37% 0.008 256)", "oklch(48% 0.009 256)", "oklch(60% 0.009 256)", "oklch(71% 0.009 256)", "oklch(83% 0.005 256)", "oklch(95% 0.002 256)"] },
+      "surface-slate": { "role": "neutral", "displayName": "Surface Slate", "canonical": "oklch(23.4% 0.011 261)", "tonalRamp": ["oklch(15% 0.003 261)", "oklch(26% 0.006 261)", "oklch(37% 0.01 261)", "oklch(48% 0.011 261)", "oklch(60% 0.011 261)", "oklch(71% 0.01 261)", "oklch(83% 0.006 261)", "oklch(95% 0.003 261)"] },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "oklch(30.3% 0.014 257)", "tonalRamp": ["oklch(15% 0.004 257)", "oklch(26% 0.008 257)", "oklch(37% 0.013 257)", "oklch(48% 0.014 257)", "oklch(60% 0.014 257)", "oklch(71% 0.014 257)", "oklch(83% 0.008 257)", "oklch(95% 0.004 257)"] },
+      "text-bright": { "role": "neutral", "displayName": "Text Bright", "canonical": "oklch(93% 0.005 258)", "tonalRamp": ["oklch(15% 0.001 258)", "oklch(26% 0.002 258)", "oklch(37% 0.004 258)", "oklch(48% 0.005 258)", "oklch(60% 0.005 258)", "oklch(71% 0.004 258)", "oklch(83% 0.003 258)", "oklch(95% 0.001 258)"] },
+      "text-soft": { "role": "neutral", "displayName": "Text Soft", "canonical": "oklch(84.7% 0.009 258)", "tonalRamp": ["oklch(15% 0.002 258)", "oklch(26% 0.005 258)", "oklch(37% 0.008 258)", "oklch(48% 0.009 258)", "oklch(60% 0.009 258)", "oklch(71% 0.009 258)", "oklch(83% 0.005 258)", "oklch(95% 0.002 258)"] },
+      "text-muted": { "role": "neutral", "displayName": "Text Muted", "canonical": "oklch(70.7% 0.017 257)", "tonalRamp": ["oklch(15% 0.004 257)", "oklch(26% 0.009 257)", "oklch(37% 0.015 257)", "oklch(48% 0.017 257)", "oklch(60% 0.017 257)", "oklch(71% 0.016 257)", "oklch(83% 0.009 257)", "oklch(95% 0.004 257)"] },
+      "text-faint": { "role": "neutral", "displayName": "Text Faint", "canonical": "oklch(49.8% 0.02 259)", "tonalRamp": ["oklch(15% 0.005 259)", "oklch(26% 0.01 259)", "oklch(37% 0.018 259)", "oklch(48% 0.02 259)", "oklch(60% 0.02 259)", "oklch(71% 0.019 259)", "oklch(83% 0.011 259)", "oklch(95% 0.005 259)"] },
+      "control-off": { "role": "neutral", "displayName": "Control Off", "canonical": "oklch(42.9% 0.017 258)", "tonalRamp": ["oklch(15% 0.004 258)", "oklch(26% 0.009 258)", "oklch(37% 0.015 258)", "oklch(48% 0.017 258)", "oklch(60% 0.017 258)", "oklch(71% 0.016 258)", "oklch(83% 0.01 258)", "oklch(95% 0.004 258)"] },
+      "viewport-top": { "role": "scene", "displayName": "Viewport Top", "canonical": "oklch(30.4% 0.016 260)", "tonalRamp": ["oklch(15% 0.004 260)", "oklch(26% 0.009 260)", "oklch(37% 0.014 260)", "oklch(48% 0.016 260)", "oklch(60% 0.016 260)", "oklch(71% 0.016 260)", "oklch(83% 0.009 260)", "oklch(95% 0.004 260)"] },
+      "viewport-bottom": { "role": "scene", "displayName": "Viewport Bottom", "canonical": "oklch(20.8% 0.009 256)", "tonalRamp": ["oklch(15% 0.002 256)", "oklch(26% 0.005 256)", "oklch(37% 0.008 256)", "oklch(48% 0.009 256)", "oklch(60% 0.009 256)", "oklch(71% 0.009 256)", "oklch(83% 0.005 256)", "oklch(95% 0.002 256)"] },
+      "part-grey": { "role": "scene", "displayName": "Part Grey", "canonical": "oklch(78.4% 0.011 257)", "tonalRamp": ["oklch(15% 0.003 257)", "oklch(26% 0.006 257)", "oklch(37% 0.01 257)", "oklch(48% 0.011 257)", "oklch(60% 0.011 257)", "oklch(71% 0.011 257)", "oklch(83% 0.006 257)", "oklch(95% 0.003 257)"] },
+      "edge-black": { "role": "scene", "displayName": "Edge Black", "canonical": "oklch(15.9% 0.005 264)", "tonalRamp": ["oklch(15% 0.001 264)", "oklch(26% 0.002 264)", "oklch(37% 0.004 264)", "oklch(48% 0.005 264)", "oklch(60% 0.005 264)", "oklch(71% 0.004 264)", "oklch(83% 0.003 264)", "oklch(95% 0.001 264)"] },
+      "cube-face": { "role": "scene", "displayName": "Cube Face", "canonical": "oklch(37% 0.019 261)", "tonalRamp": ["oklch(15% 0.005 261)", "oklch(26% 0.01 261)", "oklch(37% 0.017 261)", "oklch(48% 0.019 261)", "oklch(60% 0.019 261)", "oklch(71% 0.018 261)", "oklch(83% 0.011 261)", "oklch(95% 0.005 261)"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "\"J3D\" in the app bar. The only large text." },
+      "body": { "displayName": "Body", "purpose": "Default text: menu items and dialog text. Panel and card titles use it at 500." },
+      "subtitle": { "displayName": "Subtitle", "purpose": "Section heads such as \"Models\", in Text Muted." },
+      "body-dense": { "displayName": "Body Dense", "purpose": "Model details, the tree, measurement rows and hints." },
+      "label": { "displayName": "Label", "purpose": "Text buttons. UPPERCASE, inherited from MudBlazor." },
+      "label-small": { "displayName": "Label Small", "purpose": "Small buttons and toggle segments. UPPERCASE, inherited." },
+      "caption": { "displayName": "Caption", "purpose": "The model kind and menu captions (menu captions add 0.04em tracking)." },
+      "tag": { "displayName": "Tag", "purpose": "The format tag (STEP, BREP, GLB...)." },
+      "readout": { "displayName": "Readout", "purpose": "Values in the panel and the move fields, in tabular figures." },
+      "callout": { "displayName": "Callout", "purpose": "Measurement labels over the 3D view, in tabular figures." }
+    },
+    "shadows": [
+      { "name": "menu", "value": "0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12)", "purpose": "Material elevation 8: the toolbar's and model list's menus, and the context menu." },
+      { "name": "dialog", "value": "0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14), 0 9px 46px 8px rgba(0,0,0,.12)", "purpose": "Material elevation 24: confirmation dialogs and About." },
+      { "name": "selection-bar", "value": "inset 3px 0 0 #4F9DFF", "purpose": "Not elevation: the bar inside a selected model row's left edge (Model mode)." }
+    ],
+    "motion": [
+      { "name": "camera-transition", "value": "camera-controls smoothTime 0.25s (0.125s while dragging)", "purpose": "Fit all, Home and view cube clicks animate the camera; the library's defaults, not set by J3D." },
+      { "name": "control-state", "value": "250ms cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "MudBlazor's Material transition for button and toggle backgrounds (inherited). J3D's own CSS adds no motion." }
+    ],
+    "breakpoints": [
+      { "name": "narrow-bar", "value": "1100px", "purpose": "Below it (max-width 1099.98px), Import, Export and Fit all become 40 px icon buttons, the projection toggle reads Ortho and Persp, and group gaps tighten to 6 px." },
+      { "name": "minimum", "value": "900px", "purpose": "The narrowest width the app bar is designed to keep on one line. There's no phone or tablet layout." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Toolbar Text Button",
+      "kind": "button",
+      "refersTo": "button-toolbar",
+      "description": "Import, Export and Fit all in the app bar: transparent, UPPERCASE (inherited), icon on the left.",
+      "html": "<button class=\"ds-btn-toolbar\" type=\"button\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z\"/></svg>Export</button>",
+      "css": ".ds-btn-toolbar { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--mud-palette-text-primary, #E6E8EB); font: 500 0.875rem/1.75 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; letter-spacing: 0.02857em; text-transform: uppercase; cursor: pointer; transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-toolbar svg { width: 20px; height: 20px; fill: currentColor; } .ds-btn-toolbar:hover, .ds-btn-toolbar:focus-visible { background: rgba(154, 161, 171, 0.06); outline: none; } .ds-btn-toolbar:disabled { color: var(--mud-palette-action-disabled, #4A5059); cursor: default; background: transparent; }"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "A 40 px round icon button (inherited shape), with an accessible name and a tooltip that names its key.",
+      "html": "<button class=\"ds-icon-btn\" type=\"button\" aria-label=\"Show all\" title=\"Show all (Shift+H)\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z\"/></svg></button>",
+      "css": ".ds-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 8px; border: 0; border-radius: 50%; background: transparent; color: var(--mud-palette-text-primary, #E6E8EB); cursor: pointer; transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-icon-btn svg { width: 24px; height: 24px; fill: currentColor; } .ds-icon-btn:hover, .ds-icon-btn:focus-visible { background: rgba(154, 161, 171, 0.06); outline: none; } .ds-icon-btn:disabled { color: var(--mud-palette-action-disabled, #4A5059); background: transparent; cursor: default; }"
+    },
+    {
+      "name": "Active Tool Toggle",
+      "kind": "button",
+      "refersTo": "icon-button-active",
+      "description": "Measure, Move or Origin frames while on: a Selection Blue icon inside a 1 px blue outline, 6 px radius, aria-pressed.",
+      "html": "<button class=\"ds-tool-on\" type=\"button\" aria-label=\"Measure\" aria-pressed=\"true\" title=\"Stop measuring (M)\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z\"/></svg></button>",
+      "css": ".ds-tool-on { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; padding: 8px; border: 1px solid var(--mud-palette-primary, #4F9DFF); border-radius: 6px; background: transparent; color: var(--mud-palette-primary, #4F9DFF); cursor: pointer; transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-tool-on svg { width: 24px; height: 24px; fill: currentColor; } .ds-tool-on:hover, .ds-tool-on:focus-visible { background: rgba(79, 157, 255, 0.06); outline: none; }"
+    },
+    {
+      "name": "Toggle Group",
+      "kind": "custom",
+      "refersTo": "toggle-item-selected",
+      "description": "A segmented one-of-several switch (projection, selection level): blue frame, blue text, and the selected segment filled (white text, inherited).",
+      "html": "<div class=\"ds-toggle\" role=\"group\" aria-label=\"Projection\"><button class=\"ds-toggle-item ds-toggle-item--on\" type=\"button\" aria-pressed=\"true\">Orthographic</button><button class=\"ds-toggle-item\" type=\"button\" aria-pressed=\"false\">Perspective</button></div>",
+      "css": ".ds-toggle { display: inline-flex; border: 1px solid var(--mud-palette-primary, #4F9DFF); border-radius: 6px; overflow: hidden; } .ds-toggle-item { padding: 3px 6px; border: 0; background: transparent; color: var(--mud-palette-primary, #4F9DFF); font: 500 0.8125rem/1.75 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; letter-spacing: 0.02857em; text-transform: uppercase; cursor: pointer; transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-toggle-item + .ds-toggle-item { border-left: 1px solid var(--mud-palette-primary, #4F9DFF); } .ds-toggle-item:hover, .ds-toggle-item:focus-visible { background: rgba(79, 157, 255, 0.06); outline: none; } .ds-toggle-item--on, .ds-toggle-item--on:hover { background: var(--mud-palette-primary, #4F9DFF); color: #FFFFFF; }"
+    },
+    {
+      "name": "Format Tag",
+      "kind": "chip",
+      "refersTo": "format-tag",
+      "description": "The model's format beside its name: outlined in Hairline, no fill, no colour per format; the kind follows in Caption.",
+      "html": "<span class=\"ds-model-head\"><span class=\"ds-model-name\">bracket.step</span><span class=\"ds-tag\">STEP</span><span class=\"ds-kind\">BREP</span></span>",
+      "css": ".ds-model-head { display: inline-flex; align-items: center; gap: 8px; font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; } .ds-model-name { font-size: 0.875rem; font-weight: 500; color: #C9CDD3; } .ds-tag { padding: 0 6px; border: 1px solid var(--mud-palette-lines-default, #2A2F36); border-radius: 4px; font-size: 0.6875rem; line-height: 18px; letter-spacing: 0.04em; color: var(--mud-palette-text-secondary, #9AA1AB); } .ds-kind { font-size: 0.75rem; color: var(--mud-palette-text-secondary, #9AA1AB); }"
+    },
+    {
+      "name": "Tree Node",
+      "kind": "nav",
+      "refersTo": "tree-node-selected",
+      "description": "Assembly tree rows in Body Dense with an eye at the right; the selected node takes a 16% blue fill and blue text; a hidden node's name dims to 50%.",
+      "html": "<ul class=\"ds-tree\"><li class=\"ds-node\"><span class=\"ds-node-name\">Plate (top)</span><button class=\"ds-eye\" type=\"button\" aria-label=\"Hide: Plate (top)\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z\"/></svg></button></li><li class=\"ds-node ds-node--selected\"><span class=\"ds-node-name\">Pin</span><button class=\"ds-eye\" type=\"button\" aria-label=\"Hide: Pin\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z\"/></svg></button></li><li class=\"ds-node ds-node--hidden\"><span class=\"ds-node-name\">Plate (bottom)</span></li></ul>",
+      "css": ".ds-tree { margin: 0; padding: 0; list-style: none; width: 280px; background: #16191D; font: 400 0.8125rem/1.43 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; color: #C9CDD3; } .ds-node { display: flex; align-items: center; height: 26px; padding: 1px 4px; border-radius: 4px; } .ds-node:hover { background: rgba(154, 161, 171, 0.06); } .ds-node-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-node--selected, .ds-node--selected:hover { background: rgba(79, 157, 255, 0.16); color: #4F9DFF; } .ds-node--hidden .ds-node-name { opacity: 0.5; } .ds-eye { display: inline-flex; width: 26px; height: 26px; padding: 4px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; } .ds-eye svg { width: 18px; height: 18px; fill: currentColor; } .ds-eye:hover, .ds-eye:focus-visible { background: rgba(154, 161, 171, 0.12); outline: none; }"
+    },
+    {
+      "name": "Floating Panel",
+      "kind": "card",
+      "refersTo": "floating-panel",
+      "description": "The selection, measurement and move panel at the viewport's bottom left: 92% Surface Slate, a hairline, 6 px radius, tabular values with copy buttons.",
+      "html": "<div class=\"ds-panel\" role=\"status\"><div class=\"ds-panel-title\">Pin</div><div class=\"ds-panel-detail\">assembly.step › Bracket assembly</div><dl class=\"ds-rows\"><div class=\"ds-row\"><dt>Distance</dt><dd>35.000 mm<button class=\"ds-copy\" type=\"button\" aria-label=\"Copy Distance\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z\"/></svg></button></dd></div><div class=\"ds-row\"><dt>Angle (planes)</dt><dd>90.00°<button class=\"ds-copy\" type=\"button\" aria-label=\"Copy Angle\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z\"/></svg></button></dd></div></dl><div class=\"ds-hint\">Pick another to measure against it. Esc stops measuring.</div></div>",
+      "css": ".ds-panel { width: 320px; padding: 8px 12px; border: 1px solid var(--mud-palette-divider, #2A2F36); border-radius: 6px; background: rgba(27, 30, 35, 0.92); color: var(--mud-palette-text-primary, #E6E8EB); font: 400 0.875rem/1.43 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; } .ds-panel-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ds-panel-detail, .ds-hint { font-size: 0.8125rem; color: var(--mud-palette-text-secondary, #9AA1AB); } .ds-rows { margin: 6px 0 6px; padding-top: 6px; border-top: 1px solid var(--mud-palette-divider, #2A2F36); font-size: 0.8125rem; } .ds-row { display: grid; grid-template-columns: minmax(90px, auto) 1fr; gap: 8px; align-items: center; } .ds-row dt { color: var(--mud-palette-text-secondary, #9AA1AB); white-space: nowrap; } .ds-row dd { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin: 0; font-variant-numeric: tabular-nums; } .ds-copy { display: inline-flex; padding: 2px; border: 0; border-radius: 50%; background: transparent; color: inherit; opacity: 0.6; cursor: pointer; } .ds-copy svg { width: 16px; height: 16px; fill: currentColor; } .ds-copy:hover, .ds-copy:focus-visible { opacity: 1; background: rgba(154, 161, 171, 0.12); outline: none; }"
+    },
+    {
+      "name": "Measurement Labels",
+      "kind": "custom",
+      "refersTo": "measure-label",
+      "description": "Values drawn over the 3D view: 92% Surface Slate, 1 px Selection Blue border (dashed for the reference), tabular figures.",
+      "html": "<div class=\"ds-labels\"><span class=\"ds-measure-label ds-measure-label--reference\">300.000 mm²</span><span class=\"ds-measure-label\">35.000 mm</span></div>",
+      "css": ".ds-labels { display: flex; gap: 12px; padding: 16px; background: linear-gradient(180deg, #2A2F37 0%, #15181C 100%); } .ds-measure-label { padding: 2px 6px; border: 1px solid #4F9DFF; border-radius: 4px; background: rgba(27, 30, 35, 0.92); color: #E6E8EB; font: 400 0.75rem/1.43 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; } .ds-measure-label--reference { border-style: dashed; }"
+    },
+    {
+      "name": "Move Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "X, Y, Z (mm) and Rx, Ry, Rz (°): label, thin-bordered field with right-aligned tabular figures, unit; focus turns the border blue. Enter applies.",
+      "html": "<div class=\"ds-fields\"><label class=\"ds-field\"><span>X</span><input type=\"text\" inputmode=\"decimal\" value=\"12.500\"><span class=\"ds-unit\">mm</span></label><label class=\"ds-field\"><span>Y</span><input type=\"text\" inputmode=\"decimal\" value=\"0.000\"><span class=\"ds-unit\">mm</span></label><label class=\"ds-field\"><span>Rz</span><input type=\"text\" inputmode=\"decimal\" value=\"90.00\"><span class=\"ds-unit\">°</span></label></div>",
+      "css": ".ds-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 10px; width: 320px; padding: 8px 12px; background: rgba(27, 30, 35, 0.92); } .ds-field { display: flex; align-items: center; gap: 4px; font: 400 0.8125rem/1.43 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; color: var(--mud-palette-text-secondary, #9AA1AB); } .ds-field span:first-child { min-width: 1.4em; } .ds-field input { width: 100%; min-width: 0; padding: 3px 6px; border: 1px solid var(--mud-palette-divider, #2A2F36); border-radius: 4px; background: transparent; color: var(--mud-palette-text-primary, #E6E8EB); font: inherit; font-variant-numeric: tabular-nums; text-align: right; } .ds-field input:focus { outline: none; border-color: var(--mud-palette-primary, #4F9DFF); } .ds-unit { min-width: 1.6em; }"
+    },
+    {
+      "name": "Menu",
+      "kind": "custom",
+      "refersTo": "menu",
+      "description": "Dense menus on Surface Slate with the Menu shadow; an optional caption says what the commands act on.",
+      "html": "<div class=\"ds-menu\" role=\"menu\"><div class=\"ds-menu-caption\">Export the selection</div><button class=\"ds-menu-item\" type=\"button\" role=\"menuitem\">GLB</button><button class=\"ds-menu-item\" type=\"button\" role=\"menuitem\">STL (binary)</button><button class=\"ds-menu-item\" type=\"button\" role=\"menuitem\">STL (ASCII)</button></div>",
+      "css": ".ds-menu { display: inline-flex; flex-direction: column; min-width: 160px; padding: 4px 0; border-radius: 6px; background: var(--mud-palette-surface, #1B1E23); box-shadow: 0 5px 5px -3px rgba(0,0,0,.2), 0 8px 10px 1px rgba(0,0,0,.14), 0 3px 14px 2px rgba(0,0,0,.12); font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; } .ds-menu-caption { padding: 6px 16px 4px; font-size: 0.75rem; letter-spacing: 0.04em; color: var(--mud-palette-text-secondary, #9AA1AB); } .ds-menu-item { height: 32px; padding: 2px 12px; border: 0; background: transparent; color: var(--mud-palette-text-primary, #E6E8EB); font-family: inherit; font-size: 0.875rem; line-height: 1.43; text-align: left; cursor: pointer; } .ds-menu-item:hover, .ds-menu-item:focus-visible { background: rgba(154, 161, 171, 0.06); outline: none; }"
+    },
+    {
+      "name": "Destructive Confirmation",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "The only filled button: Error Coral with an icon, beside a text Cancel, in Delete and Clear all dialogs.",
+      "html": "<div class=\"ds-confirm\"><button class=\"ds-btn-text\" type=\"button\">Cancel</button><button class=\"ds-btn-danger\" type=\"button\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z\"/></svg>Delete</button></div>",
+      "css": ".ds-confirm { display: inline-flex; gap: 8px; padding: 8px; border-radius: 6px; background: var(--mud-palette-surface, #1B1E23); box-shadow: 0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14), 0 9px 46px 8px rgba(0,0,0,.12); } .ds-btn-text, .ds-btn-danger { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 6px 16px; border: 0; border-radius: 6px; font: 500 0.875rem/1.75 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; letter-spacing: 0.02857em; text-transform: uppercase; cursor: pointer; transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-text { background: transparent; color: var(--mud-palette-text-primary, #E6E8EB); } .ds-btn-text:hover, .ds-btn-text:focus-visible { background: rgba(154, 161, 171, 0.06); outline: none; } .ds-btn-danger { background: var(--mud-palette-error, #FF6B6B); color: #FFFFFF; } .ds-btn-danger svg { width: 18px; height: 18px; fill: currentColor; } .ds-btn-danger:hover, .ds-btn-danger:focus-visible { background: var(--mud-palette-error-darken, #FF4545); outline: none; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Inspection Bench",
+    "overview": "You put a part down on the bench to check it. The light is neutral, the edges are true and the callouts are exact. Everything J3D draws serves that moment:\n\n- The chrome is a quiet frame of cool near-black.\n- The viewport is a soft graphite gradient that lets any part colour read.\n- One blue, Selection Blue, marks only what the user is acting on: the selected part, the active tool, the measured edge.\n\nThe mood is **quiet, exact and workmanlike**. Precision shows in the numbers and in the drawing, not in decoration. The numbers use tabular figures, always carry their unit, and give lengths to three decimals. The drawing puts near-black BREP edges over every face.\n\nControls are compact and stay quiet until they're active. They sit in grey at rest; a tool that's on takes the blue outline. The density is a desktop tool's: a 48 px bar, a 320 px model list and 13 px detail text. It never gets crowded, though: there's one row of tools, one floating panel and one view cube.\n\nJ3D is dark only (PRODUCT.md). The chrome is MudBlazor 9's Material components on a custom dark palette. Some of the look comes from the library rather than from a decision: UPPERCASE button labels, round icon buttons, and white text on blue toggles. This file marks those as **inherited**. New work matches them, but a later refinement may replace them.",
+    "keyCharacteristics": [
+      "Dark only, with cool near-black neutrals: hue about 258°, OKLCH chroma under 0.02.",
+      "One accent, Selection Blue. Everything else in the chrome is grey.",
+      "Flat chrome separated by 1 px hairlines. Shadows only on what floats.",
+      "The system font stack. Numbers in tabular figures, with their units.",
+      "The model is the brightest thing on screen."
+    ],
+    "rules": [
+      { "name": "The One Blue Rule", "body": "Selection Blue marks what the user is acting on (the selection, the hover, the active tool or mode, the measurement, progress) and nothing else. There's no decorative blue and no second accent.", "section": "colors" },
+      { "name": "The Model Is Brightest Rule", "body": "The chrome stays within the graphite neutrals, so the model is the brightest thing on screen, in its own colours or in Part Grey. Bars and panels are never filled with colour.", "section": "colors" },
+      { "name": "The Status Means Status Rule", "body": "Amber and coral appear only for warnings, failures and the destructive confirmation. Never use them for emphasis or decoration.", "section": "colors" },
+      { "name": "The Tabular Figures Rule", "body": "Every number the user reads as a value is set in tabular figures: measurements, move fields and the labels in 3D. Its unit is written after it (mm, °, mm²). Lengths have three decimals, angles two, and mesh values are prefixed ≈. Values in fields are right-aligned.", "section": "typography" },
+      { "name": "The Weight Ceiling Rule", "body": "500 is the heaviest weight in the chrome. The only exception is the view cube's labels, which are drawn on the canvas at 600. Emphasis comes from Text Bright against Text Muted, not from bold.", "section": "typography" },
+      { "name": "The One Bar Rule", "body": "Every global tool lives in the app bar's single row, which stays on one line from 900 px up. A new tool joins a group. It doesn't get a second row or a floating toolbar.", "section": "layout" },
+      { "name": "The Fixed Corners Rule", "body": "Each viewport corner has one owner: the view cube top right, the panel bottom left, and snackbars bottom right. Nothing else goes in those corners.", "section": "layout" },
+      { "name": "The Shadows Only When Floating Rule", "body": "A shadow means \"this sits above the page and will go away\": a menu, a dialog, a snackbar. Bars, rows and panels stay flat, with hairlines.", "section": "elevation" },
+      { "name": "The Dashed Means Reference Rule", "body": "A dashed Selection Blue outline means \"the reference\" (a measurement's first pick) or \"drop here\". A solid outline is the current result or the active state.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do use Selection Blue (#4F9DFF) only for the selection, the hover, an active tool or mode, measurement graphics and progress.",
+      "Do keep the chrome in the graphite neutrals, and separate regions with 1 px Hairline (#2A2F36) borders.",
+      "Do give every icon-only button an accessible name and a tooltip. In the toolbar, the tooltip names the key, as in \"Fit all (F)\".",
+      "Do show values in tabular figures with their unit: lengths to 3 decimals, angles to 2, and ≈ before mesh values.",
+      "Do float new viewport UI on 92% Surface Slate with a hairline and a 6 px radius, in a corner no one owns yet.",
+      "Do match MudBlazor's inherited defaults (UPPERCASE labels, round icon buttons) in new controls, until a refinement replaces them everywhere at once."
+    ],
+    "donts": [
+      "Don't add a light theme, a theme toggle, or light surfaces. PRODUCT.md makes dark only binding.",
+      "Don't load fonts, icons or images from another origin. Cross-origin isolation blocks them, so use the system stack and bundled or inline assets.",
+      "Don't add a second accent colour, gradients in the chrome, or coloured fills on bars and panels.",
+      "Don't put shadows on bars, the drawer, rows or the floating panel. Shadows are for menus, dialogs and snackbars.",
+      "Don't use Warning Amber or Error Coral for anything but warnings, failures and the destructive confirmation.",
+      "Don't use Text Faint (#5C636E, 2.9:1) for text the user needs to read.",
+      "Don't add a second toolbar row. The app bar stays on one line from 900 px up."
+    ]
+  }
+}
