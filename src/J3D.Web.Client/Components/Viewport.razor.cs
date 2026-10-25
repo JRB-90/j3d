@@ -372,6 +372,7 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         _appliedSelectionMode = selectionMode;
         var measureMode = scene.MeasureMode;
         var fromContext = scene.TakeMeasureFromContext();
+        var fit = scene.TakeFitRequest();
         var modeChanged = measureMode != _appliedMeasureMode || fromContext;
         _appliedMeasureMode = measureMode;
 
@@ -390,6 +391,11 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             foreach (var model in pending)
             {
                 await viewer.SetPartStateAsync(model.Id, model.Hidden, model.Selected);
+            }
+
+            if (fit)
+            {
+                await viewer.FitAllAsync(); // after Isolate, once the viewer hides the rest
             }
 
             foreach (var (id, node, placement) in moves)

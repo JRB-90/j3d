@@ -1,0 +1,14 @@
+/* Links in the About text and the licence table read as text with a quiet underline, and take the blue
+   only under the pointer: fourteen blue names made this the bluest screen in the app. */
+.j3d-about-body ::deep .mud-link {
+    color: var(--mud-palette-text-primary);
+    text-decoration: underline;
+    text-decoration-color: rgba(154, 161, 171, 0.5);
+    text-underline-offset: 3px;
+}
+
+.j3d-about-body ::deep .mud-link:hover,
+.j3d-about-body ::deep .mud-link:focus-visible {
+    color: var(--mud-palette-primary);
+    text-decoration-color: currentColor;
+}

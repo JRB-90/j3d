@@ -338,6 +338,17 @@ public sealed class SceneState
         Set(Models, always: true);
     }
 
+    /// <summary>Isolate has changed what's visible, and the view should fit what's left once the viewer has it.</summary>
+    public bool FitRequested { get; private set; }
+
+    /// <summary>The <c>Viewport</c> has fitted the view after an Isolate.</summary>
+    public bool TakeFitRequest()
+    {
+        var requested = FitRequested;
+        FitRequested = false;
+        return requested;
+    }
+
     /// <summary>The <c>Viewport</c> has passed a "Measure from here" on to the viewer.</summary>
     public bool TakeMeasureFromContext()
     {
@@ -529,11 +540,15 @@ public sealed class SceneState
     /// <summary>Hides the selected parts, which leaves the selection empty (D78, D98).</summary>
     public void HideSelection() => ChangeVisibility(model => model.Hidden.Union(model.Selected));
 
-    /// <summary>Hides every part outside the selection, in every model (assumption 9).</summary>
+    /// <summary>
+    /// Hides every part outside the selection, in every model (assumption 9), and fits the view to what's
+    /// left, so the isolated parts aren't left off to one side.
+    /// </summary>
     public void IsolateSelection()
     {
         if (CanIsolate)
         {
+            FitRequested = true;
             ChangeVisibility(model => [.. model.Tree?.Parts.Where(part => !model.Selected.Contains(part)) ?? []]);
         }
     }

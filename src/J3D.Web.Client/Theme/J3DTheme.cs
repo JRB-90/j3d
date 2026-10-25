@@ -42,6 +42,9 @@ public static class J3DTheme
         Typography = new Typography
         {
             Default = new DefaultTypography { FontFamily = FontStack },
+            // Sentence case with no extra tracking, as everything else in J3D is written: Material's
+            // UPPERCASE buttons were a library default, not a J3D decision (DESIGN.md).
+            Button = new ButtonTypography { FontFamily = FontStack, TextTransform = "none", LetterSpacing = "normal", FontWeight = "500" },
         },
         LayoutProperties = new LayoutProperties
         {

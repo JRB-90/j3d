@@ -122,9 +122,28 @@ public sealed class SelectionTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.Keyboard.PressAsync("i");
         await WaitForPartStateAsync(id, [Bottom, Top], [Pin]);
 
-        await Page.Keyboard.PressAsync("f");
+        // Isolate fits the view to what's left, with no Fit all needed.
         await WaitForCameraRestAsync();
-        Assert.True((await CameraAsync()).VisibleHeight < before.VisibleHeight * 0.8, "Fit all frames only the visible pin");
+        Assert.True((await CameraAsync()).VisibleHeight < before.VisibleHeight * 0.8, "Isolate frames only the visible pin");
+        AssertNoConsoleErrors();
+    }
+
+    [Fact]
+    public async Task Escape_closes_an_open_menu_and_keeps_the_selection()
+    {
+        var id = await LoadAsync("assembly.step");
+        await ClickAsync((await PartPointAsync(id, Pin))!);
+        await WaitForPartStateAsync(id, [], [Pin]);
+
+        await Page.GetByTestId("export-menu").Locator("button").First.ClickAsync();
+        await Expect(Page.GetByTestId("export-scope")).ToBeVisibleAsync();
+        await Page.Keyboard.PressAsync("Escape");
+
+        await Expect(Page.GetByTestId("export-scope")).ToBeHiddenAsync();
+        var selected = (await PartStateAsync(id)).Selected;
+        Assert.Equal(new[] { Pin }, selected); // the Escape was the menu's, not the selection's
+        await Page.Keyboard.PressAsync("Escape");
+        await WaitForPartStateAsync(id, [], []);
         AssertNoConsoleErrors();
     }
 

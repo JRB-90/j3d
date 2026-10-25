@@ -34,4 +34,19 @@ public sealed class DisplayFormatTests
     [InlineData(1_200_000, "1.2M parts")]
     public void Counted_says_the_noun_in_the_right_number(long count, string expected) =>
         Assert.Equal(expected, DisplayFormat.Counted(count, "part"));
+
+    [Theory]
+    [InlineData("35.000 mm", "35.000 mm")]
+    [InlineData("6000.000 mm²", "6000.000 mm²")] // four digits stay whole, as in print
+    [InlineData("12500.000 mm³", "12 500.000 mm³")]
+    [InlineData("-1234567.125 mm", "-1 234 567.125 mm")]
+    [InlineData("(0.123456, 10000.000, 5.000)", "(0.123456, 10 000.000, 5.000)")] // decimals aren't grouped
+    [InlineData("≈ 100000.000 mm", "≈ 100 000.000 mm")]
+    public void Grouped_splits_long_whole_numbers_into_thousands(string value, string expected) =>
+        Assert.Equal(expected, DisplayFormat.Grouped(value));
+
+    [Theory]
+    [InlineData("35.000 mm", true)]
+    [InlineData("Face of Plate (top)", false)]
+    public void HasNumber_tells_values_from_names(string value, bool expected) => Assert.Equal(expected, DisplayFormat.HasNumber(value));
 }

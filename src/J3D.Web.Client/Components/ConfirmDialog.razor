@@ -1,0 +1,20 @@
+@* A confirmation before something that's hard to take back (D29, D110). Cancel comes first and has focus,
+   so Enter doesn't confirm; the confirming button carries the action's name and the error colour. *@
+<MudDialog Class="j3d-confirm" DefaultFocus="DefaultFocus.FirstChild">
+    <TitleContent>
+        <span class="j3d-confirm__title">@Title</span>
+    </TitleContent>
+    <DialogContent>
+        <div class="j3d-confirm__message">@Message</div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Inherit" OnClick="Cancel" data-testid="confirm-cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   StartIcon="@ConfirmIcon"
+                   OnClick="Confirm"
+                   data-testid="@ConfirmTestId">
+            @ConfirmText
+        </MudButton>
+    </DialogActions>
+</MudDialog>

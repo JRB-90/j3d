@@ -6,8 +6,18 @@
 .j3d-model-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-height: 34px;
+}
+
+/* The row's icon buttons: small and square-cornered, as in the toolbar. */
+.j3d-model-header ::deep .mud-icon-button {
+    border-radius: 6px;
+    color: var(--mud-palette-text-secondary);
+}
+
+.j3d-model-header ::deep .mud-icon-button:hover {
+    color: var(--mud-palette-text-primary);
 }
 
 .j3d-model-name {
@@ -56,8 +66,14 @@
 
 .j3d-model ::deep .j3d-model-tree-toggle {
     margin: 2px 0 0 -8px;
-    text-transform: none;
+    padding: 2px 8px 2px 4px;
+    border-radius: 6px;
     color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+}
+
+.j3d-model ::deep .j3d-model-tree-toggle:not(:hover):not(:focus-visible) {
+    background: transparent;
 }
 
 .j3d-model ::deep .j3d-model-tree {
@@ -74,10 +90,19 @@
     border-radius: 4px;
 }
 
-/* Model mode (D146): a model selected whole. */
+/* Model mode (D146): a model selected whole takes the tint, and its name the blue; the tree inside
+   doesn't repeat it node by node. */
 .j3d-model--selected {
     background: rgba(79, 157, 255, 0.10);
-    box-shadow: inset 3px 0 0 var(--mud-palette-primary);
+}
+
+.j3d-model--selected .j3d-model-name {
+    color: var(--mud-palette-primary);
+}
+
+.j3d-model.j3d-model--selected ::deep .j3d-tree-node--selected > .mud-treeview-item-content {
+    background: transparent;
+    color: inherit;
 }
 
 .j3d-model ::deep .j3d-tree-node--selected > .mud-treeview-item-content {
@@ -110,4 +135,8 @@
 /* A model whose files couldn't be kept for the next visit (D115). */
 .j3d-model-not-kept {
     color: var(--mud-palette-warning);
+}
+
+.j3d-model ::deep .j3d-tree-node-eye .mud-icon-button {
+    border-radius: 4px;
 }

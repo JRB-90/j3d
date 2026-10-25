@@ -1,9 +1,13 @@
 import type { EntityMeasure, PairMeasure, PartMeasure, Xyz } from '@j3d/occt/facade';
 
-/** One line of a measurement in the panel: what it is and its value, ready to show and copy. */
+/**
+ * One line of a measurement in the panel: what it is and its value, ready to show and copy. Rows with a
+ * group (a part's name) are listed under it, so the name isn't repeated on every line.
+ */
 export interface MeasureRow {
   name: string;
   value: string;
+  group?: string;
 }
 
 /**
@@ -103,16 +107,16 @@ export function entityRows(measure: EntityMeasure): MeasureRow[] {
   return rows;
 }
 
-/** A part's rows, under its name (D104). */
+/** A part's rows, grouped under its name (D104). */
 export function partRows(name: string, part: PartMeasure): MeasureRow[] {
   const rows: MeasureRow[] = [];
   if (part.volume > 0) {
-    rows.push({ name: `${name}: volume`, value: volume(part.volume) });
+    rows.push({ name: 'Volume', value: volume(part.volume), group: name });
   }
-  rows.push({ name: `${name}: area`, value: area(part.area) });
+  rows.push({ name: 'Area', value: area(part.area), group: name });
   if (part.min && part.max) {
-    rows.push({ name: `${name}: size`, value: size(part.min, part.max) });
-    rows.push({ name: `${name}: bounds`, value: `${point(part.min)} to ${point(part.max)}` });
+    rows.push({ name: 'Size', value: size(part.min, part.max), group: name });
+    rows.push({ name: 'Bounds', value: `${point(part.min)} to ${point(part.max)}`, group: name });
   }
   return rows;
 }

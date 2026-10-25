@@ -1,4 +1,16 @@
-/* Global page styles. Component styles live in *.razor.css; theme colours live in J3DTheme.cs. */
+/* Global page styles. Component styles live in *.razor.css; theme colours live in J3DTheme.cs.
+   The look is recorded in DESIGN.md ("The Inspection Bench"): graphite chrome, hairlines, one blue for
+   what the user is acting on, sentence case. MudBlazor's Material look is overridden here where the
+   theme can't reach it. */
+
+:root {
+    --j3d-hairline: #2a2f36;
+    --j3d-tint-hover: rgba(154, 161, 171, 0.08);
+    --j3d-tint-pressed: rgba(154, 161, 171, 0.14);
+    --j3d-tint-selected: rgba(230, 232, 235, 0.1);
+    --j3d-tint-active: rgba(79, 157, 255, 0.14);
+    --j3d-scrollbar: #3a404a;
+}
 
 html,
 body {
@@ -6,6 +18,26 @@ body {
     margin: 0;
     overflow: hidden;
     background-color: #121417;
+}
+
+/* Browser surfaces in the palette: selected text, scrollbars and keyboard focus. */
+::selection {
+    background: rgba(79, 157, 255, 0.35);
+    color: #e6e8eb;
+}
+
+* {
+    scrollbar-color: var(--j3d-scrollbar) transparent;
+    scrollbar-width: thin;
+}
+
+.mud-button-root:focus-visible,
+.mud-toggle-item:focus-visible,
+.mud-menu-item:focus-visible,
+.mud-treeview-item-content:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
 }
 
 /* App shell (see J3D.Web.Client/Layout/MainLayout.razor) */
@@ -23,6 +55,12 @@ body {
     flex-direction: column;
 }
 
+.j3d-wordmark {
+    font-size: 1.125rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
 /* The context menu (M12) opens at the pointer; its anchor is an inline MudMenu ahead of the layout, which
    would push the page down by a line (and clip the viewport's bottom), so it's taken out of the flow. */
 .j3d-context-menu {
@@ -31,78 +69,226 @@ body {
     left: 0;
 }
 
+/* The toolbar: groups of tools set off by hairlines, each tool an icon and a label (DESIGN.md, One Bar). */
 .j3d-appbar .j3d-toolbar {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-left: 24px;
+    min-width: 0;
+    margin-left: 16px;
 }
 
-    .j3d-appbar .j3d-toolbar .j3d-projection {
-        margin-left: 12px;
-        /* Keeps its labels whole in a narrow window: at 900 px it shrank and clipped "Orthographic" (M11). */
-        flex-shrink: 0;
-    }
+.j3d-toolbar-group {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    border-left: 1px solid var(--mud-palette-divider);
+}
 
-    /* A toggle's short label shows only in a narrow window (M13: the projection toggle). */
-    .j3d-appbar .j3d-toolbar .j3d-label-short {
+.j3d-toolbar-group--first {
+    padding-left: 0;
+    border-left: 0;
+}
+
+/* A tool: icon and label, square-cornered, quiet until it's on. */
+.j3d-toolbar .j3d-tool.mud-button-root {
+    min-width: 0;
+    height: 32px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 6px;
+    color: var(--mud-palette-text-primary);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+
+.j3d-toolbar .j3d-tool .mud-button-icon-start {
+    margin-left: 0;
+    margin-right: 6px;
+}
+
+.j3d-toolbar .j3d-tool .mud-button-icon-start .mud-icon-root {
+    font-size: 1.25rem;
+}
+
+.j3d-toolbar .j3d-tool.mud-button-root:hover {
+    background: var(--j3d-tint-hover);
+}
+
+/* A tool that's on is what the user is acting on, so it takes the blue (One Blue Rule): a tint, no outline,
+   so the button doesn't change size. */
+.j3d-toolbar .j3d-tool.j3d-tool--on.mud-button-root,
+.j3d-toolbar .j3d-tool.j3d-tool--on.mud-button-root:hover {
+    background: var(--j3d-tint-active);
+    color: var(--mud-palette-primary);
+}
+
+.j3d-toolbar .j3d-tool.mud-button-root.mud-button-disabled,
+.j3d-toolbar .j3d-tool .mud-button-root.mud-button-disabled {
+    color: var(--mud-palette-action-disabled);
+}
+
+/* Icon-only tools (Hide, Isolate, Show all, Undo, Redo): conventional icons, named by their tooltips. */
+.j3d-toolbar .j3d-icon-tool.mud-icon-button {
+    width: 32px;
+    height: 32px;
+    padding: 6px;
+    border-radius: 6px;
+}
+
+.j3d-toolbar .j3d-icon-tool .mud-icon-root {
+    font-size: 1.25rem;
+}
+
+.j3d-toolbar .j3d-icon-tool.mud-icon-button:hover {
+    background: var(--j3d-tint-hover);
+}
+
+/* Export is a menu: its activator is a button inside the MudMenu. */
+.j3d-toolbar .mud-menu.j3d-tool .mud-button-root {
+    min-width: 0;
+    height: 32px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+
+.j3d-toolbar .mud-menu.j3d-tool .mud-button-root:hover {
+    background: var(--j3d-tint-hover);
+}
+
+.j3d-toolbar .mud-menu.j3d-tool .mud-button-icon-start {
+    margin-left: 0;
+    margin-right: 6px;
+}
+
+.j3d-toolbar .mud-menu.j3d-tool .mud-button-icon-start .mud-icon-root {
+    font-size: 1.25rem;
+}
+
+/* Segmented switches (selection mode, projection): a hairline frame and a quietly raised choice. A mode is
+   a setting, not something being acted on, so no blue (One Blue Rule). */
+.mud-toggle-group.j3d-segmented {
+    display: inline-flex;
+    width: auto;
+    flex-shrink: 0;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 6px;
+    background: transparent;
+    overflow: hidden;
+}
+
+.mud-toggle-group.j3d-segmented .mud-toggle-item {
+    min-width: 0;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+}
+
+.mud-toggle-group.j3d-segmented .mud-toggle-item + .mud-toggle-item {
+    border-left: 1px solid var(--mud-palette-divider);
+}
+
+.mud-toggle-group.j3d-segmented .mud-toggle-item:hover {
+    background: var(--j3d-tint-hover);
+    color: var(--mud-palette-text-primary);
+}
+
+.mud-toggle-group.j3d-segmented .mud-toggle-item.mud-toggle-item-selected,
+.mud-toggle-group.j3d-segmented .mud-toggle-item.mud-toggle-item-selected:hover {
+    background: var(--j3d-tint-selected);
+    color: var(--mud-palette-text-primary);
+}
+
+.mud-toggle-group.j3d-segmented .mud-toggle-item.mud-button-disabled,
+.mud-toggle-group.j3d-segmented .mud-toggle-item:disabled {
+    color: var(--mud-palette-action-disabled);
+}
+
+/* MudToggleItem draws a check icon in front of the selected choice; the raised fill says it already. */
+.mud-toggle-group.j3d-segmented .mud-toggle-item .mud-toggle-item-check-icon {
+    display: none;
+}
+
+.j3d-segment {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.j3d-segment .mud-icon-root {
+    font-size: 1.125rem;
+}
+
+/* Narrower windows (D135) keep the app bar on one line down to 900 px. Below 1,280 px Import, Export and
+   Fit all show only their icons (conventional ones, with tooltips); below 1,100 px every tool does. */
+@media (max-width: 1279.98px) {
+    .j3d-toolbar-group--first .j3d-tool-label {
         display: none;
     }
 
-    /* Nor does the selection mode switch (M12): shrunk, its icons were cut to 8 px at 966 px. */
-    .j3d-appbar .j3d-toolbar .j3d-selection-mode {
-        flex-shrink: 0;
+    .j3d-toolbar-group--first .j3d-tool.mud-button-root,
+    .j3d-toolbar-group--first .mud-menu.j3d-tool .mud-button-root {
+        width: 32px;
+        padding: 6px;
     }
 
-    .j3d-appbar .j3d-toolbar .j3d-toolbar-group {
-        display: flex;
-        align-items: center;
-        margin-left: 12px;
-        padding-left: 8px;
-        border-left: 1px solid var(--mud-palette-divider);
-    }
-
-/* A narrow window (D135): Import, Export and Fit all show only their icons, keeping their tooltips,
-   so the app bar stays on one line. */
-@media (max-width: 1099.98px) {
-    .j3d-appbar .j3d-toolbar .j3d-collapsible .mud-button-label {
-        font-size: 0;
-    }
-
-    .j3d-appbar .j3d-toolbar .j3d-collapsible .mud-button-icon-start {
+    .j3d-toolbar-group--first .j3d-tool .mud-button-icon-start,
+    .j3d-toolbar-group--first .mud-menu.j3d-tool .mud-button-icon-start {
         margin: 0;
     }
 
-    /* Since M12's mode switch, the bar needs every button 40 px wide (MudButton's minimum is 64) and
-       tighter gaps to fit at 900 px; before, Redo already sat under the About button there. */
-    .j3d-appbar .j3d-toolbar {
-        margin-left: 12px;
+    .j3d-toolbar-group--first .mud-menu.j3d-tool .mud-button-label {
+        font-size: 0;
     }
+}
 
-    .j3d-appbar .j3d-toolbar .j3d-collapsible.mud-button-root,
-    .j3d-appbar .j3d-toolbar .j3d-collapsible .mud-button-root {
-        min-width: 0;
-        width: 40px;
-        padding: 8px;
-    }
-
-    .j3d-appbar .j3d-toolbar .mud-icon-button {
-        padding: 8px;
-    }
-
-    /* Since M13's Move and Origin frames buttons, "Ortho" and "Persp". */
-    .j3d-appbar .j3d-toolbar .j3d-label-long {
+@media (max-width: 1099.98px) {
+    .j3d-toolbar .j3d-tool-label {
         display: none;
     }
 
-    .j3d-appbar .j3d-toolbar .j3d-label-short {
-        display: inline;
+    .j3d-toolbar .j3d-tool.mud-button-root {
+        width: 32px;
+        padding: 6px;
     }
 
-    .j3d-appbar .j3d-toolbar .j3d-projection,
-    .j3d-appbar .j3d-toolbar .j3d-toolbar-group {
-        margin-left: 6px;
+    .j3d-toolbar .j3d-tool .mud-button-icon-start {
+        margin: 0;
     }
+
+    .mud-toggle-group.j3d-segmented .mud-toggle-item {
+        padding: 0 7px;
+    }
+}
+
+/* Menus: dense items, with the key that does the same written at the right. */
+.mud-popover .mud-menu-item .mud-menu-item-text {
+    font-size: 0.875rem;
+}
+
+.j3d-menu-command {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 24px;
+    width: 100%;
+}
+
+.j3d-key {
+    color: var(--mud-palette-text-secondary);
+    font: inherit;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
 }
 
 /* A menu's caption, such as what Export saves (M9). Menus open in the popover layer, outside any component's scoped CSS. */
@@ -111,6 +297,39 @@ body {
     font-size: 0.75rem;
     letter-spacing: 0.04em;
     color: var(--mud-palette-text-secondary);
+}
+
+/* Snackbars: Surface Slate with a hairline; only the icon carries the status colour (Status Means Status). */
+.mud-snackbar.mud-snackbar {
+    border: 1px solid var(--j3d-hairline);
+    background: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    font-weight: 400;
+}
+
+.mud-snackbar.mud-alert-filled-info .mud-snackbar-icon {
+    color: var(--mud-palette-text-secondary);
+}
+
+.mud-snackbar.mud-alert-filled-warning .mud-snackbar-icon {
+    color: var(--mud-palette-warning);
+}
+
+.mud-snackbar.mud-alert-filled-error .mud-snackbar-icon {
+    color: var(--mud-palette-error);
+}
+
+.mud-snackbar.mud-alert-filled-success .mud-snackbar-icon {
+    color: var(--mud-palette-text-secondary);
+}
+
+.mud-snackbar .mud-snackbar-close-button {
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Dialogs: a destructive confirmation keeps the coral, with dark text that reads on it. */
+.mud-dialog .mud-button-filled.mud-button-filled-error {
+    color: #121417;
 }
 
 /* Hidden but still focusable and clickable through its label (unlike display: none in some browsers). */

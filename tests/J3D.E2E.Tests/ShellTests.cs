@@ -19,15 +19,17 @@ public sealed class ShellTests(J3DAppFixture app) : PageTest, IClassFixture<J3DA
     }
 
     /// <summary>
-    /// D135: below about 1,100 px, Import, Export and Fit all keep only their icons, so the app bar stays
-    /// one line. Since M11 also at 900 px, with the projection toggle's labels unclipped; since M12 nothing
-    /// in the bar is clipped and the toolbar ends before the About button.
+    /// D135: the app bar stays one line from 900 px up. Since the clarity pass every tool and mode shows its
+    /// label from 1,280 px; between 1,100 and 1,280 px Import, Export and Fit all keep only their icons, and
+    /// below 1,100 px every tool does. Nothing in the bar is clipped and the toolbar ends before the About
+    /// button (M12).
     /// </summary>
     [Theory]
-    [InlineData(1280, true)]
-    [InlineData(1000, false)]
-    [InlineData(900, false)]
-    public async Task The_app_bar_stays_on_one_line(int width, bool labelled)
+    [InlineData(1280, true, true)]
+    [InlineData(1180, false, true)]
+    [InlineData(1000, false, false)]
+    [InlineData(900, false, false)]
+    public async Task The_app_bar_stays_on_one_line(int width, bool filesLabelled, bool toolsLabelled)
     {
         await Page.SetViewportSizeAsync(width, 800);
         await Page.GotoAsync(app.BaseAddress.ToString());
@@ -36,8 +38,9 @@ public sealed class ShellTests(J3DAppFixture app) : PageTest, IClassFixture<J3DA
 
         var box = (await fitAll.BoundingBoxAsync())!;
         Assert.True(box.Height < 45, $"Fit all should be one line high: {box.Height} px");
-        var labelSize = await fitAll.Locator(".mud-button-label").EvaluateAsync<string>("label => getComputedStyle(label).fontSize");
-        Assert.Equal(labelled, labelSize != "0px");
+        Assert.Equal(filesLabelled, await fitAll.Locator(".j3d-tool-label").IsVisibleAsync());
+        Assert.Equal(toolsLabelled, await Page.GetByTestId("measure-button").Locator(".j3d-tool-label").IsVisibleAsync());
+        Assert.Equal(toolsLabelled, await Page.GetByTestId("mode-feature").Locator(".j3d-tool-label").IsVisibleAsync());
         var bar = (await Page.Locator(".j3d-appbar").BoundingBoxAsync())!;
         Assert.True(bar.Height < 70, $"the app bar should be one row: {bar.Height} px");
         var clipped = await Page.Locator(".j3d-appbar .mud-toggle-item, .j3d-appbar button, .j3d-appbar label").EvaluateAllAsync<string[]>(

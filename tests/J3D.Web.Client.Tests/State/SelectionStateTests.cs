@@ -145,6 +145,18 @@ public sealed class SelectionStateTests
         Assert.Equal(PartVisibility.Hidden, ModelB.Visibility());
         Assert.Equal([3], ModelA.Selected);
         Assert.False(_scene.CanIsolate); // every visible part is selected
+        Assert.True(_scene.TakeFitRequest()); // the view fits what's left
+        Assert.False(_scene.TakeFitRequest());
+    }
+
+    [Fact]
+    public void Only_isolate_asks_for_the_view_to_fit()
+    {
+        _scene.Pick(A, 3, additive: false);
+        _scene.HideSelection();
+        _scene.ShowAll();
+
+        Assert.False(_scene.TakeFitRequest());
     }
 
     [Fact]

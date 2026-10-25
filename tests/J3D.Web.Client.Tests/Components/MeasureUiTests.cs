@@ -99,6 +99,62 @@ public sealed class MeasureUiTests : BunitTestBase
     }
 
     [Fact]
+    public async Task Feature_cards_are_numbered_in_the_order_they_were_picked()
+    {
+        var cut = Render<SelectionPanel>();
+        await Act(() =>
+        {
+            Scene.SetSelectionMode(SelectMode.Features);
+            Scene.SetFeatures(new FeatureSelection(
+                [Measure("f1", "Face (plane) of Plate (top)", ("Area", "2500.000 mm²")), Measure("f2", "Face (plane) of Plate (top)", ("Area", "250.000 mm²"))],
+                []));
+        });
+
+        Assert.Equal(["2", "1"], cut.FindAll("[data-testid=feature] .j3d-card-number").Select(static n => n.TextContent));
+    }
+
+    [Fact]
+    public async Task A_parts_rows_sit_under_its_name_and_long_numbers_are_grouped_for_reading()
+    {
+        await StartViewerAsync();
+        JSInterop.SetupModule(ViewerInterop.ModulePath).SetupVoid("copyText", static _ => true).SetVoidResult();
+        var cut = Render<SelectionPanel>();
+        await Act(() =>
+        {
+            Scene.ToggleMeasureMode();
+            Scene.SetMeasureReference(new MeasureInfo(
+                "",
+                "Face (plane) of Plate (top)",
+                "2500.000 mm²",
+                [new MeasureRow("Area", "2500.000 mm²"), new MeasureRow("Volume", "12500.000 mm³", "Plate (top)"), new MeasureRow("Area", "6000.000 mm²", "Plate (top)")],
+                [new MeasurePart(Id.Value, 1)],
+                Approximate: false));
+        });
+
+        Assert.Equal(["Plate (top)"], cut.FindAll("[data-testid=measure-group]").Select(static g => g.TextContent));
+        Assert.Equal(2, cut.FindAll(".j3d-measure-row--grouped").Count);
+        Assert.Equal("12 500.000 mm³", cut.FindAll("[data-testid=measure-value]")[1].TextContent);
+
+        cut.FindAll("[data-testid=measure-copy]")[1].Click();
+
+        var copy = JSInterop.Invocations.Single(static i => i.Identifier == "copyText");
+        Assert.Equal("12500.000 mm³", Assert.Single(copy.Arguments)); // copied as formatted, without the grouping
+    }
+
+    [Fact]
+    public async Task Names_have_no_copy_button()
+    {
+        var cut = Render<SelectionPanel>();
+        await Act(() =>
+        {
+            Scene.ToggleMeasureMode();
+            Scene.SetMeasureReference(Measure("reference", "Distance", ("Distance", "35.000 mm"), ("A", "Face of Plate (top)")));
+        });
+
+        Assert.Single(cut.FindAll("[data-testid=measure-copy]"));
+    }
+
+    [Fact]
     public async Task The_panel_names_a_selected_model_in_model_mode()
     {
         var cut = Render<SelectionPanel>();

@@ -10,7 +10,6 @@ public sealed partial class MainLayout(IDialogService dialogs)
     {
         MaxWidth = MaxWidth.Medium,
         FullWidth = true,
-        CloseButton = true,
         CloseOnEscapeKey = true,
     };
 

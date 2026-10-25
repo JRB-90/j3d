@@ -438,7 +438,7 @@ export async function describeEntity(model: MeasureModel, picked: Picked): Promi
   const rows: MeasureRow[] = [{ name: 'Point', value: point(scaled(picked.entity.point, scale), true) }];
   const box = model.parts.nodeBounds(picked.entity.node);
   if (!box.isEmpty()) {
-    rows.push({ name: `${name}: size`, value: size(scaled(box.min.toArray(), scale), scaled(box.max.toArray(), scale), true) });
+    rows.push({ name: 'Size', value: size(scaled(box.min.toArray(), scale), scaled(box.max.toArray(), scale), true), group: name });
   }
   return { info: { id: '', title: `Point on ${name}`, label: point(scaled(picked.entity.point, scale), true), rows, parts, approximate: true } };
 }

@@ -5,13 +5,14 @@ A 3D CAD viewer that runs entirely in your browser. J3D opens STEP, IGES and BRE
 glTF meshes with [three.js](https://threejs.org/). **Your CAD files never leave your machine:** reading, meshing and
 drawing all happen in the browser tab.
 
-![J3D showing a two-plate assembly with its pin selected, a 35 mm measurement between the plates, the Export menu open, and the model list with the assembly's tree](docs/screenshot.png)
+![J3D measuring the 35 mm gap between the plates of a two-plate assembly, with the labelled toolbar, the model list and the assembly's tree, and the measurement in the panel](docs/screenshot.png)
 
 ## What it does
 
 - **Import** several files at once with the **Import** button, or drop files or whole folders onto the view.
 - Each file becomes a **model** in the list on the left, with its progress while importing (and a cancel button), then
-  its size, triangle and part counts, any warnings, and its **assembly tree**.
+  the memory it takes, its triangle and part counts, any warnings, and its **assembly tree**. An empty view says what
+  to drop and how the mouse moves the view.
 - **Select** by clicking in the view or in the tree (Ctrl+click adds or removes), at one of three levels picked in
   the toolbar or with `1`, `2` and `3`: **Model** selects whole models, **Object** single parts (or, from the tree,
   sub-assemblies), and **Feature** the faces, edges and vertices of CAD models. Selected parts are highlighted in
@@ -22,13 +23,15 @@ drawing all happen in the browser tab.
   `W`) to drag the arrows and planes of a triad at the object's origin, or press `E` for its rings to turn it; hold
   `Ctrl` to snap to whole millimetres and 15°. The panel shows the object's position (X, Y, Z in mm) and turn (Rx,
   Ry, Rz in degrees, about X, then Y, then Z) in its **Parent**'s frame or the **World**'s; type new values and press
-  Enter to put it there, or in **Local** type a move about the object's own axes. Moving one of several copies of a
+  Enter (or **Apply**) to put it there, or in **Local** type a move about the object's own axes; the panel says which
+  ("Position in its parent", "Move by"). Moving one of several copies of a
   part or sub-assembly moves only that one. **Origin frames** (`O`) draws the X, Y and Z axes at the selected
   objects' origins. Moves can be undone and are kept for your next visit; a model's origin is its file's.
 - **Right-click** a part, a tree node or empty space (a click that doesn't drag) for a menu of what you can do there:
   hide, isolate, move, measure from that point and export the selection, or show all, fit all and export the scene.
+  Each command shows its key; `Esc` closes the menu.
 - **Hide, isolate and show** parts with the eye beside each model and tree node, or the toolbar buttons and keys
-  below. **Undo and redo** cover hiding and showing, moving, and deleting a model.
+  below. Isolating fits the view to what's left. **Undo and redo** cover hiding and showing, moving, and deleting a model.
 - **Measure** CAD models exactly from their BREP geometry: turn on **Measure** (or press `M`) and click a face, edge
   or vertex. That first pick is the **reference**: its own value is drawn on it (an edge's length, a circle's
   diameter, a face's area) and its properties (area, length, radius, normal, axis…) and its part's volume and size
@@ -36,7 +39,7 @@ drawing all happen in the browser tab.
   the angle between planes or lines, the distance between circle centres), replacing the last result. A feature
   selected before you turn the tool on becomes the reference; `Esc` clears the measurement and turns the tool off.
   On mesh models the tool measures between points, snapping to vertices, and marks the results approximate (≈).
-- **Delete** a model from the list. J3D asks first, then frees all of its memory; **Undo** brings it back into its
+- **Delete** a model from the list. J3D asks first (with **Cancel** focused), then frees all of its memory; **Undo** brings it back into its
   place, imported again from its kept copy, with its hidden parts and moves.
 - **Your models are kept** for your next visit: each imported file (with its buffers, materials and textures) is
   copied into the browser's private storage for this page, and when you come back the models are imported again in
@@ -50,7 +53,8 @@ drawing all happen in the browser tab.
   saves downloads, named after their model (or `scene` / `selection` for several).
 - CAD models are drawn with **shaded faces in the file's colours** and the **true BREP edges** over them; translucent
   colours are drawn translucent.
-- The view is **orthographic** by default, with a perspective toggle that keeps the framing.
+- The view is **orthographic** by default, with an **Orthographic | Perspective** switch under the view cube that keeps
+  the framing.
 
 ### Formats
 

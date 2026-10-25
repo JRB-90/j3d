@@ -1,5 +1,6 @@
 using J3D.Web.Client.Interop;
 using J3D.Web.Client.State;
+using Microsoft.AspNetCore.Components;
 using MudBlazor;
 
 namespace J3D.Web.Client.Components;
@@ -10,12 +11,8 @@ namespace J3D.Web.Client.Components;
 /// import and dismissing a failure don't ask, since there's nothing loaded to lose, and are final.
 /// Clear all removes every model and everything kept, after asking (D110).
 /// </summary>
-public sealed partial class ModelList(SceneState scene, ViewerSession session) : IDisposable
+public sealed partial class ModelList(SceneState scene, ViewerSession session, IDialogService dialogs) : IDisposable
 {
-    private MudMessageBox? _confirmDelete;
-    private MudMessageBox? _confirmClearAll;
-    private string _deleteName = "";
-
     private SceneState Scene => scene;
 
     protected override void OnInitialized() => scene.Changed += OnSceneChanged;
@@ -28,8 +25,16 @@ public sealed partial class ModelList(SceneState scene, ViewerSession session) :
     {
         if (model.Status == ModelStatus.Loaded)
         {
-            _deleteName = model.Summary.FileName;
-            if (await _confirmDelete!.ShowAsync() == true)
+            var name = model.Summary.FileName;
+            RenderFragment message = builder =>
+            {
+                builder.AddContent(0, "Delete ");
+                builder.OpenElement(1, "strong");
+                builder.AddContent(2, name);
+                builder.CloseElement();
+                builder.AddContent(3, "? Undo brings it back.");
+            };
+            if (await ConfirmDialog.AskAsync(dialogs, "Delete model", message, "Delete", Icons.Material.Outlined.Delete, "confirm-delete"))
             {
                 scene.Delete(model.Id); // the viewer frees it at once and keeps its files for an undo
             }
@@ -43,7 +48,8 @@ public sealed partial class ModelList(SceneState scene, ViewerSession session) :
 
     private async Task ClearAllAsync()
     {
-        if (await _confirmClearAll!.ShowAsync() == true)
+        RenderFragment message = static builder => builder.AddContent(0, "Remove every model, and everything kept for your next visit? This can't be undone.");
+        if (await ConfirmDialog.AskAsync(dialogs, "Clear all", message, "Clear all", Icons.Material.Outlined.DeleteSweep, "confirm-clear-all"))
         {
             scene.ClearAll();
         }

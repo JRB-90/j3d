@@ -1,0 +1,10 @@
+@* The empty view says what to do first: there's nothing else to look at yet. *@
+@if (IsVisible)
+{
+    <div class="j3d-viewport-hint" data-testid="viewport-hint">
+        <MudIcon Icon="@Icons.Material.Outlined.FileOpen" Class="j3d-viewport-hint__icon" />
+        <p class="j3d-viewport-hint__title">Drop CAD or mesh files here, or use Import</p>
+        <p class="j3d-viewport-hint__formats">STEP, IGES and BREP, with exact geometry · STL, OBJ and glTF meshes</p>
+        <p class="j3d-viewport-hint__keys">Right-drag turns the view · left-drag pans · the wheel zooms</p>
+    </div>
+}

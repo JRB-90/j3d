@@ -8,157 +8,169 @@
            class="j3d-visually-hidden"
            disabled="@(!Session.IsReady)"
            data-testid="import-input" />
-    <MudButton HtmlTag="label"
-               for="@InputId"
-               StartIcon="@Icons.Material.Filled.FileOpen"
-               Color="Color.Inherit"
-               Disabled="@(!Session.IsReady)"
-               Class="j3d-collapsible"
-               title="Import"
-               data-testid="import-button">
-        Import
-    </MudButton>
 
-    @* Export (M9, D119): the selection when there is one, else every visible part. Busy while it's written (D125). *@
-    <MudMenu Label="@(_exporting ? "Exporting…" : "Export")"
-             StartIcon="@(_exporting ? Icons.Material.Filled.HourglassTop : Icons.Material.Filled.FileDownload)"
-             Color="Color.Inherit"
-             Disabled="@(!Session.IsReady || !Scene.CanExport || _exporting)"
-             AnchorOrigin="Origin.BottomLeft"
-             TransformOrigin="Origin.TopLeft"
-             Dense="true"
-             AriaLabel="@ExportLabel"
-             Class="j3d-collapsible"
-             title="Export"
-             aria-busy="@(_exporting ? "true" : "false")"
-             data-testid="export-menu">
-        <div class="j3d-menu-header" data-testid="export-scope">@ExportLabel</div>
-        @foreach (var format in MeshFormats)
-        {
-            <MudMenuItem Label="@format.DisplayName" OnClick="@(() => StartExport(format, Scene.HasSelection))" data-testid="@($"export-{FormatKey(format)}")" />
-        }
-    </MudMenu>
+    @* Files in and out, and framing them (D48, D119). Below 1,100 px they keep only their icons (D135). *@
+    <div class="j3d-toolbar-group j3d-toolbar-group--first" role="group" aria-label="Files and view">
+        <MudTooltip Text="Import STEP, IGES, BREP, STL, OBJ or glTF files, or drop them on the view">
+            <MudButton HtmlTag="label"
+                       for="@InputId"
+                       StartIcon="@Icons.Material.Outlined.FileOpen"
+                       Color="Color.Inherit"
+                       Disabled="@(!Session.IsReady)"
+                       Class="j3d-tool j3d-collapsible"
+                       aria-label="Import"
+                       data-testid="import-button">
+                <span class="j3d-tool-label">Import</span>
+            </MudButton>
+        </MudTooltip>
 
-    <MudTooltip Text="Fit all (F)">
-        <MudButton StartIcon="@Icons.Material.Filled.FitScreen"
-                   Color="Color.Inherit"
-                   Disabled="@(!Session.IsReady)"
-                   OnClick="FitAllAsync"
-                   Class="j3d-collapsible"
-                   data-testid="fit-all-button">
-            Fit all
-        </MudButton>
-    </MudTooltip>
+        @* Export (M9, D119): the selection when there is one, else every visible part. Busy while it's written (D125). *@
+        <MudMenu StartIcon="@(_exporting ? Icons.Material.Outlined.HourglassTop : Icons.Material.Outlined.FileDownload)"
+                 Label="@(_exporting ? "Exporting…" : "Export")"
+                 Color="Color.Inherit"
+                 Disabled="@(!Session.IsReady || !Scene.CanExport || _exporting)"
+                 AnchorOrigin="Origin.BottomLeft"
+                 TransformOrigin="Origin.TopLeft"
+                 Dense="true"
+                 AriaLabel="@ExportLabel"
+                 Class="j3d-tool j3d-collapsible"
+                 title="@ExportLabel"
+                 aria-busy="@(_exporting ? "true" : "false")"
+                 data-testid="export-menu">
+            <div class="j3d-menu-header" data-testid="export-scope">@ExportLabel</div>
+            @foreach (var format in MeshFormats)
+            {
+                <MudMenuItem Label="@format.DisplayName" OnClick="@(() => StartExport(format, Scene.HasSelection))" data-testid="@($"export-{FormatKey(format)}")" />
+            }
+        </MudMenu>
 
-    <MudToggleGroup T="Projection"
-                    Value="Session.Projection"
-                    ValueChanged="SetProjectionAsync"
-                    Size="Size.Small"
-                    Color="Color.Primary"
-                    Disabled="@(!Session.IsReady)"
-                    Class="j3d-projection"
-                    data-testid="projection">
-        @* Below 1,100 px the labels shorten (app.css), so the bar keeps one line at 900 px (M13). *@
-        <MudToggleItem Value="Projection.Orthographic"><span class="j3d-label-long">Orthographic</span><span class="j3d-label-short" aria-hidden="true">Ortho</span></MudToggleItem>
-        <MudToggleItem Value="Projection.Perspective"><span class="j3d-label-long">Perspective</span><span class="j3d-label-short" aria-hidden="true">Persp</span></MudToggleItem>
-    </MudToggleGroup>
+        <MudTooltip Text="Fit everything visible in the view (F)">
+            <MudButton StartIcon="@Icons.Material.Outlined.FitScreen"
+                       Color="Color.Inherit"
+                       Disabled="@(!Session.IsReady)"
+                       OnClick="FitAllAsync"
+                       Class="j3d-tool j3d-collapsible"
+                       aria-label="Fit all"
+                       data-testid="fit-all-button">
+                <span class="j3d-tool-label">Fit all</span>
+            </MudButton>
+        </MudTooltip>
+    </div>
 
     @* What a click selects (M12, D146): models, objects or features, with the keys 1, 2 and 3 (D162). *@
-    <MudToggleGroup T="SelectMode"
-                    Value="Scene.Mode"
-                    ValueChanged="Scene.SetSelectionMode"
-                    Size="Size.Small"
-                    Color="Color.Primary"
-                    Disabled="@(!Session.IsReady)"
-                    Class="j3d-selection-mode"
-                    aria-label="Selection mode"
-                    data-testid="selection-mode">
-        @foreach (var mode in SelectModes)
-        {
-            <MudToggleItem Value="mode" aria-pressed="@(Scene.Mode == mode ? "true" : "false")" data-testid="@($"mode-{ModeKey(mode)}")">
-                <MudTooltip Text="@ModeTooltip(mode)">
-                    <MudIcon Icon="@ModeIcon(mode)" Size="Size.Small" aria-label="@ModeTooltip(mode)" />
-                </MudTooltip>
-            </MudToggleItem>
-        }
-    </MudToggleGroup>
+    <div class="j3d-toolbar-group" role="group" aria-label="Select">
+        <MudToggleGroup T="SelectMode"
+                        Value="Scene.Mode"
+                        ValueChanged="Scene.SetSelectionMode"
+                        Size="Size.Small"
+                        Disabled="@(!Session.IsReady)"
+                        Class="j3d-segmented j3d-selection-mode"
+                        aria-label="Selection mode"
+                        data-testid="selection-mode">
+            @foreach (var mode in SelectModes)
+            {
+                <MudToggleItem Value="mode" aria-pressed="@(Scene.Mode == mode ? "true" : "false")" aria-label="@ModeName(mode)" data-testid="@($"mode-{ModeKey(mode)}")">
+                    <MudTooltip Text="@ModeTooltip(mode)">
+                        <span class="j3d-segment">
+                            <MudIcon Icon="@ModeIcon(mode)" Size="Size.Small" />
+                            <span class="j3d-tool-label">@ModeName(mode)</span>
+                        </span>
+                    </MudTooltip>
+                </MudToggleItem>
+            }
+        </MudToggleGroup>
+    </div>
 
-    @* The Measure tool (M7, D79): a toggle, highlighted while it's on. *@
-    <MudTooltip Text="@(Scene.MeasureMode ? "Stop measuring (M)" : "Measure (M)")">
-        <MudIconButton Icon="@Icons.Material.Filled.Straighten"
-                       Color="@(Scene.MeasureMode ? Color.Primary : Color.Inherit)"
-                       Variant="@(Scene.MeasureMode ? Variant.Outlined : Variant.Text)"
+    @* The tools, each on until it's turned off (M7, D79; M13, D149, D150). *@
+    <div class="j3d-toolbar-group" role="group" aria-label="Tools">
+        <MudTooltip Text="@(Scene.MeasureMode ? "Stop measuring (M or Esc)" : "Measure faces, edges and vertices (M)")">
+            <MudButton StartIcon="@Icons.Material.Outlined.Straighten"
+                       Color="Color.Inherit"
                        Disabled="@(!Session.IsReady)"
                        OnClick="Scene.ToggleMeasureMode"
+                       Class="@ToolClass(Scene.MeasureMode)"
                        aria-label="Measure"
                        aria-pressed="@(Scene.MeasureMode ? "true" : "false")"
-                       Class="j3d-measure-button"
-                       data-testid="measure-button" />
-    </MudTooltip>
+                       data-testid="measure-button">
+                <span class="j3d-tool-label">Measure</span>
+            </MudButton>
+        </MudTooltip>
 
-    @* The Move tool (M13, D149, D166): W for its arrows, E for its rings; highlighted while it's on. *@
-    <MudTooltip Text="@(Scene.Moving is null ? "Move (W; E rotates)" : "Stop moving (W or E)")">
-        <MudIconButton Icon="@Icons.Material.Filled.OpenWith"
-                       Color="@(Scene.Moving is not null ? Color.Primary : Color.Inherit)"
-                       Variant="@(Scene.Moving is not null ? Variant.Outlined : Variant.Text)"
+        <MudTooltip Text="@(Scene.Moving is null ? "Move the selected object (W; E turns it)" : "Stop moving (W or E)")">
+            <MudButton StartIcon="@Icons.Material.Outlined.OpenWith"
+                       Color="Color.Inherit"
                        Disabled="@(!Session.IsReady)"
                        OnClick="ToggleMove"
+                       Class="@ToolClass(Scene.Moving is not null)"
                        aria-label="Move"
                        aria-pressed="@(Scene.Moving is not null ? "true" : "false")"
-                       data-testid="move-button" />
-    </MudTooltip>
+                       data-testid="move-button">
+                <span class="j3d-tool-label">Move</span>
+            </MudButton>
+        </MudTooltip>
 
-    @* Origin frames at the selected objects (M13, D150, D171). *@
-    <MudTooltip Text="@(Scene.OriginFrames ? "Hide origin frames (O)" : "Origin frames (O)")">
-        <MudIconButton Icon="@Icons.Material.Filled._3dRotation"
-                       Color="@(Scene.OriginFrames ? Color.Primary : Color.Inherit)"
-                       Variant="@(Scene.OriginFrames ? Variant.Outlined : Variant.Text)"
+        <MudTooltip Text="@(Scene.OriginFrames ? "Hide origin frames (O)" : "Show the selected objects' origin frames (O)")">
+            <MudButton StartIcon="@OriginFramesIcon"
+                       Color="Color.Inherit"
                        Disabled="@(!Session.IsReady)"
                        OnClick="Scene.ToggleOriginFrames"
+                       Class="@ToolClass(Scene.OriginFrames)"
                        aria-label="Origin frames"
                        aria-pressed="@(Scene.OriginFrames ? "true" : "false")"
-                       data-testid="origin-frames-button" />
-    </MudTooltip>
+                       data-testid="origin-frames-button">
+                <span class="j3d-tool-label">Origin frames</span>
+            </MudButton>
+        </MudTooltip>
+    </div>
 
-    @* Visibility of the selection, then the undo history (decision D97). *@
-    <div class="j3d-toolbar-group" role="group" aria-label="Visibility and history" data-testid="visibility-tools">
-        <MudTooltip Text="Hide selection (H)">
-            <MudIconButton Icon="@Icons.Material.Filled.VisibilityOff"
+    @* Visibility of the selection (D97). *@
+    <div class="j3d-toolbar-group" role="group" aria-label="Visibility" data-testid="visibility-tools">
+        <MudTooltip Text="Hide the selection (H)">
+            <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff"
                            Color="Color.Inherit"
                            Disabled="@(!Session.IsReady || !Scene.HasSelection)"
                            OnClick="Scene.HideSelection"
+                           Class="j3d-icon-tool"
                            aria-label="Hide selection"
                            data-testid="hide-button" />
         </MudTooltip>
-        <MudTooltip Text="Isolate selection (I)">
-            <MudIconButton Icon="@Icons.Material.Filled.FilterCenterFocus"
+        <MudTooltip Text="Show only the selection (I)">
+            <MudIconButton Icon="@Icons.Material.Outlined.FilterCenterFocus"
                            Color="Color.Inherit"
                            Disabled="@(!Session.IsReady || !Scene.CanIsolate)"
                            OnClick="Scene.IsolateSelection"
+                           Class="j3d-icon-tool"
                            aria-label="Isolate selection"
                            data-testid="isolate-button" />
         </MudTooltip>
-        <MudTooltip Text="Show all (Shift+H)">
-            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+        <MudTooltip Text="Show everything hidden (Shift+H)">
+            <MudIconButton Icon="@Icons.Material.Outlined.Visibility"
                            Color="Color.Inherit"
                            Disabled="@(!Session.IsReady || !Scene.HasHidden)"
                            OnClick="Scene.ShowAll"
+                           Class="j3d-icon-tool"
                            aria-label="Show all"
                            data-testid="show-all-button" />
         </MudTooltip>
+    </div>
+
+    @* The undo history (D84). *@
+    <div class="j3d-toolbar-group" role="group" aria-label="History">
         <MudTooltip Text="Undo (Ctrl+Z)">
-            <MudIconButton Icon="@Icons.Material.Filled.Undo"
+            <MudIconButton Icon="@Icons.Material.Outlined.Undo"
                            Color="Color.Inherit"
                            Disabled="@(!Session.IsReady || !Scene.CanUndo)"
                            OnClick="Scene.Undo"
+                           Class="j3d-icon-tool"
                            aria-label="Undo"
                            data-testid="undo-button" />
         </MudTooltip>
         <MudTooltip Text="Redo (Ctrl+Y)">
-            <MudIconButton Icon="@Icons.Material.Filled.Redo"
+            <MudIconButton Icon="@Icons.Material.Outlined.Redo"
                            Color="Color.Inherit"
                            Disabled="@(!Session.IsReady || !Scene.CanRedo)"
                            OnClick="Scene.Redo"
+                           Class="j3d-icon-tool"
                            aria-label="Redo"
                            data-testid="redo-button" />
         </MudTooltip>

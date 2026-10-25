@@ -24,6 +24,7 @@ public sealed class ViewportTests : BunitTestBase
         _viewer.SetupVoid("removeModel", static _ => true).SetVoidResult();
         _viewer.SetupVoid("forgetModel", static _ => true).SetVoidResult();
         _viewer.SetupVoid("clearAll").SetVoidResult();
+        _viewer.SetupVoid("fitAll").SetVoidResult();
         _restoreScene = _viewer.Setup<StoredScene>("restoreScene");
         _restoreScene.SetResult(StoredScene.Empty);
     }
@@ -165,6 +166,20 @@ public sealed class ViewportTests : BunitTestBase
         Assert.Equal(
             [("m1", "", "3"), ("m1", "3", "")],
             PartStates());
+    }
+
+    [Fact]
+    public async Task Isolate_fits_the_view_once_the_viewer_has_hidden_the_rest()
+    {
+        var cut = await LoadedAsync();
+        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 3, additive: false));
+
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("isolate"));
+
+        cut.WaitForAssertion(() => Assert.Contains(_viewer.Invocations, static i => i.Identifier == "fitAll"));
+        var calls = _viewer.Invocations.Select(static i => i.Identifier).ToList();
+        Assert.True(calls.LastIndexOf("setPartState") < calls.IndexOf("fitAll"), "the fit comes after the parts are hidden");
+        Assert.Single(calls, static c => c == "fitAll");
     }
 
     [Fact]

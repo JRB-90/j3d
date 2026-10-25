@@ -42,7 +42,8 @@ describe('formatting (assumption 13)', () => {
       { name: 'Area', value: '200.000 mm²' },
       { name: 'Normal', value: '(0.000, 0.000, 1.000)' },
     ]);
-    expect(partRows('Box', boxFace.part).map((row) => row.name)).toEqual(['Box: volume', 'Box: area', 'Box: size', 'Box: bounds']);
+    expect(partRows('Box', boxFace.part).map((row) => row.name)).toEqual(['Volume', 'Area', 'Size', 'Bounds']);
+    expect(partRows('Box', boxFace.part).every((row) => row.group === 'Box')).toBe(true);
     const pair: PairMeasure = { kind: 'pair', distance: 30, pointA: [0, 0, 30], pointB: [0, 0, 0], angleOf: 'planes', angle: 0 };
     expect(pairLabel(pair)).toBe('30.000 mm');
     expect(pairRows(pair).map((row) => row.name)).toEqual(['Distance', 'Angle (planes)', 'Δx, Δy, Δz', 'From', 'To']);

@@ -12,7 +12,7 @@ public sealed class MainLayoutTests : BunitTestBase
             .Add(layout => layout.Body, (RenderFragment)(builder => builder.AddContent(0, "viewport-placeholder"))));
 
         Assert.Contains("J3D", cut.Find(".j3d-appbar").TextContent, StringComparison.Ordinal);
-        Assert.Contains("No models imported.", cut.Find(".j3d-drawer").TextContent, StringComparison.Ordinal);
+        Assert.Contains("No models yet. Import files, or drop them on the view.", cut.Find(".j3d-drawer").TextContent, StringComparison.Ordinal);
         Assert.Contains("viewport-placeholder", cut.Find(".j3d-main").TextContent, StringComparison.Ordinal);
     }
 }
