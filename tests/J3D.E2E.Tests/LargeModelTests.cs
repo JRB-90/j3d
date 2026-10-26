@@ -71,7 +71,10 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
         }
         """;
 
-    private const string PartsAre = "([id, parts]) => window.__j3dTest.partState(id).parts.length === parts";
+    /// <summary>How long one editing step may take: CI's software drawing is slow (D201).</summary>
+    private const int Slow = 5 * 60_000;
+
+    private const string PartsAre ="([id, parts]) => window.__j3dTest.partState(id).parts.length === parts";
     private const string AllSelected = "([id, parts]) => window.__j3dTest.partState(id).selected.length === parts";
     private const string PlacedAt = "([id, node, x]) => Math.abs(window.__j3dTest.placement(id, node).local[12] - x) < 1e-3";
 
@@ -265,9 +268,10 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
     /// </summary>
     private async Task<string> EditAsync(string id, string fileName)
     {
+        // CI draws the plant in software, up to 26 s a frame while other tests run, and the page
+        // answers nothing meanwhile; the camera stays where the orbit left it, the model in view.
+        Page.SetDefaultTimeout(Slow);
         Assert.Equal("kept", await Page.EvaluateAsync<string>("async () => { await window.__j3dTest.storeIdle(); return window.__j3dTest.store().status; }"));
-        await Page.GetByTestId("home-button").ClickAsync();
-        await WaitForCameraRestAsync();
         var parts = await PartCountAsync(id);
         var selecting = await SelectInEachModeAsync(id, fileName, parts);
 
@@ -300,7 +304,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 
         // The whole model, by its own frame (D169), and back.
         await Page.Keyboard.PressAsync("w");
-        await Expect(Page.GetByTestId("move-title")).ToHaveTextAsync(fileName);
+        await Expect(Page.GetByTestId("move-title")).ToHaveTextAsync(fileName, new() { Timeout = Slow });
         await Page.GetByTestId("move-frame-world").ClickAsync();
         var x = await LocalXAsync(id, -1);
         var move = await TimedAsync(() => TypeAsync("move-x", x + 100), PlacedAt, new object[] { id, -1, x + 100 });
@@ -317,7 +321,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
         var featureClick = await TimedAsync(Click, "() => window.__j3dTest.selectionState().features.length === 1");
         await Page.Keyboard.PressAsync("Escape");
         await Page.Keyboard.PressAsync("2");
-        await Expect(Page.GetByTestId("mode-object")).ToHaveAttributeAsync("aria-pressed", "true");
+        await Expect(Page.GetByTestId("mode-object")).ToHaveAttributeAsync("aria-pressed", "true", new() { Timeout = Slow });
 
         return $"a click on a part in Object mode {objectClick}; 1 (Model mode, all {parts} parts selected) {modelKey}; a click in Model mode {modelClick}; " +
             $"a typed move of the model {move}, its undo {undo}; 2 {objectKey}; 3 {featureKey}; a click in Feature mode {featureClick}";
@@ -334,7 +338,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
         var select = await TimedAsync(() => row.ClickAsync(), AllSelected, new object[] { id, count });
 
         await Page.Keyboard.PressAsync("w");
-        await Expect(Page.GetByTestId("move-title")).ToHaveTextAsync(name);
+        await Expect(Page.GetByTestId("move-title")).ToHaveTextAsync(name, new() { Timeout = Slow });
         await Page.GetByTestId("move-frame-parent").ClickAsync();
         var x = await LocalXAsync(id, node);
         var moved = Math.Round(x + 100, 3);
@@ -362,7 +366,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
     private async Task<(string Line, int Parts)> ExpandAllAsync(string id, int root, int parts)
     {
         await (await TreeRowAsync(id, root, root)).ClickAsync(new() { Button = MouseButton.Right });
-        await Expect(Page.GetByTestId("context-isolate")).ToBeVisibleAsync();
+        await Expect(Page.GetByTestId("context-isolate")).ToBeVisibleAsync(new() { Timeout = Slow });
         var expandAll = Page.GetByTestId("context-expand-all");
         if (await expandAll.CountAsync() == 0)
         {
@@ -374,7 +378,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
             () => expandAll.ClickAsync(),
             "([id, parts]) => window.__j3dTest.partState(id).parts.length > parts && !document.querySelector('[data-testid=model-expanding]')",
             new object[] { id, parts },
-            10 * 60_000);
+            2 * Slow);
         var expanded = await PartCountAsync(id);
         var undo = await TimedAsync(() => Page.Keyboard.PressAsync("Control+z"), PartsAre, new object[] { id, parts });
         var redo = await TimedAsync(() => Page.Keyboard.PressAsync("Control+y"), PartsAre, new object[] { id, expanded });
@@ -432,7 +436,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
         var tasks = Longest(await TakeLongTasksAsync());
 
         Assert.Equal(moved, await LocalXAsync(id, node), 3);
-        await Expect(Page.GetByTestId("model-item").GetByTestId("model-warnings")).ToHaveCountAsync(0);
+        await Expect(Page.GetByTestId("model-item").GetByTestId("model-warnings")).ToHaveCountAsync(0, new() { Timeout = Slow });
         return $"restored with its edits after a reload in {elapsed.TotalSeconds:F1} s (longest task {tasks})";
     }
 
@@ -461,7 +465,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
     /// Does something, then waits until the page shows it's done (D63's method), as its time and the
     /// longest task meanwhile.
     /// </summary>
-    private async Task<string> TimedAsync(Func<Task> act, string done, object? arg = null, int timeout = 120_000)
+    private async Task<string> TimedAsync(Func<Task> act, string done, object? arg = null, int timeout = Slow)
     {
         await StartLongTaskLogAsync();
         var stopwatch = Stopwatch.StartNew();
@@ -499,19 +503,25 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
             await StartExportAsync(format);
             var export = Page.GetByTestId("model-item").GetByTestId("model-export");
             var shown = await WaitForExportToShowAsync(export);
-            await Expect(export).ToHaveCountAsync(0, new() { Timeout = 30 * 60_000 });
-            var elapsed = shown ? $"in {stopwatch.Elapsed.TotalSeconds:F1} s" : "before its progress showed";
-            var tasks = Longest(await TakeLongTasksAsync());
 
-            // The browser reports the download a moment after the page has saved it.
-            if (await Task.WhenAny(downloaded.Task, Task.Delay(10_000)) == downloaded.Task)
+            // The file, or a failure's snackbar, ends it. The row can't say so: a small export can end
+            // before it shows, and CI's slow frames can hold it back past the wait for it (D201).
+            var error = Page.Locator(".mud-snackbar").Filter(new() { HasText = "Couldn't export" });
+            while (!downloaded.Task.IsCompleted && await error.CountAsync() == 0 && stopwatch.Elapsed < TimeSpan.FromMinutes(30))
+            {
+                await Task.WhenAny(downloaded.Task, Task.Delay(250));
+            }
+
+            var elapsed = $"in {stopwatch.Elapsed.TotalSeconds:F1} s{(shown ? "" : ", before its progress showed")}";
+            await Expect(export).ToHaveCountAsync(0, new() { Timeout = Slow });
+            var tasks = Longest(await TakeLongTasksAsync());
+            if (downloaded.Task.IsCompleted)
             {
                 var download = downloaded.Task.Result;
                 var file = new FileInfo(await download.PathAsync());
                 return ($"{format.ToUpperInvariant()} of {file.Length / (1 << 20)} MB {elapsed} (longest task {tasks})", download);
             }
 
-            var error = Page.Locator(".mud-snackbar").Filter(new() { HasText = "Couldn't export" });
             await Expect(error).ToContainTextAsync("Out of memory");
             return ($"{format.ToUpperInvariant()} failed {elapsed} (longest task {tasks}): {await error.First.InnerTextAsync()}", null);
         }
