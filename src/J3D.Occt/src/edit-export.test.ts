@@ -65,7 +65,7 @@ function rebuilt(scene: ImportedScene): PlanNode[] {
   }));
 }
 
-async function again(bytes: Uint8Array, format = ImportFormat.Step) {
+async function again(bytes: Uint8Array, format: ImportFormat = ImportFormat.Step) {
   return OcctModel.load(oc, bytes, format, format === ImportFormat.Step ? 'again.step' : 'again.brep');
 }
 
