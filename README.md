@@ -168,7 +168,7 @@ and so do models coming back from your last visit or an undo.
   1.8 MB to about 15 MB. On that plant, selecting, moving and editing take 0.05–0.2 seconds on a laptop, Expand all of
   its 840 compound parts about 0.7 seconds (with "Expanding" in its item), and coming back after a refresh 2.5
   seconds.
-- Not in this version yet: sections, exploded views, and a phone or tablet layout.
+- Not in this version yet: a phone or tablet layout. Sections and exploded views aren't planned.
 
 ## Browsers
 

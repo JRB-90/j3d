@@ -25,8 +25,9 @@ J3D is a 3D CAD viewer that runs entirely in the browser. It opens STEP, IGES an
 measure and arrange their own models with their exact geometry, without installing a CAD package.
 
 Success is **a solid, self-run MIT open-source tool**: one the owner reaches for on their own projects, and one that
-works dependably for anyone who clones and runs it. Public hosting isn't the aim. Deployment stays local-only (plan
-D25, D75), and any hosted version would be a later decision, after the LGPL/Open CASCADE review.
+works dependably for anyone who clones and runs it. Public hosting isn't the aim: deployment was dropped (plan D25,
+D207), so J3D stays local-only. After iteration 5 its kernel, viewer and a Blazor viewer component are also a reusable
+library that the owner's other projects can reference (D214).
 
 ## Positioning
 
@@ -63,24 +64,30 @@ machine, large-assembly scale, and arranging assemblies and writing them back.
 
 ## Capabilities and Constraints
 
-**As built (through M13):**
+**As built (through M16, iteration 3):**
 
 - Import from STEP, IGES, BREP, STL, OBJ and glTF/GLB.
 - Shaded faces in the file's colours (translucency included) under the true BREP edges.
-- A read-only assembly tree with eye toggles.
+- An assembly tree with eye toggles, moved through by keys.
 - Selection at three levels.
 - Exact BREP measurement, approximate for meshes.
 - Moving objects in a Local, Parent or World frame, and origin frames.
+- Assembly editing: re-parent, copy, paste, delete, group, ungroup and rename.
+- **Expand**: turning a compound part into one part per solid.
 - Undo and redo.
 - Persistence, as described under Sessions.
-- Export of the scene or the selection as GLB or STL, and of a CAD model as STEP or BREP.
+- Export of the scene or the selection as GLB or STL, and of an edited CAD model, or the selection in one, as STEP
+  or BREP.
 
-**Planned (iteration 3, M14–M16):**
+**Planned (iteration 4, M17–M20):**
 
-- Assembly editing: re-parent, copy, paste, delete and group.
-- Exporting the edited assembly, or just the selection, as STEP or BREP.
-- **Expand**: turning a compound part into one part per solid.
-- Large-assembly hardening.
+- A Rotate button beside Move, and a Move | Rotate switch while moving (D208).
+- Selection changes in the undo history, and Previous view and Next view for the camera (D209).
+- Moving and copying objects between models of the same kind (D210).
+- Phone and tablet layouts for Android and Windows touch devices, with every feature (D211, D212).
+
+**Planned (iteration 5):** the reusable library (D214). Then the owner's round of testing and refinement, after which
+the project is complete (D215).
 
 **Constraints:**
 
@@ -93,9 +100,11 @@ machine, large-assembly scale, and arranging assemblies and writing them back.
 - Edits change placements and structure, never shapes (D144).
 - Lengths are in millimetres, to 3 decimals, and angles are in degrees, to 2. The scene is Z-up. Mesh values are
   prefixed ≈.
-- The layout is desktop only today. Phone and tablet layouts are out of scope for iteration 3, but the owner hasn't
-  ruled them out for later. Touch input works.
-- **Dropped for good** (D143): users and auth, sectioning, keeping measurements or selections, and editing geometry.
+- The layout is desktop only today; phone and tablet layouts come in iteration 4 (D211, D212), for Android phones and
+  tablets and Windows touch devices. iPhones and iPads stay unsupported, since every browser on them is Safari's
+  engine (D137). Touch input works.
+- **Dropped for good** (D143, D207): users and auth, deployment, sectioning, exploded views, exact measurement of mesh
+  models, keeping measurements or selections, and editing geometry.
 - **Licensing:** J3D is MIT. OCCT is LGPL-2.1 with the Open CASCADE exception. The About dialog has to keep its
   licence, third-party list and OCCT notice, and a test keeps them in step with `THIRD-PARTY-NOTICES.md`.
 
