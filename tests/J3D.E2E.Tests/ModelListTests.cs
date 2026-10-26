@@ -101,14 +101,41 @@ public sealed partial class ModelListTests(J3DAppFixture app) : ViewerPageTest(a
     {
         await ImportWithToolbarAsync("assembly.step");
         await WaitForImportsAsync(1);
-        var nodes = Items.Locator("[data-testid=model-tree] .mud-treeview-item-content");
+        var nodes = Items.Locator("[data-testid=model-tree-node] .j3d-tree-node-name");
 
         await Items.GetByTestId("model-tree-toggle").ClickAsync();
         await Expect(nodes).ToHaveTextAsync(["Bracket assembly"]);
 
         // Clicking a node's name selects it (M6); its arrow expands it.
-        await nodes.First.Locator(".mud-treeview-item-arrow button").ClickAsync();
+        await Items.GetByTestId("tree-node-toggle").First.ClickAsync();
         await Expect(nodes).ToHaveTextAsync(["Bracket assembly", "Plate (bottom)", "Plate (top)", "Pin"]);
+        AssertNoConsoleErrors();
+    }
+
+    /// <summary>M16 (D202): the tree's rows take the arrow keys with the real keyboard, and Enter selects.</summary>
+    [Fact]
+    public async Task The_tree_moves_between_rows_with_the_arrow_keys()
+    {
+        await ImportWithToolbarAsync("assembly.step");
+        var id = Assert.Single(await WaitForImportsAsync(1)).Id;
+        await Items.GetByTestId("model-tree-toggle").ClickAsync();
+        var rows = Items.GetByTestId("model-tree-node");
+        await rows.First.ClickAsync(); // selects the bracket, and takes the focus
+        await Expect(rows.First).ToBeFocusedAsync();
+
+        await Page.Keyboard.PressAsync("ArrowRight");
+        await Expect(rows).ToHaveCountAsync(4);
+        await Page.Keyboard.PressAsync("ArrowDown");
+        await Page.Keyboard.PressAsync("ArrowDown");
+        await Expect(rows.Nth(2)).ToBeFocusedAsync();
+        await Expect(rows.Nth(2)).ToHaveAttributeAsync("tabindex", "0");
+        await Page.Keyboard.PressAsync("Enter");
+        await WaitForPartStateAsync(id, [], [2]); // Plate (top)
+
+        await Page.Keyboard.PressAsync("ArrowLeft"); // to its parent
+        await Expect(rows.First).ToBeFocusedAsync();
+        await Page.Keyboard.PressAsync("ArrowLeft"); // which closes
+        await Expect(rows).ToHaveCountAsync(1);
         AssertNoConsoleErrors();
     }
 

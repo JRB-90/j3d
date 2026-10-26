@@ -1,0 +1,10 @@
+<div role="tree"
+     class="j3d-model-tree"
+     aria-label="@($"{Model.Summary.FileName}: {(Model.Summary.Kind == ModelKind.Brep ? "assembly" : "hierarchy")}")"
+     aria-multiselectable="true"
+     data-tree="@Model.Id.Value"
+     data-testid="model-tree">
+    <Virtualize Items="Rows" ItemSize="RowHeight" OverscanCount="10" Context="row">
+        <ModelTreeRow @key="row.Node" State="StateOf(row)" Owner="this" />
+    </Virtualize>
+</div>

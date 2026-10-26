@@ -47,6 +47,9 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     private string _appliedMoveTool = MoveToolKey(null, null, MoveFrame.Local);
     private string _appliedOriginFrames = "";
 
+    /// <summary>The changes last sent, which the next waits for (M16): sending can now yield part-way (D199).</summary>
+    private Task _sending = Task.CompletedTask;
+
     /// <summary>Raised once the viewer has started and reported the browser's capabilities.</summary>
     [Parameter]
     public EventCallback<ViewerCapabilities> OnReady { get; set; }
@@ -432,8 +435,13 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         var modeChanged = measureMode != _appliedMeasureMode || fromContext;
         _appliedMeasureMode = measureMode;
 
+        // The viewer takes the changes in the order they were made, even when a large edit yields below.
+        var previous = _sending;
+        var done = new TaskCompletionSource();
+        _sending = done.Task;
         try
         {
+            await previous;
             if (orderChanged)
             {
                 await viewer.SetModelOrderAsync(ids);
@@ -444,12 +452,26 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
                 await viewer.SetSelectionModeAsync(selectionMode);
             }
 
+            // The viewer's share of an edit goes in a task after .NET's (D199): for Expand all of the
+            // large plant both took a quarter of a second together.
+            if (edits.Count > 0)
+            {
+                await Task.Yield();
+            }
+
             foreach (var (id, modelEdits) in edits)
             {
-                if (await viewer.SetStructureAsync(id, modelEdits.ToDto()) is { } stats)
+                if (await viewer.SetStructureAsync(id, modelEdits) is { } stats)
                 {
                     scene.ReportStats(id, stats);
                 }
+            }
+
+            // An edit's selection goes in a task of its own (D199): after Expand all of the large plant,
+            // both together took a quarter of a second.
+            if (edits.Count > 0 && pending.Count > 0)
+            {
+                await Task.Yield();
             }
 
             foreach (var model in pending)
@@ -490,6 +512,10 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         {
             // Nothing awaits this, so a failure would otherwise go unseen (M14 found one).
             Console.Error.WriteLine($"J3D: the viewer couldn't apply a change to the scene: {exception.Message}");
+        }
+        finally
+        {
+            done.SetResult();
         }
     }
 

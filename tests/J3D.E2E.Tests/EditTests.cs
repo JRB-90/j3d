@@ -75,14 +75,14 @@ public sealed class EditTests(J3DAppFixture app) : ViewerPageTest(app)
         await TreeNode(id, Pin).Locator(".j3d-tree-node-name").First.DragToAsync(TreeNode(id, 4).Locator(".j3d-tree-node-name").First);
 
         await Page.WaitForFunctionAsync(
-            "id => document.querySelector(`[data-tree-node=\"${id}:4\"] [data-tree-node=\"${id}:3\"]`) !== null",
+            "id => document.querySelector(`[data-tree-node=\"${id}:3\"]`)?.dataset.treeParent === '4'",
             id);
         Assert.Contains((Pin, "Pin", 4), await TreeAsync(id));
         await AssertWorldAsync(id, Pin, 25, 25, 0);
 
         // And onto the model's name: the top level (D182).
         await TreeNode(id, Pin).Locator(".j3d-tree-node-name").First.DragToAsync(Page.GetByTestId("model-name"));
-        await Page.WaitForFunctionAsync("id => window.__j3dTest.placement(id, 3)?.parentWorld[12] === 0 && document.querySelector(`[data-tree-node=\"${id}:3\"]`)?.parentElement.closest('[data-tree-node]') === null", id);
+        await Page.WaitForFunctionAsync("id => window.__j3dTest.placement(id, 3)?.parentWorld[12] === 0 && document.querySelector(`[data-tree-node=\"${id}:3\"]`)?.dataset.treeParent === '-1'", id);
         Assert.Contains((Pin, "Pin", -1), await TreeAsync(id));
         await AssertWorldAsync(id, Pin, 25, 25, 0);
         AssertNoConsoleErrors();
@@ -206,17 +206,15 @@ public sealed class EditTests(J3DAppFixture app) : ViewerPageTest(app)
     private ILocator TreeNode(string id, int node) => Page.Locator($"[data-tree-node=\"{id}:{node}\"]");
 
     private async Task ExpandAsync(string id, int node) =>
-        await TreeNode(id, node).Locator(".mud-treeview-item-arrow button").First.ClickAsync();
+        await TreeNode(id, node).GetByTestId("tree-node-toggle").ClickAsync();
 
     /// <summary>The tree as shown: each node's id, name and parent node (-1 at the top level).</summary>
     private async Task<List<(int Node, string Name, int Parent)>> TreeAsync(string id)
     {
         var rows = await Page.EvaluateAsync<JsonElement>(
             """
-            id => [...document.querySelectorAll(`[data-tree-node^="${id}:"]`)].map(row => {
-              const parent = row.parentElement.closest('[data-tree-node]');
-              return [Number(row.dataset.treeNode.split(':').pop()), row.querySelector('.j3d-tree-node-name')?.textContent ?? '', parent ? Number(parent.dataset.treeNode.split(':').pop()) : -1];
-            })
+            id => [...document.querySelectorAll(`[data-tree-node^="${id}:"]`)].map(row =>
+              [Number(row.dataset.treeNode.split(':').pop()), row.querySelector('.j3d-tree-node-name')?.textContent ?? '', Number(row.dataset.treeParent)])
             """,
             id);
         return [.. rows.EnumerateArray().Select(static row => (row[0].GetInt32(), row[1].GetString()!, row[2].GetInt32()))];

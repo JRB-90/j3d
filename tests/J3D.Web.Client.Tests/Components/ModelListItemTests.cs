@@ -118,49 +118,44 @@ public sealed class ModelListItemTests : BunitTestBase
 
         cut.Find("[data-testid=model-tree-toggle]").Click();
         Assert.Equal(["Bracket"], NodeTexts(cut));
+        Assert.Equal("tree", cut.Find("[data-testid=model-tree]").GetAttribute("role"));
 
         ExpandNode(cut, "Bracket");
         cut.WaitForAssertion(() => Assert.Equal(["Bracket", "Plate (bottom)", "Top"], NodeTexts(cut)));
 
         ExpandNode(cut, "Top");
         cut.WaitForAssertion(() => Assert.Equal(["Bracket", "Plate (bottom)", "Top", "Plate (top)", "(unnamed)"], NodeTexts(cut)));
-        Assert.Empty(cut.FindAll(".mud-treeview-item-selected"));
+        Assert.All(cut.FindAll("[data-testid=model-tree-node]"), static row => Assert.Equal("false", row.GetAttribute("aria-selected")));
+
+        // An ARIA tree (D202): levels, positions, open rows, and parents for the tests and the drag.
+        var plate = Row(cut, "Plate (top)");
+        Assert.Equal(("treeitem", "3", "1", "2", null), (plate.GetAttribute("role"), plate.GetAttribute("aria-level"), plate.GetAttribute("aria-posinset"), plate.GetAttribute("aria-setsize"), plate.GetAttribute("aria-expanded")));
+        Assert.Equal(("2", "0 2"), (plate.GetAttribute("data-tree-parent"), plate.GetAttribute("data-tree-ancestors")));
+        Assert.Equal("true", Row(cut, "Top").GetAttribute("aria-expanded"));
+        Assert.Equal(["0", "-1", "-1", "-1", "-1"], cut.FindAll("[data-testid=model-tree-node]").Select(static row => row.GetAttribute("tabindex")));
 
         cut.Find("[data-testid=model-tree-toggle]").Click();
         Assert.Empty(cut.FindAll("[data-testid=model-tree]"));
     }
 
     [Fact]
-    public void Wide_levels_show_a_page_at_a_time()
+    public void A_wide_level_shows_all_its_nodes_without_pages()
     {
-        // 250 top-level nodes: a group of 150 parts, then 249 loose parts.
+        // 250 top-level nodes: a group of 150 parts, then 249 loose parts. M16 (D198): the tree is
+        // virtualised, so D60's "Show more" pages are gone, and only a window of rows is drawn.
         List<TreeNode> tree = [new("Group", Parent: -1, Prototype: -1)];
         tree.AddRange(Enumerable.Range(1, 150).Select(static i => new TreeNode($"Inner {i}", Parent: 0, Prototype: 0)));
         tree.AddRange(Enumerable.Range(1, 249).Select(static i => new TreeNode($"Loose {i}", Parent: -1, Prototype: 0)));
         var cut = RenderItem(Queued().AsLoaded(Info() with { Tree = TreeColumns.From(tree) }));
-        Assert.Equal(100, ModelListItem.TreePageSize);
 
         cut.Find("[data-testid=model-tree-toggle]").Click();
-        Assert.Equal(100, NodeCount(cut));
-        Assert.Equal("Show 100 more (150 left)", MoreText(cut));
+        Assert.Empty(cut.FindAll("[data-testid=model-tree-more]"));
+        Assert.InRange(NodeCount(cut), 1, 249);
+        Assert.Equal("250", Row(cut, "Group").GetAttribute("aria-setsize"));
 
-        ClickMore(cut);
-        cut.WaitForAssertion(() => Assert.Equal(200, NodeCount(cut)));
-        Assert.Equal("Show 50 more", MoreText(cut));
-
-        ClickMore(cut);
-        cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=model-tree-more]")));
-        Assert.Equal(250, NodeCount(cut));
-        Assert.Equal("Loose 249", NodeTexts(cut)[^1]);
-
-        // A lazily loaded level pages the same way.
         ExpandNode(cut, "Group");
-        cut.WaitForAssertion(() => Assert.Equal(350, NodeCount(cut)));
-        Assert.Equal("Show 50 more", MoreText(cut));
-        ClickMore(cut);
-        cut.WaitForAssertion(() => Assert.Equal(400, NodeCount(cut)));
-        Assert.Equal(["Group", "Inner 1"], NodeTexts(cut)[..2]);
-        Assert.Equal("Inner 150", NodeTexts(cut)[150]);
+        cut.WaitForAssertion(() => Assert.Equal(["Group", "Inner 1"], NodeTexts(cut)[..2]));
+        Assert.Equal(("150", "2"), (Row(cut, "Inner 1").GetAttribute("aria-setsize"), Row(cut, "Inner 1").GetAttribute("aria-level")));
     }
 
     [Fact]
@@ -176,20 +171,14 @@ public sealed class ModelListItemTests : BunitTestBase
         cut.Find($"[data-testid={testId}]").TextContent.Trim();
 
     private static List<string> NodeTexts(IRenderedComponent<ModelListItem> cut) =>
-        [.. cut.FindAll("[data-testid=model-tree] .mud-treeview-item-content").Select(static node => node.TextContent.Trim())];
+        [.. cut.FindAll("[data-testid=model-tree-node] .j3d-tree-node-name").Select(static node => node.TextContent.Trim())];
 
     private static int NodeCount(IRenderedComponent<ModelListItem> cut) => cut.FindAll("[data-testid=model-tree-node]").Count;
 
-    private static string MoreText(IRenderedComponent<ModelListItem> cut) =>
-        cut.Find("[data-testid=model-tree-more] .mud-treeview-item-content").TextContent.Trim();
+    private static AngleSharp.Dom.IElement Row(IRenderedComponent<ModelListItem> cut, string text) =>
+        cut.FindAll("[data-testid=model-tree-node]").Single(row => row.QuerySelector(".j3d-tree-node-name")?.TextContent.Trim() == text);
 
-    private static void ClickMore(IRenderedComponent<ModelListItem> cut) =>
-        cut.Find("[data-testid=model-tree-more] .mud-treeview-item-content").Click();
-
-    /// <summary>Clicking a node's text selects it (M6), so expanding takes its arrow.</summary>
+    /// <summary>Clicking a row selects it (M6), so expanding takes its arrow.</summary>
     private static void ExpandNode(IRenderedComponent<ModelListItem> cut, string text) =>
-        cut.FindAll("[data-testid=model-tree] .mud-treeview-item-content")
-            .Single(node => node.TextContent.Trim() == text)
-            .QuerySelector(".mud-treeview-item-arrow button")!
-            .Click();
+        Row(cut, text).QuerySelector("[data-testid=tree-node-toggle]")!.Click();
 }

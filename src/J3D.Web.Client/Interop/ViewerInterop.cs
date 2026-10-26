@@ -1,4 +1,5 @@
 using J3D.Web.Client.Models;
+using J3D.Web.Client.State;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 
@@ -111,8 +112,12 @@ public sealed class ViewerInterop : IAsyncDisposable
     /// A model's tree as edited (M14): the viewer applies all of its edits and keeps them, and answers
     /// what the model now draws, or null when nothing changed.
     /// </summary>
-    public ValueTask<ModelStats?> SetStructureAsync(ModelId id, ModelEditsDto edits) =>
-        _viewer.InvokeAsync<ModelStats?>("setStructure", id.Value, edits);
+    /// <remarks>Since M16 the edits cross packed (<see cref="EditsCodec"/>, D199): as JSON they took 160 ms after Expand all.</remarks>
+    public ValueTask<ModelStats?> SetStructureAsync(ModelId id, ModelEdits edits)
+    {
+        var (numbers, text) = EditsCodec.Encode(edits);
+        return _viewer.InvokeAsync<ModelStats?>("setStructure", id.Value, numbers, text);
+    }
 
     /// <summary>Saves the visible scene, or only the selection, as GLB or STL: a browser download (M9, D119, D120).</summary>
     public ValueTask<ExportOutcome> ExportMeshAsync(MeshExportFormat format, bool selection) =>
@@ -135,8 +140,12 @@ public sealed class ViewerInterop : IAsyncDisposable
     /// <summary>Copies text to the clipboard: a measurement's value (D87).</summary>
     public ValueTask CopyTextAsync(string text) => _module.InvokeVoidAsync("copyText", text);
 
-    /// <summary>Scrolls the element a CSS selector finds into view, if it isn't already (D96).</summary>
-    public ValueTask ScrollIntoViewAsync(string selector) => _module.InvokeVoidAsync("scrollIntoView", selector);
+    /// <summary>
+    /// Scrolls a virtualised tree's row into view by its index (D96, D198), and focuses it once it's drawn
+    /// if asked (D202). <paramref name="tree"/> and <paramref name="row"/> are CSS selectors.
+    /// </summary>
+    public ValueTask RevealTreeRowAsync(string tree, int index, int rowHeight, string row, bool focus) =>
+        _module.InvokeVoidAsync("revealTreeRow", tree, index, rowHeight, row, focus);
 
     public async ValueTask DisposeAsync()
     {

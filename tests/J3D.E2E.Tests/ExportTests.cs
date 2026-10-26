@@ -77,7 +77,7 @@ public sealed class ExportTests(J3DAppFixture app) : ViewerPageTest(app)
         await ImportWithToolbarAsync("assembly.step");
         var original = Assert.Single(await WaitForImportsAsync(1));
         await Page.GetByTestId("model-tree-toggle").ClickAsync();
-        await TreeNode(original.Id, 0).Locator(".mud-treeview-item-arrow button").First.ClickAsync();
+        await TreeNode(original.Id, 0).GetByTestId("tree-node-toggle").ClickAsync();
         await TreeNode(original.Id, Pin).GetByTestId("tree-node-eye").ClickAsync();
         await WaitForPartStateAsync(original.Id, [Pin], []);
 

@@ -20,7 +20,7 @@ public sealed class SelectionUiTests : BunitTestBase
     {
         var viewer = SetupViewerModule();
         viewer.SetupVoid("attachFileInput", static _ => true).SetVoidResult();
-        viewer.SetupVoid("scrollIntoView", static _ => true).SetVoidResult();
+        viewer.SetupVoid("revealTreeRow", static _ => true).SetVoidResult();
         Scene.Add(Summary(Id.Value, "bracket.step"));
         Scene.MarkLoaded(Id, Info());
     }
@@ -89,13 +89,16 @@ public sealed class SelectionUiTests : BunitTestBase
         await Act(() => Scene.Pick(Id, 4, additive: false));
 
         cut.WaitForAssertion(() => Assert.Equal("true", Node(cut, "(unnamed)").GetAttribute("data-selected")));
-        var scroll = JSInterop.Invocations.Single(static i => i.Identifier == "scrollIntoView");
-        Assert.Equal("[data-tree-node=\"m1:4\"]", Assert.Single(scroll.Arguments));
+        // Bracket, Plate (bottom), Top, Plate (top), then the unnamed part: the fifth row.
+        var reveal = JSInterop.Invocations.Single(static i => i.Identifier == "revealTreeRow");
+        Assert.Equal(["[data-testid=model-tree][data-tree=\"m1\"]", 4, 26, "[data-tree-node=\"m1:4\"]", false], reveal.Arguments);
     }
 
     [Fact]
-    public async Task A_part_deep_in_a_wide_level_is_paged_to()
+    public async Task A_part_deep_in_a_wide_level_is_scrolled_to_by_its_row()
     {
+        // M16 (D198): the tree is virtualised, so the row is found by its index, not paged to (D60).
+        await StartViewerAsync();
         List<J3D.Web.Client.Interop.TreeNode> tree = [new("Group", Parent: -1, Prototype: -1)];
         tree.AddRange(Enumerable.Range(1, 350).Select(static i => new J3D.Web.Client.Interop.TreeNode($"Inner {i}", Parent: 0, Prototype: 0)));
         var id = new ModelId("wide");
@@ -108,8 +111,12 @@ public sealed class SelectionUiTests : BunitTestBase
 
         await Act(() => Scene.Pick(id, 230, additive: false));
 
-        cut.WaitForAssertion(() => Assert.Equal("true", Node(cut, "Inner 230").GetAttribute("data-selected")));
-        Assert.Contains("Show 50 more", cut.Find("[data-testid=model-tree-more]").TextContent, StringComparison.Ordinal);
+        cut.WaitForAssertion(() => Assert.Contains(JSInterop.Invocations, static i => i.Identifier == "revealTreeRow"));
+        var reveal = JSInterop.Invocations.Last(static i => i.Identifier == "revealTreeRow");
+        Assert.Equal(230, reveal.Arguments[1]); // Group is row 0
+        Assert.Equal("[data-tree-node=\"wide:230\"]", reveal.Arguments[3]);
+        Assert.Equal("true", Node(cut, "Group").GetAttribute("aria-expanded"));
+        Assert.Empty(cut.FindAll("[data-testid=model-tree-more]"));
     }
 
     [Fact]
@@ -171,11 +178,11 @@ public sealed class SelectionUiTests : BunitTestBase
     private static AngleSharp.Dom.IElement Node(IRenderedComponent<ModelList> cut, string name) =>
         cut.FindAll("[data-testid=model-tree-node]").First(node => node.QuerySelector(".j3d-tree-node-name")?.TextContent == name);
 
-    private static AngleSharp.Dom.IElement Content(IRenderedComponent<ModelList> cut, string name) =>
-        Node(cut, name).QuerySelector(".mud-treeview-item-content")!;
+    /// <summary>A row is what's clicked (M16, D198).</summary>
+    private static AngleSharp.Dom.IElement Content(IRenderedComponent<ModelList> cut, string name) => Node(cut, name);
 
     private static AngleSharp.Dom.IElement Eye(IRenderedComponent<ModelList> cut, string name) =>
-        Content(cut, name).QuerySelector("[data-testid=tree-node-eye]")!;
+        Node(cut, name).QuerySelector("[data-testid=tree-node-eye]")!;
 
     private static bool Disabled(IRenderedComponent<Toolbar> cut, string testId) =>
         cut.Find($"[data-testid={testId}]").HasAttribute("disabled");

@@ -1,0 +1,70 @@
+@using System.Globalization
+<div role="treeitem"
+     class="@RowClass"
+     style="@($"padding-left: {(State.Level * IndentStep).ToString(CultureInfo.InvariantCulture)}px")"
+     tabindex="@(State.TabStop ? "0" : "-1")"
+     aria-level="@(State.Level + 1)"
+     aria-expanded="@(State.Expandable ? (State.Expanded ? "true" : "false") : null)"
+     aria-selected="@(State.Selected ? "true" : "false")"
+     aria-setsize="@State.SetSize"
+     aria-posinset="@State.Position"
+     draggable="@(State.Draggable ? "true" : "false")"
+     data-tree-node="@State.Key"
+     data-tree-parent="@State.Parent"
+     data-tree-ancestors="@State.Ancestors"
+     data-tree-assembly="@(State.IsPart ? "false" : "true")"
+     data-selected="@(State.Selected ? "true" : "false")"
+     data-testid="model-tree-node"
+     @onclick="OnClick"
+     @onkeydown="OnKeyDown"
+     @onfocus="OnFocus"
+     @oncontextmenu="OnContextMenu"
+     @oncontextmenu:preventDefault="true"
+     @oncontextmenu:stopPropagation="true">
+    @if (State.Expandable)
+    {
+        <button type="button"
+                class="j3d-tree-node-toggle"
+                tabindex="-1"
+                aria-label="@($"{(State.Expanded ? "Collapse" : "Expand")} {State.Text}")"
+                @onclick="OnToggle"
+                @onclick:stopPropagation="true"
+                data-testid="tree-node-toggle">
+            <MudIcon Icon="@(State.Expanded ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)" Size="Size.Small" />
+        </button>
+    }
+    else
+    {
+        <span class="j3d-tree-node-toggle" aria-hidden="true"></span>
+    }
+    <MudIcon Icon="@(State.IsPart ? Icons.Material.Outlined.Category : Icons.Material.Outlined.AccountTree)" Size="Size.Small" Class="j3d-tree-node-icon" />
+    @if (State.Renaming)
+    {
+        <input @ref="_renameInput"
+               class="j3d-tree-rename"
+               aria-label="@($"Name of {State.Text}")"
+               value="@_renameText"
+               @oninput="@(args => _renameText = args.Value?.ToString() ?? "")"
+               @onkeydown="OnRenameKey"
+               @onkeydown:stopPropagation="true"
+               @onblur="@(() => Owner.EndRename(_renameText))"
+               @onclick:stopPropagation="true"
+               onfocus="this.select()"
+               data-testid="tree-rename" />
+    }
+    else
+    {
+        <span class="j3d-tree-node-name">@State.Text</span>
+    }
+    <span class="j3d-tree-node-eye" @onclick:stopPropagation="true">
+        <MudIconButton Icon="@ModelListItem.EyeIcon(State.Visibility)"
+                       Size="Size.Small"
+                       Class="@ModelListItem.EyeClass(State.Visibility)"
+                       title="@ModelListItem.EyeTitle(State.Visibility)"
+                       aria-label="@($"{ModelListItem.EyeTitle(State.Visibility)}: {State.Text}")"
+                       tabindex="-1"
+                       OnClick="@(() => Owner.ToggleVisibility(State.Node))"
+                       data-visibility="@State.Visibility.ToString().ToLowerInvariant()"
+                       data-testid="tree-node-eye" />
+    </span>
+</div>

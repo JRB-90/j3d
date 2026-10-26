@@ -121,6 +121,15 @@
                                    Class="j3d-model-progress"
                                    data-testid="export-progress" />
             }
+            @if (Model.Expanding is { } expanding)
+            {
+                <div class="j3d-model-detail" data-testid="model-expanding">@ExpandingText(expanding)</div>
+                <MudProgressLinear Color="Color.Primary"
+                                   Size="Size.Small"
+                                   Rounded="true"
+                                   Indeterminate="true"
+                                   Class="j3d-model-progress" />
+            }
             @if (Model.NotKept is { } notKept)
             {
                 <div class="j3d-model-detail j3d-model-not-kept" data-testid="model-not-kept">Not kept: @notKept</div>
@@ -134,85 +143,9 @@
                        data-testid="model-tree-toggle">
                 @TreeLabel
             </MudButton>
-            @if (_treeOpen && _roots is not null)
+            @if (_treeOpen && Model.Tree is not null)
             {
-                <MudTreeView T="int?"
-                             Items="_roots"
-                             ServerData="LoadChildrenAsync"
-                             ReadOnly="true"
-                             Dense="true"
-                             ExpandOnClick="false"
-                             Class="j3d-model-tree"
-                             data-testid="model-tree">
-                    <ItemTemplate>
-                        @if (IsShowMore(context))
-                        {
-                            <MudTreeViewItem Value="@context.Value"
-                                             Text="@context.Text"
-                                             Icon="@Icons.Material.Filled.MoreHoriz"
-                                             CanExpand="false"
-                                             ReadOnly="true"
-                                             OnClick="@(() => ShowMore(context))"
-                                             Class="j3d-model-tree-more"
-                                             data-testid="model-tree-more" />
-                        }
-                        else
-                        {
-                            var node = context.Value!.Value;
-                            var visibility = Model.VisibilityOf(node);
-                            var renaming = IsRenaming(node);
-                            @* Keyed by node: after an edit (M14) a row mustn't show another node's children. *@
-                            <MudTreeViewItem @key="@node"
-                                             Value="@context.Value"
-                                             Text="@context.Text"
-                                             Icon="@context.Icon"
-                                             CanExpand="@context.Expandable"
-                                             Items="@context.Children"
-                                             @bind-Expanded="@context.Expanded"
-                                             ReadOnly="true"
-                                             OnClick="@(args => SelectNode(node, args))"
-                                             Class="@NodeClass(node, visibility)"
-                                             draggable="@(CanDrag && !renaming ? "true" : "false")"
-                                             data-tree-node="@NodeKey(node)"
-                                             data-tree-assembly="@(_tree!.IsAssembly(node) ? "true" : "false")"
-                                             data-selected="@(Model.IsSelected(node) ? "true" : "false")"
-                                             data-testid="model-tree-node">
-                                <BodyContent Context="item">
-                                    @if (renaming)
-                                    {
-                                        <input @ref="_renameInput"
-                                               class="j3d-tree-rename"
-                                               aria-label="@($"Name of {context.Text}")"
-                                               value="@_renameText"
-                                               @oninput="@(args => _renameText = args.Value?.ToString() ?? "")"
-                                               @onkeydown="OnRenameKey"
-                                               @onblur="@(() => Scene.EndRename(_renameText))"
-                                               @onclick:stopPropagation="true"
-                                               onfocus="this.select()"
-                                               data-testid="tree-rename" />
-                                    }
-                                    else
-                                    {
-                                        <span class="j3d-tree-node-name"
-                                              @oncontextmenu="@(args => OpenNodeMenu(node, args))"
-                                              @oncontextmenu:preventDefault="true"
-                                              @oncontextmenu:stopPropagation="true">@context.Text</span>
-                                    }
-                                    <span class="j3d-tree-node-eye" @onclick:stopPropagation="true">
-                                        <MudIconButton Icon="@EyeIcon(visibility)"
-                                                       Size="Size.Small"
-                                                       Class="@EyeClass(visibility)"
-                                                       title="@EyeTitle(visibility)"
-                                                       aria-label="@($"{EyeTitle(visibility)}: {context.Text}")"
-                                                       OnClick="@(() => Scene.ToggleNodeVisibility(Model.Id, node))"
-                                                       data-visibility="@visibility.ToString().ToLowerInvariant()"
-                                                       data-testid="tree-node-eye" />
-                                    </span>
-                                </BodyContent>
-                            </MudTreeViewItem>
-                        }
-                    </ItemTemplate>
-                </MudTreeView>
+                <ModelTreeView Model="Model" Reveal="_reveal" />
             }
             break;
 

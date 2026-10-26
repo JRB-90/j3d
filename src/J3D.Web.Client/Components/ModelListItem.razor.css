@@ -79,17 +79,61 @@
 .j3d-model ::deep .j3d-model-tree {
     margin-right: 8px;
     font-size: 0.8125rem;
+    line-height: 1.43;
 }
 
-.j3d-model ::deep .j3d-model-tree-more .mud-treeview-item-content {
-    color: var(--mud-palette-primary);
+/* A node (D198): DESIGN.md's 26 px rows, which the virtualised tree counts on; each row's level sets
+   its indent. */
+.j3d-model ::deep .j3d-tree-node {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-sizing: border-box;
+    height: 26px;
+    padding-right: 2px;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.j3d-model ::deep .j3d-tree-node:hover {
+    background: var(--mud-palette-action-default-hover);
+}
+
+/* Keyboard focus (D202): DESIGN.md's blue ring. */
+.j3d-model ::deep .j3d-tree-node:focus-visible {
+    outline: 1px solid var(--mud-palette-primary);
+    outline-offset: -1px;
+}
+
+.j3d-model ::deep .j3d-tree-node-toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+}
+
+.j3d-model ::deep button.j3d-tree-node-toggle {
+    cursor: pointer;
+}
+
+.j3d-model ::deep button.j3d-tree-node-toggle:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+.j3d-model ::deep .j3d-tree-node-icon {
+    flex: none;
+    color: var(--mud-palette-text-secondary);
 }
 
 /* Selection and visibility in the tree (decisions D96, D98). */
-.j3d-model ::deep .j3d-tree-node > .mud-treeview-item-content {
-    border-radius: 4px;
-}
-
 /* Model mode (D146): a model selected whole takes the tint, and its name the blue; the tree inside
    doesn't repeat it node by node. */
 .j3d-model--selected {
@@ -100,27 +144,27 @@
     color: var(--mud-palette-primary);
 }
 
-.j3d-model.j3d-model--selected ::deep .j3d-tree-node--selected > .mud-treeview-item-content {
-    background: transparent;
-    color: inherit;
-}
-
-.j3d-model ::deep .j3d-tree-node--selected > .mud-treeview-item-content {
+.j3d-model ::deep .j3d-tree-node--selected {
     background: rgba(79, 157, 255, 0.16);
     color: var(--mud-palette-primary);
 }
 
-.j3d-model ::deep .j3d-tree-node--hidden > .mud-treeview-item-content .j3d-tree-node-name {
+.j3d-model.j3d-model--selected ::deep .j3d-tree-node--selected {
+    background: transparent;
+    color: inherit;
+}
+
+.j3d-model ::deep .j3d-tree-node--hidden .j3d-tree-node-name {
     opacity: 0.5;
 }
 
 /* A cut node, until it's pasted (M14, assumption 20): dimmed, as a file manager dims cut files. */
-.j3d-model ::deep .j3d-tree-node--cut > .mud-treeview-item-content .j3d-tree-node-name {
+.j3d-model ::deep .j3d-tree-node--cut .j3d-tree-node-name {
     opacity: 0.5;
 }
 
 /* Where a dragged node would go (D182): DESIGN.md's dashed "drop here" outline. */
-.j3d-model ::deep .j3d-drop-target > .mud-treeview-item-content,
+.j3d-model ::deep .j3d-tree-node.j3d-drop-target,
 .j3d-model-header.j3d-drop-target {
     outline: 1px dashed var(--mud-palette-primary);
     outline-offset: -1px;

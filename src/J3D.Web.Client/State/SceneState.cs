@@ -87,33 +87,58 @@ public sealed partial class SceneState
     private (ModelId Id, int Node)? _anchor;
 
     /// <summary>
+    /// Values worked out from the selection, kept until the models, the mode or the anchor change (M16):
+    /// each walks the selected parts, and every render asked for them several times, so with all 10,122
+    /// parts of the large plant selected any change took over 150 ms.
+    /// </summary>
+    private readonly Dictionary<string, object?> _derived = [];
+    private (ImmutableList<ModelEntry> Models, SelectMode Mode, (ModelId Id, int Node)? Anchor)? _derivedFor;
+
+    private T Derive<T>(string name, Func<T> compute)
+    {
+        var key = (Models, Mode, _anchor);
+        if (_derivedFor is not { } kept || !ReferenceEquals(kept.Models, key.Models) || kept.Mode != key.Mode || kept.Anchor != key._anchor)
+        {
+            _derived.Clear();
+            _derivedFor = key;
+        }
+
+        if (!_derived.TryGetValue(name, out var value))
+        {
+            value = compute();
+            _derived[name] = value;
+        }
+
+        return (T)value!;
+    }
+
+    /// <summary>
     /// The one object the Move tool moves (D167): in Model mode a single selected model (node
     /// <see cref="ModelEntry.ModelFrameNode"/>); in Object mode the node last picked in the tree, or the
     /// part picked in the view, while the selection is exactly its visible parts, or else a single
     /// selected part. Nothing in Feature mode, or for any other selection.
     /// </summary>
-    public (ModelId Id, int Node)? MoveTarget
+    public (ModelId Id, int Node)? MoveTarget => Derive(nameof(MoveTarget), FindMoveTarget);
+
+    private (ModelId Id, int Node)? FindMoveTarget()
     {
-        get
+        if (Mode == SelectMode.Features || Models.Where(model => !model.Selected.IsEmpty).ToList() is not [var model])
         {
-            if (Mode == SelectMode.Features || Models.Where(model => !model.Selected.IsEmpty).ToList() is not [var model])
-            {
-                return null;
-            }
-
-            if (Mode == SelectMode.Models)
-            {
-                return IsModelSelected(model) ? (model.Id, ModelEntry.ModelFrameNode) : null;
-            }
-
-            if (_anchor is { } anchor && anchor.Id == model.Id && model.Tree is { } tree && tree.Contains(anchor.Node) &&
-                model.Selected.SetEquals(tree.PartsUnder(anchor.Node).Where(part => !model.Hidden.Contains(part))))
-            {
-                return anchor;
-            }
-
-            return model.Selected.Count == 1 ? (model.Id, model.Selected.Single()) : null;
+            return null;
         }
+
+        if (Mode == SelectMode.Models)
+        {
+            return IsModelSelected(model) ? (model.Id, ModelEntry.ModelFrameNode) : null;
+        }
+
+        if (_anchor is { } anchor && anchor.Id == model.Id && model.Tree is { } tree && tree.Contains(anchor.Node) &&
+            model.Selected.SetEquals(tree.PartsUnder(anchor.Node).Where(part => !model.Hidden.Contains(part))))
+        {
+            return anchor;
+        }
+
+        return model.Selected.Count == 1 ? (model.Id, model.Selected.Single()) : null;
     }
 
     /// <summary>Why the Move tool has nothing to move, while it's on without a target.</summary>
@@ -167,16 +192,17 @@ public sealed partial class SceneState
     public bool CanClearAll => !Models.IsEmpty || CanUndo || CanRedo;
 
     /// <summary>Every selected part, in list order, then tree order.</summary>
-    public IReadOnlyList<(ModelEntry Model, int Node)> Selection =>
-        [.. Models.SelectMany(model => model.Selected.Order().Select(node => (model, node)))];
+    public IReadOnlyList<(ModelEntry Model, int Node)> Selection => Derive<IReadOnlyList<(ModelEntry Model, int Node)>>(
+        nameof(Selection),
+        () => [.. Models.SelectMany(model => model.Selected.Order().Select(node => (model, node)))]);
 
     public bool HasSelection => Models.Any(model => !model.Selected.IsEmpty);
 
     public bool HasHidden => Models.Any(model => !model.Hidden.IsEmpty);
 
     /// <summary>Isolate would change something: there's a selection and a visible part outside it.</summary>
-    public bool CanIsolate => HasSelection && Models.Any(model =>
-        model.Tree is { } tree && tree.Parts.Any(part => !model.Hidden.Contains(part) && !model.Selected.Contains(part)));
+    public bool CanIsolate => Derive(nameof(CanIsolate), () => HasSelection && Models.Any(model =>
+        model.Tree is { } tree && tree.Parts.Any(part => !model.Hidden.Contains(part) && !model.Selected.Contains(part))));
 
     /// <summary>The toolbar's Export menu has something to save: a selection, or a visible part (M9).</summary>
     public bool CanExport => HasSelection || Models.Any(model =>
@@ -245,6 +271,9 @@ public sealed partial class SceneState
     /// <summary>A model's STEP or BREP export started (its format, no progress yet), or ended (null) (D125).</summary>
     public void SetExport(ModelId id, BrepExportFormat? format) =>
         Update(id, model => model.WithExport(format is { } started ? new ModelExport(started, null) : null));
+
+    /// <summary>Expand or Expand all started on so many of a model's parts, or ended (null) (M16, D199).</summary>
+    public void SetExpanding(ModelId id, int? parts) => Update(id, model => model.WithExpanding(parts));
 
     /// <summary>How far a model's export is: a fraction, or null while OCCT can't tell.</summary>
     public void ReportExportProgress(ModelId id, double? fraction) =>
