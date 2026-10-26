@@ -53,6 +53,62 @@ internal static class EditsCodec
         return (MemoryMarshal.AsBytes(CollectionsMarshal.AsSpan(numbers)).ToArray(), text.ToString());
     }
 
+    /// <summary>Edits the viewer packed (a restored model's, M16, D204), as they cross interop.</summary>
+    public static ModelEditsDto Decode(byte[] numbers, string text)
+    {
+        var values = MemoryMarshal.Cast<byte, int>(numbers).ToArray();
+        var at = 0;
+        var textAt = 0;
+        int Next() => at < values.Length ? values[at++] : throw new FormatException("The packed edits end early.");
+        string NextText()
+        {
+            var length = Next();
+            var value = text.Substring(textAt, length);
+            textAt += length;
+            return value;
+        }
+
+        if (Next() != Version)
+        {
+            throw new FormatException("The packed edits are of another version.");
+        }
+
+        var added = new int[Next()];
+        for (var i = 0; i < added.Length; i++)
+        {
+            added[i] = Next();
+        }
+
+        var children = new ChildList[Next()];
+        for (var i = 0; i < children.Length; i++)
+        {
+            var parent = Next();
+            var nodes = new int[Next()];
+            for (var j = 0; j < nodes.Length; j++)
+            {
+                nodes[j] = Next();
+            }
+
+            children[i] = new ChildList(parent, nodes);
+        }
+
+        var names = new NodeName[Next()];
+        for (var i = 0; i < names.Length; i++)
+        {
+            names[i] = new NodeName(Next(), NextText());
+        }
+
+        var count = Next();
+        ExpandedNodeDto[]? pieces = count < 0 ? null : new ExpandedNodeDto[count];
+        for (var i = 0; i < count; i++)
+        {
+            var (node, expands, piece, part) = (Next(), Next(), Next(), Next());
+            pieces![i] = new ExpandedNodeDto(node, expands, piece, NextText(), part != 0);
+        }
+
+        return new ModelEditsDto(added, children, names, pieces);
+    }
+
     private static int[] Sorted(IEnumerable<int> keys)
     {
         int[] sorted = [.. keys];

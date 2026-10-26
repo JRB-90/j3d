@@ -196,6 +196,28 @@ describe('placements (M13, D150)', () => {
     expect(x(parts.placement(ModelFrame).local)).toBe(100);
   });
 
+  it("applies a restore's placements at once, as they would be one at a time (M16, D204)", () => {
+    const placements = [
+      { node: 2, local: new Matrix4().makeTranslation(3, 0, 0) },
+      { node: 0, local: new Matrix4().makeTranslation(20, 0, 0) }, // above node 2: its world follows
+      { node: ModelFrame, local: new Matrix4().makeTranslation(100, 0, 0) },
+    ];
+    const one = assembly();
+    const { parts: oneByOne } = buildBrepObject('m', one, new MaterialCache());
+    placements.forEach(({ node, local }) => oneByOne.setPlacement(node, local));
+    const all = assembly();
+    const { object, parts } = buildBrepObject('m', all, new MaterialCache());
+
+    parts.setPlacements(placements);
+
+    expect(all.instances.map((instance) => x(instance.matrix))).toEqual([120, 123, 105]);
+    expect(all.instances.map((instance) => x(instance.matrix))).toEqual(one.instances.map((instance) => x(instance.matrix)));
+    const batch = object.children.find((c): c is BatchedMesh => c instanceof BatchedMesh)!;
+    expect([0, 1, 2].map((id) => x(batch.getMatrixAt(id, new Matrix4())))).toEqual([120, 123, 105]);
+    parts.setPlacements([{ node: 1, local: new Matrix4().makeTranslation(7, 0, 0) }]); // without the frame: only below node 1
+    expect(all.instances.map((instance) => x(instance.matrix))).toEqual([127, 123, 105]);
+  });
+
   it('moves instanced copies and their edges, and a hidden copy stays hidden until shown where it now is', () => {
     const count = InstancingThreshold;
     const scene: ImportedScene = {

@@ -523,9 +523,7 @@ export class Viewer {
       entry.structure = new ModelStructure(model.tree, model.restored.edits, expansionsOf(model.content));
       entry.parts.setStructure(entry.structure);
     }
-    for (const { node, matrix } of [...(model.restored?.placements ?? [])].sort((a, b) => a.node - b.node)) {
-      entry.parts.setPlacement(node, new Matrix4().fromArray(matrix));
-    }
+    entry.parts.setPlacements((model.restored?.placements ?? []).map(({ node, matrix }) => ({ node, local: new Matrix4().fromArray(matrix) })));
     if (model.restored?.placements?.length || model.restored?.edits) {
       const moved = entry.parts.addVisibleBounds(new Box3());
       entry.bounds = moved.isEmpty() ? entry.bounds : moved;

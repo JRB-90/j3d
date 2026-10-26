@@ -288,6 +288,38 @@ class BrepParts implements ModelParts {
     } else {
       return [];
     }
+    return this.redrawFrom(tops);
+  }
+
+  /**
+   * Several placements at once (a restore's kept moves, M16, D204): each node's world is worked out once,
+   * from the topmost moved nodes. One at a time, the large plant's 2,940 after Expand all took 0.2 s.
+   */
+  setPlacements(placements: readonly { node: number; local: Matrix4 }[]): void {
+    const moved = new Set<number>();
+    let frame = false;
+    for (const { node, local } of placements) {
+      if (node === ModelFrame) {
+        this.frame.copy(local);
+        frame = true;
+      } else if (this.structure.nodes[node]) {
+        local.toArray(this.locals, node * 16);
+        moved.add(node);
+      }
+    }
+    const inside = (node: number) => {
+      for (let parent = this.parents[node]!; parent >= 0; parent = this.parents[parent]!) {
+        if (moved.has(parent)) {
+          return true;
+        }
+      }
+      return false;
+    };
+    this.redrawFrom(frame ? this.structure.childrenOf(TopLevel) : [...moved].filter((node) => !inside(node)));
+  }
+
+  /** Works out the worlds under these nodes again and redraws their placements; returns the parts moved. */
+  private redrawFrom(tops: readonly number[]): number[] {
     const parts: number[] = [];
     const placements: number[] = [];
     const visit = (current: number, parentWorld: Matrix4) => {

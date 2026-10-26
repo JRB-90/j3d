@@ -57,10 +57,13 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
 
     private string ProgressText => (Model.Phase, Model.Fraction) switch
     {
-        ({ } phase, { } fraction) => $"{phase} · {Math.Floor(fraction * 100).ToString(CultureInfo.InvariantCulture)}%",
-        ({ } phase, null) => $"{phase}…",
+        ({ } phase, { } fraction) => $"{PhaseName(phase)} · {Math.Floor(fraction * 100).ToString(CultureInfo.InvariantCulture)}%",
+        ({ } phase, null) => $"{PhaseName(phase)}…",
         _ => "Starting…",
     };
+
+    /// <summary>A phase as the item says it: since M16 a restore's edits are "Applying your edits" (D203).</summary>
+    private static string PhaseName(ImportPhase phase) => phase == ImportPhase.Applying ? "Applying your edits" : phase.ToString();
 
     private static string ExportText(ModelExport export) => export.Fraction is { } fraction
         ? $"Exporting {export.Format.DisplayName} · {Math.Floor(fraction * 100).ToString(CultureInfo.InvariantCulture)}%"

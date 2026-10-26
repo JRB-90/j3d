@@ -240,10 +240,20 @@ export class ModelManager {
     entry.task.result
       .then(async (result) => {
         // A kept model's expanded parts (M15) are expanded again before its edits are checked (R25);
-        // one that can't be leaves its edits not fitting.
+        // one that can't be leaves its edits not fitting. Since M16 that's a phase of its own (D203):
+        // the large plant's 840 took a second at "Extracting · 100%".
         const expanded = expandedFileNodes(result.tree.length, entry.restored?.edits);
+        const report = (fraction: number | null) => {
+          if (this.entries.get(summary.id) === entry && entry.status === 'importing') {
+            entry.phase = 'applying';
+            entry.fraction = fraction;
+            entry.report('applying', fraction);
+          }
+        };
         if (expanded.length > 0) {
-          await expandFileParts(result.content, expanded).catch(() => undefined);
+          await expandFileParts(result.content, expanded, (done, total) => report(done / total)).catch(() => undefined);
+        } else if (entry.restored?.edits) {
+          report(null);
         }
         return result;
       })

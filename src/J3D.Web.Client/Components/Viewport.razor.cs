@@ -97,7 +97,11 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     public void OnModelProgress(ModelId id, ImportPhase phase, double? fraction) => scene.ReportProgress(id, phase, fraction);
 
     [JSInvokable]
-    public void OnModelLoaded(ModelId id, ModelLoadedInfo info) => scene.MarkLoaded(id, info);
+    public void OnModelLoaded(ModelId id, ModelLoadedInfo info, byte[] tree, string names, byte[]? edits, string? editNames)
+    {
+        // Since M16 the tree and a restored model's edits cross packed (D204).
+        scene.MarkLoaded(id, info with { Tree = TreeCodec.Decode(tree, names), Edits = edits is null ? null : EditsCodec.Decode(edits, editNames ?? "") });
+    }
 
     [JSInvokable]
     public void OnModelFailed(ModelId id, ImportError error)

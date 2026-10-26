@@ -10,7 +10,8 @@ export type ModelId = string;
  * Import phases in the order they occur. OCCT imports go through all of them; mesh imports use
  * only `reading` and `parsing`.
  */
-export type ImportPhase = 'reading' | 'parsing' | 'transferring' | 'meshing' | 'extracting';
+/** Since M16 a restored model with kept edits ends with `applying` them (D203). */
+export type ImportPhase = 'reading' | 'parsing' | 'transferring' | 'meshing' | 'extracting' | 'applying';
 
 /** Error codes shown in the model list (docs/plan.md §6.2). */
 export type ImportErrorCode = 'Unsupported' | 'MissingFile' | 'ParseFailed' | 'Empty' | 'OutOfMemory' | 'Internal';

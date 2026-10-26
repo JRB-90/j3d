@@ -43,6 +43,13 @@ public sealed class ModelListItemTests : BunitTestBase
     }
 
     [Fact]
+    public void A_restore_applying_its_edits_says_so() // M16, D203
+    {
+        Assert.Equal("Applying your edits · 50%", Text(RenderItem(Importing(ImportPhase.Applying, 0.5)), "model-status"));
+        Assert.Equal("Applying your edits…", Text(RenderItem(Importing(ImportPhase.Applying, null)), "model-status"));
+    }
+
+    [Fact]
     public void A_phase_that_cant_measure_itself_has_an_indeterminate_bar()
     {
         var cut = RenderItem(Importing(ImportPhase.Parsing, null));

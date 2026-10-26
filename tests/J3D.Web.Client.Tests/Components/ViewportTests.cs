@@ -90,9 +90,19 @@ public sealed class ViewportTests : BunitTestBase
         await cut.InvokeAsync(() => cut.Instance.OnModelProgress(id, ImportPhase.Meshing, 0.5));
         Assert.Equal((ModelStatus.Importing, ImportPhase.Meshing), (Scene.Models[0].Status, Scene.Models[0].Phase));
 
-        var info = Info();
-        await cut.InvokeAsync(() => cut.Instance.OnModelLoaded(id, info));
-        Assert.Same(info, Scene.Models[0].Info);
+        // Since M16 the tree and a restored model's edits cross packed beside the rest (D204).
+        var info = Info() with { Tree = Info().Tree with { Expandable = [4] } };
+        var (tree, names) = TreeCodec.Encode(info.Tree);
+        var kept = ModelEdits.None with { Names = ModelEdits.None.Names.Add(3, "Lid") };
+        var (edits, editNames) = EditsCodec.Encode(kept);
+        await cut.InvokeAsync(() => cut.Instance.OnModelLoaded(id, info with { Tree = null! }, tree, names, edits, editNames));
+        var loaded = Scene.Models[0].Info!;
+        Assert.Equal(info.Tree.Names, loaded.Tree.Names);
+        Assert.Equal(info.Tree.Parents, loaded.Tree.Parents);
+        Assert.Equal(info.Tree.Prototypes, loaded.Tree.Prototypes);
+        Assert.Equal([4], loaded.Tree.Expandable!);
+        Assert.Equal("Lid", Scene.Models[0].Tree!.NameOf(3));
+        Assert.Equal(info.Stats, loaded.Stats);
 
         await cut.InvokeAsync(() => cut.Instance.OnModelRemoved(id));
         Assert.Empty(Scene.Models);
@@ -268,7 +278,8 @@ public sealed class ViewportTests : BunitTestBase
     {
         var cut = Render<Viewport>();
         await cut.InvokeAsync(() => cut.Instance.OnModelQueued(Summary("m1")));
-        await cut.InvokeAsync(() => cut.Instance.OnModelLoaded(new ModelId("m1"), Info()));
+        var (tree, names) = TreeCodec.Encode(Info().Tree);
+        await cut.InvokeAsync(() => cut.Instance.OnModelLoaded(new ModelId("m1"), Info(), tree, names, null, null));
         return cut;
     }
 
