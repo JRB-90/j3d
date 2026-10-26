@@ -275,6 +275,59 @@ describe('ModelManager', () => {
     warn.mockRestore();
   });
 
+  it("expands a kept model's expanded parts again before checking its edits, and drops them when it can't (M15, R25)", async () => {
+    const { manager, tasks } = setup();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const mesh = { indices: new Uint32Array(3), edges: new Float32Array(6) } as never;
+    const result = (expand: (node: number) => Promise<never>): ImportResult => ({
+      ...loadedResult(),
+      content: {
+        kind: 'brep',
+        scene: {
+          nodes: [{ name: 'set', parent: -1, prototype: 0 }],
+          instances: [{ node: 0, prototype: 0, matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }],
+          prototypes: [mesh],
+        },
+        expander: { expand },
+      },
+      tree: [{ name: 'set', parent: -1, prototype: 0 }],
+      stats: { nodes: 1, prototypes: 1, instances: 1, triangles: 1, edges: 1, textures: 0 },
+    });
+    // The set (0) as its assembly (1) of one piece (2).
+    const expanded = {
+      added: [-1, -1],
+      children: [
+        { parent: -1, nodes: [1] },
+        { parent: 1, nodes: [2] },
+      ],
+      names: [],
+      pieces: [
+        { node: 1, expands: 0, piece: -1, name: 'set', part: false },
+        { node: 2, expands: 0, piece: 0, name: 'set 1', part: true },
+      ],
+    };
+    const piece = { name: '', parent: -1, prototype: 1, matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] };
+    const summary = (id: string) => ({ id, fileName: `${id}.step`, format: 'step', kind: 'brep', sizeBytes: 4 }) as const;
+    const loaded: { id: string; edits: boolean; prototypes: number; warnings: string[] }[] = [];
+    manager.subscribe({
+      loaded: (model) =>
+        loaded.push({ id: model.summary.id, edits: !!model.restored?.edits, prototypes: model.content.kind === 'brep' ? model.content.scene.prototypes.length : 0, warnings: model.warnings }),
+    });
+
+    manager.importStored(summary('fits'), Promise.resolve(files('fits.step')), [], [], expanded);
+    manager.importStored(summary('changed'), Promise.resolve(files('changed.step')), [], [], expanded);
+    await flush();
+    tasks[0]!.resolve(result(async () => ({ pieces: [piece], prototypes: [mesh] }) as never));
+    tasks[1]!.resolve(result(() => Promise.reject(new Error('That part has nothing to expand.'))));
+    await flush();
+
+    expect(loaded).toEqual([
+      { id: 'fits', edits: true, prototypes: 2, warnings: [] },
+      { id: 'changed', edits: false, prototypes: 1, warnings: [EditsDroppedWarning] },
+    ]);
+    warn.mockRestore();
+  });
+
   it('disposes everything without raising events', async () => {
     const { manager, tasks, events } = setup();
     manager.importFiles(files('a.step', 'b.step'));

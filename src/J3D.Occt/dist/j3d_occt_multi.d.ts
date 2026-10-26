@@ -37,6 +37,8 @@ declare class J3DModel {
   measurePair(kindA: number, prototypeA: number, indexA: number, matrixA: string, kindB: number, prototypeB: number, indexB: number, matrixB: string, shapeB: string): string;
   exportEntity(kind: number, prototype: number, index: number): string;
   exportFile(format: number): number;
+  expandNode(node: number): string;
+  exportTree(format: number, plan: string): number;
   getOutputLength(): number;
   getOutputChunkCount(): number;
   getOutputChunkPtr(index: number): number;

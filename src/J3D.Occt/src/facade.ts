@@ -65,6 +65,8 @@ export interface J3DModelHandle {
   ): string;
   exportEntity(kind: number, prototype: number, index: number): string;
   exportFile(format: number): number;
+  expandNode(node: number): string;
+  exportTree(format: number, plan: string): number;
   getOutputLength(): number;
   getOutputChunkCount(): number;
   getOutputChunkPtr(index: number): number;
@@ -112,6 +114,8 @@ export interface SceneNode {
    * Always there from the facade; scenes built by hand in tests may leave it out (identity).
    */
   matrix?: number[];
+  /** For a compound part, the parts Expand would make of it (M15, D190); absent when fewer than two. */
+  pieces?: number;
 }
 
 export interface SceneInstance {
@@ -265,6 +269,49 @@ export class OcctExportError extends Error {
   }
 }
 
+/** One piece of an expanded part (M15, D154, D189–D191), as {@link OcctModel.expand} gives them. */
+export interface ExpandedPiece {
+  /** The name the file gives it, or "" (J3D numbers those, D191). */
+  name: string;
+  /** An earlier piece, or -1 for the expanded node itself. */
+  parent: number;
+  /** Index into the scene's prototypes, or -1 for a sub-assembly. */
+  prototype: number;
+  /** The placement in its parent's frame, column-major 4x4. */
+  matrix: number[];
+}
+
+/**
+ * How {@link OcctModel.exportTree} writes each node of an edited tree (M15): reusing its origin's
+ * definition whole, or as a new assembly whose children follow.
+ */
+export const PlanKind = { Reuse: 0, Assembly: 1 } as const;
+export type PlanKind = (typeof PlanKind)[keyof typeof PlanKind];
+
+/** A plan node's origin: the file's own (piece {@link FileOrigin}), its expansion (-1) or one of its pieces. */
+export const FileOrigin = -2;
+
+/** One node of an export plan, each after its parent (wrappers/j3d_facade.cpp, exportTree). */
+export interface PlanNode {
+  kind: PlanKind;
+  /** An earlier node, or -1 for the top level. */
+  parent: number;
+  /** The file node it comes from, or -1 for a new assembly of J3D's. */
+  ref: number;
+  /** {@link FileOrigin}, or with `ref` expanded, -1 for the expansion and a piece index for a piece. */
+  piece: number;
+  /** The placement in the parent's frame, column-major 4x4: the identity at the top level, but for a part. */
+  matrix: readonly number[];
+  name: string;
+}
+
+/** The plan as the facade reads it: one line per node, "kind parent ref piece matrix\tname". */
+export function planText(plan: readonly PlanNode[]): string {
+  return plan
+    .map(({ kind, parent, ref, piece, matrix, name }) => `${kind} ${parent} ${ref} ${piece} ${matrix.join(',')}\t${name.replace(/[\t\r\n]/g, ' ')}\n`)
+    .join('');
+}
+
 /** One imported model. Owns its C++ J3DModel (and therefore its BREP) until disposed. */
 export class OcctModel implements Disposable {
   private constructor(
@@ -336,6 +383,10 @@ export class OcctModel implements Disposable {
    * {@link OcctExportError}, with status Cancelled when `isCancelled` stopped it. The model stays usable.
    */
   exportFile(format: ExportFormat, options: ExportOptions = {}): Uint8Array<ArrayBuffer> {
+    return this.write((handle) => handle.exportFile(format), options);
+  }
+
+  private write(run: (handle: J3DModelHandle) => number, options: ExportOptions): Uint8Array<ArrayBuffer> {
     if (!this.handle) {
       throw new OcctExportError(ExportStatus.Internal, 'The model has been disposed.');
     }
@@ -344,7 +395,7 @@ export class OcctModel implements Disposable {
     this.module.j3dProgress = onProgress ? (phase, fraction) => onProgress(phase as ExportPhase, fraction) : undefined;
     this.module.j3dCancelled = isCancelled;
     try {
-      const status = handle.exportFile(format);
+      const status = run(handle);
       if (status === ExportStatus.Ok) {
         return readOutput(this.module, handle);
       }
@@ -358,6 +409,31 @@ export class OcctModel implements Disposable {
       this.module.j3dProgress = undefined;
       this.module.j3dCancelled = undefined;
     }
+  }
+
+  /**
+   * Expands file node `node`'s compound part (M15, D154): its pieces, in tree order, with the
+   * prototypes they draw extracted and appended to {@link scene}'s. Expanding a node whose definition
+   * was expanded before gives the same pieces, and new prototypes only for a style not drawn yet.
+   * Throws {@link OcctMeasureError} when there's nothing to expand.
+   */
+  expand(node: number): { pieces: ExpandedPiece[]; prototypes: PrototypeMesh[] } {
+    const handle = this.live();
+    const { pieces } = parseMeasure<{ pieces: ExpandedPiece[] }>(handle.expandNode(node));
+    const first = this.scene.prototypes.length;
+    const prototypes = Array.from({ length: handle.getPrototypeCount() - first }, (_, offset) =>
+      extractPrototype(this.module, handle, first + offset),
+    );
+    this.scene.prototypes.push(...prototypes);
+    return { pieces, prototypes };
+  }
+
+  /**
+   * An edited tree, as a STEP or BREP file (M15, D145, D188–D196), from a plan of its nodes. Runs and
+   * fails as {@link exportFile} does.
+   */
+  exportTree(format: ExportFormat, plan: readonly PlanNode[], options: ExportOptions = {}): Uint8Array<ArrayBuffer> {
+    return this.write((handle) => handle.exportTree(format, planText(plan)), options);
   }
 
   /** WASM heap size of the module this model lives in (one module per worker). */

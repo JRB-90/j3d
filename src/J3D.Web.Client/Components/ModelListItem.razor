@@ -25,7 +25,7 @@
                            OnClick="ToggleModelVisibility"
                            data-visibility="@Model.Visibility().ToString().ToLowerInvariant()"
                            data-testid="model-eye" />
-            @* A BREP model saves itself as imported (M9, D83, D119). *@
+            @* A BREP model saves itself, as edited (M9, D83, D119; M15, D145). *@
             @if (Model.Summary.Kind == ModelKind.Brep)
             {
                 <MudMenu Icon="@Icons.Material.Outlined.FileDownload"

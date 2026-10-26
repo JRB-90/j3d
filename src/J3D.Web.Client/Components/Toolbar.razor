@@ -42,6 +42,15 @@
             {
                 <MudMenuItem Label="@format.DisplayName" OnClick="@(() => StartExport(format, Scene.HasSelection))" data-testid="@($"export-{FormatKey(format)}")" />
             }
+            @* STEP and BREP of a selection in one BREP model, which its list item writes (M15, D192). *@
+            @if (Scene.SelectionBrepModel is not null)
+            {
+                <MudDivider Class="my-1" />
+                @foreach (var format in BrepFormats)
+                {
+                    <MudMenuItem Label="@format.DisplayName" OnClick="@(() => Scene.RequestModelExport(format))" data-testid="@($"export-{format.ToString().ToLowerInvariant()}")" />
+                }
+            }
         </MudMenu>
 
         <MudTooltip Text="Fit everything visible in the view (F)">

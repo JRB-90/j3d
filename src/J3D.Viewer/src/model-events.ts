@@ -12,6 +12,8 @@ export interface TreeColumns {
   names: string[];
   parents: number[];
   prototypes: number[];
+  /** The compound parts Expand can split (M15, D190), when there are any. */
+  expandable?: number[];
 }
 
 /** What .NET is told about a loaded model (mirrors J3D.Web.Client/Interop/ModelLoadedInfo.cs). */
@@ -78,10 +80,12 @@ export function forwardModelEvents(models: Pick<ModelManager, 'subscribe'>, dotn
 }
 
 /** The tree as .NET receives it. */
-export function toColumns(tree: readonly TreeNode[]): TreeColumns {
+export function toColumns(tree: readonly (TreeNode & { pieces?: number })[]): TreeColumns {
+  const expandable = tree.flatMap((node, index) => ((node.pieces ?? 0) >= 2 ? [index] : []));
   return {
     names: tree.map((node) => node.name),
     parents: tree.map((node) => node.parent),
     prototypes: tree.map((node) => node.prototype),
+    ...(expandable.length > 0 ? { expandable } : {}),
   };
 }

@@ -1,4 +1,6 @@
+import type { PlanNode } from '@j3d/occt/facade';
 import { afterPaint, saveFile } from './download';
+import { expandFileParts } from './edit/expand';
 import type { ModelEdits } from './edit/structure';
 import { fileInputAccept, kindOf } from './formats';
 import { filesFromDataTransfer, filesFromInput } from './import/batch-files';
@@ -33,6 +35,15 @@ export type { ModelEdits } from './edit/structure';
 export interface ExportOutcome {
   fileName?: string;
   cancelled?: boolean;
+  error?: string;
+}
+
+/**
+ * Expanded file parts' pieces (M15), each after its piece parent (-1: the part's new assembly), with
+ * the file's name or "", and whether it draws something. Mirrors J3D.Web.Client/Interop/ExpandOutcome.cs.
+ */
+export interface ExpandOutcome {
+  expansions?: { node: number; pieces: { name: string; parent: number; part: boolean }[] }[];
   error?: string;
 }
 
@@ -90,8 +101,16 @@ export interface ViewerHandle {
   setStructure(id: string, edits: ModelEdits): ModelStats | null;
   /** Saves the visible scene, or the selection, as GLB or STL: a download (M9, D119, D120). */
   exportMesh(format: MeshExportFormat, selection: boolean): Promise<ExportOutcome>;
-  /** Saves a BREP model as imported, as STEP or BREP, reporting progress to .NET's `OnExportProgress` (D83, D125). */
-  exportModel(id: string, format: BrepExportFormat): Promise<ExportOutcome>;
+  /**
+   * Expands file parts of a BREP model in its worker (M15, D154): each one's pieces, for .NET's edit,
+   * which then arrives as any other through `setStructure`.
+   */
+  expandParts(id: string, fileNodes: number[]): Promise<ExpandOutcome>;
+  /**
+   * Saves a BREP model as STEP or BREP, reporting progress to .NET's `OnExportProgress` (D83, D125):
+   * as edited, or just its selection (M15, D145, D155).
+   */
+  exportModel(id: string, format: BrepExportFormat, selection?: boolean): Promise<ExportOutcome>;
   /** Stops a model's STEP or BREP export, whose `exportModel` then ends cancelled. */
   cancelExport(id: string): void;
   dispose(): void;
@@ -314,11 +333,35 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
         return { error: messageOf(error) };
       }
     },
-    async exportModel(id, format) {
+    async expandParts(id, fileNodes) {
+      const model = models.models.find(({ summary }) => summary.id === id)?.model;
+      if (!model) {
+        return { error: "The model isn't loaded." };
+      }
+      try {
+        const expansions = await expandFileParts(model.content, fileNodes);
+        return {
+          expansions: fileNodes.map((node) => ({
+            node,
+            pieces: (expansions.get(node) ?? []).map(({ name, parent, prototype }) => ({ name, parent, part: prototype >= 0 })),
+          })),
+        };
+      } catch (error) {
+        console.error(`J3D: expanding parts of ${model.summary.fileName} failed.`, error);
+        return { error: messageOf(error) };
+      }
+    },
+    async exportModel(id, format, selection = false) {
       const model = models.models.find(({ summary }) => summary.id === id)?.model;
       const exporter = model?.content.kind === 'brep' ? model.content.exporter : undefined;
       if (!model || !exporter) {
         return { error: "The model isn't loaded." };
+      }
+      let plan: PlanNode[] | undefined;
+      try {
+        plan = view?.exportPlan(id, selection);
+      } catch (error) {
+        return { error: messageOf(error) };
       }
       exports.get(id)?.abort();
       const controller = new AbortController();
@@ -328,6 +371,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
           await new Promise((resolve) => controller.signal.addEventListener('abort', resolve, { once: true }));
         }
         const bytes = await exporter.export(format, {
+          ...(plan ? { plan } : {}),
           signal: controller.signal,
           onProgress: (fraction) => call(dotnet, 'OnExportProgress', id, fraction),
         });

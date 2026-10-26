@@ -20,7 +20,8 @@ namespace J3D.Web.Client.Components;
 /// context menu (D164), and in Model mode a selected model's item is highlighted (D146). Since M14 the
 /// tree follows the model's edits, its nodes drag onto assemblies and the model's name in Object mode
 /// (the viewer's tree-drag.ts handles the drag, D182), a node's name is edited in place (D183), and cut
-/// nodes are dimmed (assumption 20).
+/// nodes are dimmed (assumption 20). Since M15 the STEP and BREP it saves are of the model as edited, and
+/// it also writes the Export menu's STEP or BREP of its selection (D192).
 /// </summary>
 public sealed partial class ModelListItem(SceneState scene, ViewerSession session, ISnackbar snackbar) : IDisposable
 {
@@ -107,7 +108,20 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     /// <summary>Tree nodes drag in Object mode, where edits act on objects (D182, D187).</summary>
     private bool CanDrag => scene.Mode == SelectMode.Objects;
 
-    protected override void OnInitialized() => scene.RevealRequested += OnRevealRequested;
+    protected override void OnInitialized()
+    {
+        scene.RevealRequested += OnRevealRequested;
+        scene.ModelExportRequested += OnModelExportRequested;
+    }
+
+    /// <summary>The Export menu's STEP or BREP of this model's selection, or of it all (M15, D192): written as the item's own.</summary>
+    private void OnModelExportRequested(ModelId id, BrepExportFormat format, bool selection)
+    {
+        if (id == Model.Id)
+        {
+            _ = InvokeAsync(() => ExportAsync(format, selection));
+        }
+    }
 
     /// <summary>An edit made a new tree (M14): the open tree shows it, with the same nodes open; and a rename may have started.</summary>
     protected override void OnParametersSet()
@@ -213,7 +227,11 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         }
     }
 
-    public void Dispose() => scene.RevealRequested -= OnRevealRequested;
+    public void Dispose()
+    {
+        scene.RevealRequested -= OnRevealRequested;
+        scene.ModelExportRequested -= OnModelExportRequested;
+    }
 
     private Task RemoveAsync() => OnRemove.InvokeAsync(Model);
 
@@ -221,10 +239,11 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     private void StartExport(BrepExportFormat format) => _ = InvokeAsync(() => ExportAsync(format));
 
     /// <summary>
-    /// Saves the model as STEP or BREP: the item shows the export until it ends, the browser saves the
-    /// file, and a failure goes to a snackbar (D125). A cancelled export, or a deleted model's, says nothing.
+    /// Saves the model as STEP or BREP, as edited, or its selection (M15, D145, D155): the item shows the
+    /// export until it ends, the browser saves the file, and a failure goes to a snackbar (D125). A
+    /// cancelled export, or a deleted model's, says nothing.
     /// </summary>
-    private async Task ExportAsync(BrepExportFormat format)
+    private async Task ExportAsync(BrepExportFormat format, bool selection = false)
     {
         if (Model.Export is not null)
         {
@@ -232,19 +251,19 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
         }
 
         var id = Model.Id;
-        var fileName = Model.Summary.FileName;
+        var what = selection ? $"the selection of {Model.Summary.FileName}" : Model.Summary.FileName;
         scene.SetExport(id, format);
         try
         {
-            var outcome = await session.ExportModelAsync(id, format);
+            var outcome = await session.ExportModelAsync(id, format, selection);
             if (outcome?.Error is { } error)
             {
-                snackbar.Add($"Couldn't export {fileName} as {format.DisplayName}: {error}", Severity.Error, static options => options.VisibleStateDuration = 10_000);
+                snackbar.Add($"Couldn't export {what} as {format.DisplayName}: {error}", Severity.Error, static options => options.VisibleStateDuration = 10_000);
             }
         }
         catch (JSException exception)
         {
-            snackbar.Add($"Couldn't export {fileName} as {format.DisplayName}: {exception.Message}", Severity.Error, static options => options.VisibleStateDuration = 10_000);
+            snackbar.Add($"Couldn't export {what} as {format.DisplayName}: {exception.Message}", Severity.Error, static options => options.VisibleStateDuration = 10_000);
         }
         finally
         {

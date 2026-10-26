@@ -4,7 +4,8 @@ import { throttleProgress, type ProgressListener } from './progress';
 import type { ImportRunner, ImportTask } from './runner';
 import { planBatch, SidecarSet, UnusedSidecarReason, type BatchFile } from './sidecars';
 import { editedStats } from '../edit/stats';
-import { EditsMismatchError, hasEdits, ModelStructure, type ModelEdits } from '../edit/structure';
+import { expandFileParts, expansionsOf } from '../edit/expand';
+import { EditsMismatchError, expandedFileNodes, hasEdits, ModelStructure, type ModelEdits } from '../edit/structure';
 import type { ImportError, ImportPhase, ImportResult, KeptPlacement, KeptState, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types';
 
 /** Model lifecycle events. Progress is limited to 10 reports per second per model. */
@@ -236,10 +237,20 @@ export class ModelManager {
       entry.task = { result: Promise.reject(error), dispose() {} };
     }
 
-    entry.task.result.then(
-      (result) => this.settle(entry, result),
-      (error: unknown) => this.settle(entry, error instanceof ModelImportError ? error : toImportError(error)),
-    );
+    entry.task.result
+      .then(async (result) => {
+        // A kept model's expanded parts (M15) are expanded again before its edits are checked (R25);
+        // one that can't be leaves its edits not fitting.
+        const expanded = expandedFileNodes(result.tree.length, entry.restored?.edits);
+        if (expanded.length > 0) {
+          await expandFileParts(result.content, expanded).catch(() => undefined);
+        }
+        return result;
+      })
+      .then(
+        (result) => this.settle(entry, result),
+        (error: unknown) => this.settle(entry, error instanceof ModelImportError ? error : toImportError(error)),
+      );
   }
 
   private settle(entry: Entry, outcome: ImportResult | ModelImportError | ImportError): void {
@@ -313,7 +324,7 @@ function keptStateFor(summary: ModelSummary, result: ImportResult, kept: KeptSta
     return kept;
   }
   try {
-    const structure = new ModelStructure(result.tree, kept.edits);
+    const structure = new ModelStructure(result.tree, kept.edits, expansionsOf(result.content));
     result.stats = editedStats(result.content, structure, result.stats);
     return kept;
   } catch (error) {

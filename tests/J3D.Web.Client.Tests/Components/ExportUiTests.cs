@@ -83,6 +83,30 @@ public sealed class ExportUiTests : BunitTestBase
     }
 
     [Fact]
+    public async Task A_selection_in_one_brep_model_also_saves_as_step_or_brep_written_by_its_item()
+    {
+        // M15, D192: the item shows the export, as its own (D125).
+        var export = _viewer.Setup<ExportOutcome>("exportModel", static _ => true);
+        var list = Render<ModelList>();
+        var cut = Render<Toolbar>();
+        await StartViewerAsync();
+        await cut.InvokeAsync(() => LoadBracket());
+        OpenExportMenu(cut);
+        Assert.Equal(["GLB", "STL (binary)", "STL (ASCII)"], MenuLabels()); // nothing selected
+
+        await cut.InvokeAsync(() => Scene.SelectNode(new ModelId("m1"), 2, additive: false));
+        cut.WaitForAssertion(() => Assert.Equal(["GLB", "STL (binary)", "STL (ASCII)", "STEP", "BREP"], MenuLabels()));
+        _popovers.Find("[data-testid=export-step]").Click();
+
+        var invocation = Assert.Single(_viewer.Invocations, static i => i.Identifier == "exportModel");
+        Assert.Equal<object?>(["m1", BrepExportFormat.Step, true], invocation.Arguments);
+        list.WaitForAssertion(() => Assert.Equal("Exporting STEP…", list.Find("[data-testid=model-export-status]").TextContent.Trim()));
+        export.SetResult(new ExportOutcome(null, false, "Nothing is selected."));
+        list.WaitForAssertion(() => Assert.Empty(list.FindAll("[data-testid=model-export]")));
+        Assert.Equal("Couldn't export the selection of part.step as STEP: Nothing is selected.", Snackbars.ShownSnackbars.Single().Message);
+    }
+
+    [Fact]
     public void Only_a_brep_model_saves_itself()
     {
         Assert.NotNull(RenderItem(Loaded()).Find("[data-testid=export-model]"));
@@ -102,7 +126,7 @@ public sealed class ExportUiTests : BunitTestBase
         _popovers.Find("[data-testid=export-step]").Click();
 
         var invocation = Assert.Single(_viewer.Invocations, static i => i.Identifier == "exportModel");
-        Assert.Equal<object?>(["m1", BrepExportFormat.Step], invocation.Arguments);
+        Assert.Equal<object?>(["m1", BrepExportFormat.Step, false], invocation.Arguments);
         cut.WaitForAssertion(() => Assert.Equal("Exporting STEP…", Text(cut, "model-export-status")));
         Assert.Empty(_popovers.FindAll(".mud-popover-open"));
         Assert.Contains("mud-progress-indeterminate", cut.Find("[data-testid=export-progress]").ClassName, StringComparison.Ordinal);

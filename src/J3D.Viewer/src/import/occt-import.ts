@@ -1,7 +1,7 @@
 import { ModelImportError, toImportError } from './errors';
 import { compileOcctModule } from './occt-module';
-import { ExportCancelledError, type BrepExporter, type BrepMeasurer } from './types';
-import type { ExportRequest, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, OcctFormat } from './protocol';
+import { ExportCancelledError, type BrepExpander, type BrepExporter, type BrepMeasurer } from './types';
+import type { ExpandRequest, ExportRequest, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, OcctFormat } from './protocol';
 import { liveWorkers, type ImportRunner } from './runner';
 import type { ImportResult } from './types';
 
@@ -43,7 +43,7 @@ export function createOcctRunner(options: OcctRunnerOptions = {}): ImportRunner 
               break;
             case 'loaded':
               resolve({
-                content: { kind: 'brep', scene: data.scene, measure: channel.measure, exporter: channel.exporter },
+                content: { kind: 'brep', scene: data.scene, measure: channel.measure, exporter: channel.exporter, expander: channel.expander },
                 tree: data.scene.nodes,
                 bounds: data.bounds,
                 stats: data.stats,
@@ -95,6 +95,7 @@ export function createOcctRunner(options: OcctRunnerOptions = {}): ImportRunner 
 interface ModelChannel {
   measure: BrepMeasurer;
   exporter: BrepExporter;
+  expander: BrepExpander;
   /** Hands the channel a worker answer. */
   receive(data: ModelWorkerResponse): void;
   /** The worker is gone: exports in progress fail with `error`. */
@@ -123,8 +124,17 @@ function modelChannel(worker: Worker): ModelChannel {
       pair: (a, b, shapeB) => ask({ type: 'measurePair', a, b, ...(shapeB === undefined ? {} : { shapeB }) }),
       exportEntity: (entity) => ask({ type: 'exportEntity', entity }),
     },
+    expander: {
+      expand: (node) =>
+        new Promise((resolve, reject) => {
+          const id = ++next;
+          pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+          const message: ExpandRequest = { type: 'expand', id, node };
+          worker.postMessage(message);
+        }),
+    },
     exporter: {
-      export: (format, { onProgress, signal } = {}) =>
+      export: (format, { plan, onProgress, signal } = {}) =>
         new Promise<ArrayBuffer>((resolve, reject) => {
           if (signal?.aborted) {
             reject(new ExportCancelledError());
@@ -157,7 +167,7 @@ function modelChannel(worker: Worker): ModelChannel {
             },
             ...(onProgress ? { onProgress } : {}),
           });
-          const message: ExportRequest = { type: 'export', id, format, ...(cancel ? { cancel } : {}) };
+          const message: ExportRequest = { type: 'export', id, format, ...(plan ? { plan } : {}), ...(cancel ? { cancel } : {}) };
           worker.postMessage(message);
         }),
     },
@@ -172,6 +182,12 @@ function modelChannel(worker: Worker): ModelChannel {
           } else {
             waiting?.reject(new Error(data.message));
           }
+          break;
+        }
+        case 'expanded': {
+          const waiting = pending.get(data.id);
+          pending.delete(data.id);
+          waiting?.resolve({ pieces: data.pieces, prototypes: data.prototypes });
           break;
         }
         case 'exportProgress':

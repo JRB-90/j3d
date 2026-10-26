@@ -36,6 +36,11 @@ drawing all happen in the browser tab.
   **Rename** (`F2`) renames any node. Nothing moves in 3D. An edit acts on the selection's objects: select all of a
   sub-assembly's parts and it's the sub-assembly that's copied or deleted. Edits stay within one model, can be undone,
   and are kept for your next visit; in Model mode `Delete` deletes the selected models, after asking.
+- **Expand** a CAD part that holds several solids (a compound, such as a bolt set saved as one part): right-click it
+  and choose **Expand**, and it becomes a sub-assembly with one part per solid, keeping the names and colours the
+  file gives them (others are numbered after the part: "Bolt set 1", "Bolt set 2"). **Expand all** does the same for
+  every such part in the selected assemblies or models. Only the one you picked is split, not every copy of it, and
+  it's an edit like the others: it can be undone, is kept, and is exported.
 - **Right-click** a part, a tree node or empty space (a click that doesn't drag) for a menu of what you can do there:
   hide, isolate, move, measure from that point, edit and export the selection, or show all, fit all, paste and export
   the scene. Each command shows its key; `Esc` closes the menu.
@@ -58,9 +63,13 @@ drawing all happen in the browser tab.
   removes every model and everything kept. Only one tab keeps models: a second J3D tab says so and keeps nothing.
 - **Export** what you see: the toolbar's **Export** saves every visible part, or only the selection when there is one,
   as **GLB** (with colours, the tree and the BREP edges) or **STL** (binary or ASCII, one uncoloured mesh). A CAD
-  model's download icon in the list saves the whole model as imported, as **STEP** (with its assembly, names and
-  colours) or **BREP**, showing its progress in the list with a **Cancel** button. Files are saved where your browser
-  saves downloads, named after their model (or `scene` / `selection` for several).
+  model's download icon in the list saves the whole model **as you've edited it**, as **STEP** (with its assembly,
+  names and colours, its moves, copies and deletions, and without the parts you've hidden) or **BREP**, showing its
+  progress in the list with a **Cancel** button; a model you haven't touched is saved exactly as imported. Parts of
+  the assembly you didn't change stay shared in the file, so six identical robots are still one robot placed six
+  times. When the selection lies in one CAD model, **Export** also offers STEP and BREP of just the selection, under
+  its assemblies from the top. Files are saved where your browser saves downloads, named after their model (or
+  `scene` / `selection` for several).
 - CAD models are drawn with **shaded faces in the file's colours** and the **true BREP edges** over them; translucent
   colours are drawn translucent.
 - The view is **orthographic** by default, with an **Orthographic | Perspective** switch under the view cube that keeps
@@ -111,11 +120,12 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Copy a node into another assembly | `Ctrl`+drag it in the tree | | Copy, select the assembly, Paste |
 | Group the selection, or ungroup an assembly | | | **New assembly** (`Ctrl+G`), **Ungroup** (`Ctrl+Shift+G`) in the right-click menu |
 | Rename a node | | | **Rename** in the right-click menu, or `F2`; `Enter` keeps it, `Esc` doesn't |
+| Split a compound part into its solids | | | **Expand** (one part) or **Expand all** (an assembly's, or a model's) in the right-click menu |
 | Undo, redo (hiding, showing, moving, editing, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
 | Measure | Click a face, edge or vertex (the reference), then others | Tap | **Measure** in the toolbar, or `M`; **Measure from here** in the right-click menu; `Esc` ends it |
 | End the Move or Measure tool | | | `Esc` (again to clear the selection) |
-| Export the scene or the selection | | | **Export** in the toolbar: GLB, STL (binary) or STL (ASCII) |
-| Export a CAD model as imported | | | The model's download icon in the list: STEP or BREP |
+| Export the scene or the selection | | | **Export** in the toolbar: GLB, STL (binary) or STL (ASCII), and STEP or BREP of a selection in one CAD model |
+| Export a CAD model as edited | | | The model's download icon in the list: STEP or BREP |
 
 The view fits itself to the first model you import into an empty scene; later imports leave the camera where it is,
 and so do models coming back from your last visit or an undo.
@@ -141,10 +151,12 @@ and so do models coming back from your last visit or an undo.
   every model that loads also exports: the 200 MB STEP saves as STEP in about 12 seconds and as BREP in 2, and one of
   600 MB, about the largest that loads, as STEP in about half a minute. **Cancel** stops an export at once, although
   the last few seconds of writing a STEP file carry on unseen, and the model's next export waits for them.
-- Moves and assembly edits are kept and drawn, and GLB and STL exports follow them, but a CAD model's STEP and BREP
-  exports still save it as imported until a later version writes the edited assembly. Objects can't be moved or
-  copied from one model to another, and a model whose kept edits no longer fit it (if a new version of J3D reads its
-  file differently) comes back as imported, with a warning in the list.
+- An edited CAD model's STEP is rebuilt from J3D's tree: names, colours, placements and the assembly come through, and
+  so does anything the file attaches to the parts J3D keeps whole, but metadata on assemblies you've changed may not.
+  BREP holds geometry only, so it has no names or colours. A top-level assembly is written at the origin, with its
+  placement (and the model's, if you moved it) in its children. Objects can't be moved or copied from one model to
+  another, and a model whose kept edits no longer fit it (if a new version of J3D reads its file differently) comes
+  back as imported, with a warning in the list.
 - Not in this version yet: sections, exploded views, and a phone or tablet layout.
 
 ## Browsers

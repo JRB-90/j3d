@@ -1,4 +1,4 @@
-import type { EntityMeasure, EntityRef, ImportedScene, PairMeasure } from '@j3d/occt/facade';
+import type { EntityMeasure, EntityRef, ExpandedPiece, ImportedScene, PairMeasure, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
 import type { Object3D } from 'three';
 import type { ModelEdits } from '../edit/structure';
 import type { ModelFormat, ModelKind } from '../formats';
@@ -82,13 +82,22 @@ export interface BrepMeasurer {
   exportEntity(entity: EntityRef): Promise<string>;
 }
 
-/** Saving a BREP model as imported, in its worker (M9, D83, D125). */
+/** Saving a BREP model, in its worker (M9, D83, D125): as imported, or its edited tree from a plan (M15). */
 export interface BrepExporter {
   /**
    * The file's bytes. `onProgress` gets a fraction, or null while OCCT writes a STEP file. Aborting
    * `signal` stops OCCT and rejects with an {@link ExportCancelledError}; so does removing the model.
    */
-  export(format: BrepExportFormat, options?: { onProgress?: (fraction: number | null) => void; signal?: AbortSignal }): Promise<ArrayBuffer>;
+  export(
+    format: BrepExportFormat,
+    options?: { plan?: PlanNode[]; onProgress?: (fraction: number | null) => void; signal?: AbortSignal },
+  ): Promise<ArrayBuffer>;
+}
+
+/** Expanding a BREP model's file parts, in its worker (M15, D154). */
+export interface BrepExpander {
+  /** A file part's pieces, and the prototypes they draw that the model didn't have yet, numbered after its others. */
+  expand(node: number): Promise<{ pieces: ExpandedPiece[]; prototypes: PrototypeMesh[] }>;
 }
 
 /** An export that was cancelled, or whose model was removed, before it finished. */
@@ -100,7 +109,11 @@ export class ExportCancelledError extends Error {
 }
 
 export type ModelContent =
-  | { kind: 'brep'; scene: ImportedScene; measure?: BrepMeasurer; exporter?: BrepExporter }
+  /**
+   * `expansions` are the file parts expanded so far (M15), by file node: their prototypes are appended
+   * to the scene's as they arrive.
+   */
+  | { kind: 'brep'; scene: ImportedScene; measure?: BrepMeasurer; exporter?: BrepExporter; expander?: BrepExpander; expansions?: Map<number, ExpandedPiece[]> }
   /**
    * `nodes[i]` is the object of tree node i, for picking and hiding parts (D81). `unitScale` takes
    * model units to millimetres (D105): 1000 for glTF, which is in metres, except J3D's own GLB, which
