@@ -143,6 +143,23 @@ public sealed class ExpandStateTests
     }
 
     [Fact]
+    public void Expand_all_in_Model_mode_keeps_the_models_selected_whole()
+    {
+        _scene.SetSelectionMode(SelectMode.Models);
+        _scene.Pick(A, 3, additive: false);
+        _scene.Pick(B, 3, additive: true);
+
+        // Found in M16: the old parts stayed selected as objects, the pieces didn't, and Move found no model.
+        _scene.Expand(A, [1, 4], [Plate, Plate with { Node = 4 }]);
+        var model = _scene.Find(A)!;
+        Assert.Equal(model.Tree!.Parts.Order(), model.Selected.Order());
+        Assert.True(SceneState.IsModelSelected(model));
+        Assert.True(SceneState.IsModelSelected(_scene.Find(B)!));
+        _scene.Undo();
+        Assert.Equal([1, 3, 4], _scene.Find(A)!.Selected);
+    }
+
+    [Fact]
     public void Edits_kept_before_M15_have_no_pieces()
     {
         var edits = ModelEdits.From(new ModelEditsDto([1], [new ChildList(0, [1, 5, 2])], []));

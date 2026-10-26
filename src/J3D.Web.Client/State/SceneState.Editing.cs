@@ -448,9 +448,12 @@ public sealed partial class SceneState
         var before = model.EditState;
         List<int> reparented = [.. before.Placements.Keys.Where(node => node >= 0 && (!next.Contains(node) || next.ParentOf(node) != tree.ParentOf(node)))];
         var placements = before.Placements.RemoveRange(reparented);
-        var selected = selectNodes is null
-            ? model.Selected
-            : PartSet.From(selectNodes.Where(next.Contains).SelectMany(next.PartsUnder).Where(part => !hidden.Contains(part)));
+        var selected = selectNodes is not null
+            ? PartSet.From(selectNodes.Where(next.Contains).SelectMany(next.PartsUnder).Where(part => !hidden.Contains(part)))
+            // A model selected in Model mode stays selected whole, Expand all's pieces included (M16).
+            : Mode == SelectMode.Models && !model.Selected.IsEmpty
+                ? PartSet.From(next.Parts.Where(part => !hidden.Contains(part)))
+                : model.Selected;
         var edited = model.WithEdit(new ModelEdit(next.Edits, hidden, selected, placements) { Tree = next });
         Record(new EditStep(model.Id, before, edited.EditState));
         if (selectNodes is not null)

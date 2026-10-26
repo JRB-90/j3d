@@ -612,6 +612,8 @@ export class Viewer {
     }
     entry.structure = structure;
     const placements = entry.parts.setStructure(structure);
+    // Copies and pieces are objects of their own, which order-independent transparency must sort too.
+    this.sortedMaterials = undefined;
     const gone = new Set(structure.nodes.flatMap((_, node) => (structure.isLive(node) ? [] : [node])));
     this.measureTool.dropHidden(id, gone);
     this.features.dropHidden(id, gone);
