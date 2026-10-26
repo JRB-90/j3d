@@ -180,14 +180,14 @@ public sealed class SelectionTests(J3DAppFixture app) : ViewerPageTest(app)
         await WaitForPartStateAsync(id, [], [Bottom, Top, Pin]);
         await Expect(Page.GetByTestId("selection-title")).ToHaveTextAsync("3 parts selected");
 
-        await TreeNode(id, 0).Locator(".mud-treeview-item-arrow button").First.ClickAsync();
+        await TreeNode(id, 0).GetByTestId("tree-node-toggle").ClickAsync();
         await TreeNode(id, Top).Locator(".j3d-tree-node-name").ClickAsync(new LocatorClickOptions { Modifiers = [KeyboardModifier.Control] });
         await WaitForPartStateAsync(id, [], [Bottom, Pin]);
 
         await TreeNode(id, Pin).GetByTestId("tree-node-eye").ClickAsync();
         await WaitForPartStateAsync(id, [Pin], [Bottom]);
         await Expect(TreeNode(id, Pin).GetByTestId("tree-node-eye")).ToHaveAttributeAsync("data-visibility", "hidden");
-        await Expect(TreeNode(id, 0).GetByTestId("tree-node-eye").First).ToHaveAttributeAsync("data-visibility", "mixed");
+        await Expect(TreeNode(id, 0).GetByTestId("tree-node-eye")).ToHaveAttributeAsync("data-visibility", "mixed");
 
         await Page.GetByTestId("model-eye").ClickAsync(); // partly hidden: hides the rest
         await WaitForPartStateAsync(id, [Bottom, Top, Pin], []);

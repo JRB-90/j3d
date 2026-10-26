@@ -21,7 +21,15 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     public override async ValueTask InitializeAsync()
     {
         await base.InitializeAsync();
-        Page.Console += (_, message) =>
+        WatchConsole(Page);
+        await Page.GotoAsync(app.BaseAddress.ToString());
+        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+    }
+
+    /// <summary>Records a page's console errors and warnings with the test page's.</summary>
+    private void WatchConsole(IPage page)
+    {
+        page.Console += (_, message) =>
         {
             if (message.Type == "error")
             {
@@ -32,10 +40,21 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
                 _consoleWarnings.Add(message.Text);
             }
         };
-        Page.PageError += (_, error) => _consoleErrors.Add(error);
+        page.PageError += (_, error) => _consoleErrors.Add(error);
+    }
 
-        await Page.GotoAsync(app.BaseAddress.ToString());
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+    /// <summary>
+    /// Closes a tab and opens the app in a new one of the same context, as someone closing J3D and
+    /// coming back would; its console is watched like the test page's. Since <c>Page</c> can't be
+    /// replaced, the caller uses the new page from then on.
+    /// </summary>
+    protected async Task<IPage> ReopenAsync(IPage page)
+    {
+        await page.CloseAsync();
+        var next = await Context.NewPageAsync();
+        WatchConsole(next);
+        await next.GotoAsync(app.BaseAddress.ToString());
+        return next;
     }
 
     protected Task ImportAsync(params string[] fixtures) =>
@@ -84,6 +103,10 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
 
     protected void AssertNoConsoleErrors() => Assert.Empty(_consoleErrors);
 
+    /// <summary>The console's errors and last warnings so far, for a failure's message.</summary>
+    protected string ConsoleReport() =>
+        $"console errors: [{string.Join(" | ", _consoleErrors)}]; console warnings: [{string.Join(" | ", _consoleWarnings.TakeLast(5))}]";
+
     /// <summary>
     /// Keeps each sampled screenshot in <c>screenshots/</c> next to the test binaries, named after the
     /// browser and test, with the sampled points in a text file beside it. CI uploads the folder when
@@ -126,8 +149,7 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
             "points => JSON.stringify(window.__j3dTest.canvasPixels(points))",
             _sampledPoints.Select(p => new[] { p.X, p.Y }).ToArray());
         var redrawn = await SamplePixelsAsync(_sampledPoints);
-        return $"{state}; a fresh frame (RGBA) at the samples: {buffer}; its screenshot: [{string.Join(", ", redrawn)}]; " +
-            $"console errors: [{string.Join(" | ", _consoleErrors)}]; console warnings: [{string.Join(" | ", _consoleWarnings.TakeLast(5))}]";
+        return $"{state}; a fresh frame (RGBA) at the samples: {buffer}; its screenshot: [{string.Join(", ", redrawn)}]; {ConsoleReport()}";
     }
 
     /// <summary>The viewer's camera (src/J3D.Viewer/src/view/viewer.ts, CameraState).</summary>

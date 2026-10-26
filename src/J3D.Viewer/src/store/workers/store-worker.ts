@@ -8,7 +8,8 @@ import { respond, StoreOps, type DirectoryHandle } from '../store-ops';
 
 const scope = globalThis as unknown as WorkerScope<StoreRequestMessage, StoreResponse>;
 
-const ops = navigator.storage.getDirectory().then((root) => new StoreOps(root as unknown as DirectoryHandle));
+// The estimate tells a full store from a write that only came up short (D200).
+const ops = navigator.storage.getDirectory().then((root) => new StoreOps(root as unknown as DirectoryHandle, () => navigator.storage.estimate()));
 ops.catch(() => {}); // a page without a private file system: each request reports it instead
 let queue: Promise<void> = Promise.resolve();
 

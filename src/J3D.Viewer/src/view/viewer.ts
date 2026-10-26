@@ -523,9 +523,7 @@ export class Viewer {
       entry.structure = new ModelStructure(model.tree, model.restored.edits, expansionsOf(model.content));
       entry.parts.setStructure(entry.structure);
     }
-    for (const { node, matrix } of [...(model.restored?.placements ?? [])].sort((a, b) => a.node - b.node)) {
-      entry.parts.setPlacement(node, new Matrix4().fromArray(matrix));
-    }
+    entry.parts.setPlacements((model.restored?.placements ?? []).map(({ node, matrix }) => ({ node, local: new Matrix4().fromArray(matrix) })));
     if (model.restored?.placements?.length || model.restored?.edits) {
       const moved = entry.parts.addVisibleBounds(new Box3());
       entry.bounds = moved.isEmpty() ? entry.bounds : moved;
@@ -612,6 +610,8 @@ export class Viewer {
     }
     entry.structure = structure;
     const placements = entry.parts.setStructure(structure);
+    // Copies and pieces are objects of their own, which order-independent transparency must sort too.
+    this.sortedMaterials = undefined;
     const gone = new Set(structure.nodes.flatMap((_, node) => (structure.isLive(node) ? [] : [node])));
     this.measureTool.dropHidden(id, gone);
     this.features.dropHidden(id, gone);
@@ -1163,6 +1163,7 @@ export class Viewer {
     this.viewCube.dispose();
     this.environment.dispose();
     this.renderer.dispose();
+    this.renderer.forceContextLoss(); // its buffers go now, not when the canvas is collected
     this.renderer.domElement.remove();
   }
 

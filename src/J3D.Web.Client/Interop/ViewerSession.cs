@@ -60,12 +60,12 @@ public sealed class ViewerSession
         }
     }
 
-    /// <summary>Scrolls an element into view, e.g. a tree node a 3D pick revealed (D96).</summary>
-    public async Task ScrollIntoViewAsync(string selector)
+    /// <summary>Scrolls a tree's row into view, e.g. a node a 3D pick revealed (D96), focusing it if asked (D202).</summary>
+    public async Task RevealTreeRowAsync(string tree, int index, int rowHeight, string row, bool focus)
     {
         if (_viewer is not null)
         {
-            await _viewer.ScrollIntoViewAsync(selector);
+            await _viewer.RevealTreeRowAsync(tree, index, rowHeight, row, focus);
         }
     }
 

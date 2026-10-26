@@ -1,6 +1,6 @@
 import type { ModelId } from '../import/types';
 import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol';
-import type { Manifest, StoredMeta } from './types';
+import type { KeptEdits, Manifest, ManifestModel, StoredMeta } from './types';
 
 // The parts of the origin private file system the store worker uses (docs/plan.md §6.2, D112).
 // Declared here because TypeScript's DOM library lacks the worker-only synchronous access handle,
@@ -29,6 +29,8 @@ export const RootName = 'j3d';
 export const ModelsName = 'models';
 export const ManifestNames = ['manifest-0.json', 'manifest-1.json'] as const;
 export const MetaName = 'meta.json';
+/** A model's edits and moves (M16, D205), written to two files in turn as the manifest is. */
+export const EditsNames = ['edits-0.json', 'edits-1.json'] as const;
 /** Files are copied this many bytes at a time, so none is ever whole in memory. */
 export const ChunkBytes = 4 * 1024 * 1024;
 
@@ -41,21 +43,51 @@ export class StorageFullError extends Error {
 }
 
 /**
+ * Thrown when the browser wrote less than it was given, twice, while the quota had room (M16, D200):
+ * seen once in the built-in browser, where it was reported as a full store.
+ */
+export class ShortWriteError extends Error {
+  constructor(written: number, size: number) {
+    super(`The browser wrote only ${written} of ${size} bytes.`);
+    this.name = 'ShortWriteError';
+  }
+}
+
+/** The origin's storage use and quota, as `navigator.storage.estimate()` gives them. */
+export type Estimate = () => Promise<{ usage?: number; quota?: number }>;
+
+/** What the store held when it opened. */
+export interface OpenedStore {
+  manifest: Manifest | null;
+  metas: Record<ModelId, StoredMeta>;
+  /** Each listed model's edits and moves, from its own files or, before M16, the manifest. */
+  edits: Record<ModelId, KeptEdits>;
+  /** Models the manifest lists whose meta couldn't be read: kept for the next visit, not restored (D200). */
+  unreadable: ManifestModel[];
+}
+
+/**
  * The store's file operations, run one at a time in the store worker (D112). Layout under the
  * origin's root: `j3d/manifest-0.json` and `j3d/manifest-1.json` (written in turn), and
- * `j3d/models/<id>/` holding a model's files (`0`, `1`, …) and its `meta.json`.
+ * `j3d/models/<id>/` holding a model's files (`0`, `1`, …), its `meta.json` and since M16 its
+ * `edits-0.json` and `edits-1.json` (D205).
  */
 export class StoreOps {
   private seq = 0;
+  private readonly editsSeq = new Map<ModelId, number>();
 
-  constructor(private readonly origin: DirectoryHandle) {}
+  constructor(
+    private readonly origin: DirectoryHandle,
+    private readonly estimate?: Estimate,
+  ) {}
 
   /**
-   * Reads the newest readable manifest, keeping the models whose folders are complete, and deletes
-   * every other model folder: models deleted before the page closed (assumption 11) and copies a
-   * refresh cut short (D113).
+   * Reads the newest readable manifest and each listed model's meta and edits, and deletes every model
+   * folder it doesn't list: models deleted before the page closed (assumption 11) and copies a refresh
+   * cut short (D113), which are never listed. A listed model whose meta can't be read is kept (D200):
+   * deleting it lost a model in M16's timings.
    */
-  async open(): Promise<{ manifest: Manifest | null; metas: Record<ModelId, StoredMeta> }> {
+  async open(): Promise<OpenedStore> {
     const root = await this.root();
     let manifest: Manifest | null = null;
     for (const name of ManifestNames) {
@@ -68,14 +100,25 @@ export class StoreOps {
 
     const models = await this.models();
     const metas: Record<ModelId, StoredMeta> = {};
+    const edits: Record<ModelId, KeptEdits> = {};
+    const unreadable: ManifestModel[] = [];
+    const listed = new Set(manifest?.models.map(({ id }) => id));
     if (manifest) {
       for (const entry of manifest.models) {
-        const meta = await models
-          .getDirectoryHandle(entry.id)
-          .then((folder) => readJson(folder, MetaName))
-          .then(toMeta, () => null);
-        if (meta && meta.summary.id === entry.id) {
-          metas[entry.id] = meta;
+        const folder = await models.getDirectoryHandle(entry.id).catch(() => null);
+        const meta = folder ? await readJson(folder, MetaName).then(toMeta, () => null) : null;
+        if (!meta || meta.summary.id !== entry.id) {
+          if (folder) {
+            unreadable.push(entry);
+          }
+          continue;
+        }
+        metas[entry.id] = meta;
+        const kept = folder ? await this.readEdits(entry.id, folder) : undefined;
+        // Before M16 the manifest held them (D205); they move to the model's files at the next write.
+        const legacy = entry.placements?.length || entry.edits ? { placements: entry.placements ?? [], ...(entry.edits ? { edits: entry.edits } : {}) } : undefined;
+        if (kept ?? legacy) {
+          edits[entry.id] = (kept ?? legacy)!;
         }
       }
       manifest = { ...manifest, models: manifest.models.filter((entry) => metas[entry.id] !== undefined) };
@@ -83,14 +126,45 @@ export class StoreOps {
 
     const stale: string[] = [];
     for await (const name of models.keys()) {
-      if (metas[name] === undefined) {
+      if (!listed.has(name)) {
         stale.push(name);
       }
     }
     for (const name of stale) {
       await removeIfPresent(models, name);
     }
-    return { manifest, metas };
+    return { manifest, metas, edits, unreadable };
+  }
+
+  /** Writes a model's edits and moves over the older of its two files, or removes both when it has none (D205). */
+  async writeEdits(id: ModelId, kept: KeptEdits | null): Promise<void> {
+    const folder = await (await this.models()).getDirectoryHandle(id);
+    if (!kept) {
+      for (const name of EditsNames) {
+        await removeIfPresent(folder, name);
+      }
+      this.editsSeq.delete(id);
+      return;
+    }
+    const seq = (this.editsSeq.get(id) ?? 0) + 1;
+    await this.writeFile(folder, EditsNames[seq % 2]!, new Blob([JSON.stringify({ ...kept, seq })]));
+    this.editsSeq.set(id, seq);
+  }
+
+  private async readEdits(id: ModelId, folder: DirectoryHandle): Promise<KeptEdits | undefined> {
+    let newest: (KeptEdits & { seq: number }) | undefined;
+    for (const name of EditsNames) {
+      const read = await readJson(folder, name).then(toKeptEdits, () => null);
+      if (read && (!newest || read.seq > newest.seq)) {
+        newest = read;
+      }
+    }
+    if (newest) {
+      this.editsSeq.set(id, newest.seq);
+      const { seq: _, ...kept } = newest;
+      return kept;
+    }
+    return undefined;
   }
 
   /**
@@ -102,9 +176,9 @@ export class StoreOps {
     try {
       const folder = await models.getDirectoryHandle(id, { create: true });
       for (const [index, file] of files.entries()) {
-        await writeFile(folder, meta.files[index]!.name, file);
+        await this.writeFile(folder, meta.files[index]!.name, file);
       }
-      await writeFile(folder, MetaName, new Blob([JSON.stringify(meta)]));
+      await this.writeFile(folder, MetaName, new Blob([JSON.stringify(meta)]));
     } catch (error) {
       await removeIfPresent(models, id).catch(() => {});
       throw isQuotaError(error) ? new StorageFullError() : error;
@@ -135,8 +209,44 @@ export class StoreOps {
   /** Writes the manifest over the older of its two files. */
   async writeManifest(manifest: Omit<Manifest, 'seq'>): Promise<void> {
     const seq = this.seq + 1;
-    await writeFile(await this.root(), ManifestNames[seq % 2]!, new Blob([JSON.stringify({ ...manifest, seq })]));
+    await this.writeFile(await this.root(), ManifestNames[seq % 2]!, new Blob([JSON.stringify({ ...manifest, seq })]));
     this.seq = seq;
+  }
+
+  /**
+   * Streams a file into a synchronous access handle a chunk at a time. A write that comes up short is
+   * tried once more for the rest (D200), and then taken for a full store only if the quota says so: in
+   * WebKit a full store writes short, but in M16's timings one write came up short in Chromium with
+   * gigabytes free, and was reported as a full store.
+   */
+  private async writeFile(folder: DirectoryHandle, name: string, blob: Blob): Promise<void> {
+    const handle = await (await folder.getFileHandle(name, { create: true })).createSyncAccessHandle();
+    try {
+      handle.truncate(0);
+      for (let at = 0; at < blob.size; at += ChunkBytes) {
+        const chunk = new Uint8Array(await blob.slice(at, at + ChunkBytes).arrayBuffer());
+        let written = handle.write(chunk, { at });
+        if (written < chunk.byteLength) {
+          written += handle.write(chunk.subarray(written), { at: at + written });
+        }
+        if (written < chunk.byteLength) {
+          throw (await this.isFull(chunk.byteLength - written)) ? new StorageFullError() : new ShortWriteError(at + written, blob.size);
+        }
+      }
+      handle.flush();
+    } finally {
+      handle.close();
+    }
+  }
+
+  /** Whether this many more bytes don't fit the quota; without an estimate, a short write is taken for a full store. */
+  private async isFull(bytes: number): Promise<boolean> {
+    try {
+      const { usage, quota } = (await this.estimate?.()) ?? {};
+      return usage === undefined || quota === undefined || quota - usage < bytes;
+    } catch {
+      return true;
+    }
   }
 
   private root(): Promise<DirectoryHandle> {
@@ -176,22 +286,8 @@ function run(store: StoreOps, request: StoreRequest): Promise<unknown> {
       return store.clear();
     case 'manifest':
       return store.writeManifest(request.manifest);
-  }
-}
-
-async function writeFile(folder: DirectoryHandle, name: string, blob: Blob): Promise<void> {
-  const handle = await (await folder.getFileHandle(name, { create: true })).createSyncAccessHandle();
-  try {
-    handle.truncate(0);
-    for (let at = 0; at < blob.size; at += ChunkBytes) {
-      const chunk = new Uint8Array(await blob.slice(at, at + ChunkBytes).arrayBuffer());
-      if (handle.write(chunk, { at }) !== chunk.byteLength) {
-        throw new StorageFullError(); // a short write: the quota ran out
-      }
-    }
-    handle.flush();
-  } finally {
-    handle.close();
+    case 'edits':
+      return store.writeEdits(request.id, request.kept);
   }
 }
 
@@ -214,11 +310,17 @@ function isQuotaError(error: unknown): boolean {
   return error instanceof StorageFullError || (error instanceof DOMException && error.name === 'QuotaExceededError');
 }
 
+/** A manifest of either version: before M16 its models carried their moves and edits (D205). */
 function toManifest(value: unknown): Manifest | null {
   const manifest = value as Partial<Manifest> | null;
-  return manifest?.version === 1 && typeof manifest.seq === 'number' && Array.isArray(manifest.models)
-    ? { version: 1, seq: manifest.seq, models: manifest.models, camera: manifest.camera ?? null }
+  return (manifest?.version === 1 || manifest?.version === 2) && typeof manifest.seq === 'number' && Array.isArray(manifest.models)
+    ? { version: manifest.version, seq: manifest.seq, models: manifest.models, camera: manifest.camera ?? null }
     : null;
+}
+
+function toKeptEdits(value: unknown): (KeptEdits & { seq: number }) | null {
+  const kept = value as Partial<KeptEdits & { seq: number }> | null;
+  return typeof kept?.seq === 'number' && Array.isArray(kept.placements) ? (kept as KeptEdits & { seq: number }) : null;
 }
 
 function toMeta(value: unknown): StoredMeta | null {

@@ -167,6 +167,7 @@ public sealed class EditUiTests : BunitTestBase
         await StartViewerAsync();
         var popovers = Render<MudPopoverProvider>();
         Render<ContextMenu>();
+        var list = Render<ModelList>();
 
         await Act(() => Scene.OpenContextMenu(id, 3, 100, 100, canMeasure: false));
         popovers.WaitForAssertion(() => Assert.NotEmpty(popovers.FindAll("[data-testid=context-cut]")));
@@ -185,10 +186,26 @@ public sealed class EditUiTests : BunitTestBase
         var invocation = Assert.Single(_viewer.Invocations, static i => i.Identifier == "expandParts");
         Assert.Equal(id.Value, invocation.Arguments[0]);
         Assert.Equal([4], (IEnumerable<int>)invocation.Arguments[1]!);
-        expand.SetResult(new ExpandOutcome([new PartExpansion(4, [new ExpansionPiece("", -1, true), new ExpansionPiece("", -1, true)])]));
+        // M16 (D199): the model's item says so while the viewer expands.
+        list.WaitForAssertion(() => Assert.Equal("Expanding 1 part…", list.Find("[data-testid=model-expanding]").TextContent.Trim()));
+        expand.SetResult(ExpandOutcome.Of([new PartExpansion(4, [new ExpansionPiece("", -1, true), new ExpansionPiece("", -1, true)])]));
         var tree = () => Scene.Find(id)!.Tree!;
         popovers.WaitForAssertion(() => Assert.Equal([3, 5], tree().ChildrenOf(2)));
         Assert.Equal(["Part 1", "Part 2"], tree().ChildrenOf(5).Select(tree().NameOf));
+        list.WaitForAssertion(() => Assert.Empty(list.FindAll("[data-testid=model-expanding]")));
+        Assert.Null(Scene.Find(id)!.Expanding);
+    }
+
+    [Fact]
+    public void An_outcome_sends_each_list_of_pieces_once()
+    {
+        // M16 (D199): the plant's 840 compound parts place two definitions, so two lists of pieces.
+        ExpansionPiece[] bolts = [new("Bolt", -1, true)];
+        var outcome = new ExpandOutcome([7, 8, 9], [0, 1, 0], [bolts, [new("", -1, true), new("", -1, true)]]);
+        Assert.Equal([7, 8, 9], outcome.Expansions!.Select(static expansion => expansion.Node));
+        Assert.Same(outcome.Expansions![0].Pieces, outcome.Expansions[2].Pieces);
+        Assert.Equal(2, outcome.Expansions[1].Pieces.Count);
+        Assert.Null(new ExpandOutcome(Error: "No worker").Expansions);
     }
 
     [Fact]
@@ -208,11 +225,12 @@ public sealed class EditUiTests : BunitTestBase
         await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("paste"));
 
         // (bUnit lists the calls by name, so their order across names can't be checked here; E2E covers it.)
-        Assert.Equal([5], (int[])_viewer.Invocations.Last(static i => i.Identifier == "setPartState").Arguments[2]!);
-        var edits = (ModelEditsDto)_viewer.Invocations.Last(static i => i.Identifier == "setStructure").Arguments[1]!;
-        Assert.Equal([1], edits.Added);
-        Assert.Equal(0, Assert.Single(edits.Children).Parent);
-        Assert.Equal([1, 5, 2], edits.Children[0].Nodes);
+        // Since M16 the viewer's share comes in a task after .NET's (D199), and the edits cross packed.
+        await EventuallyAsync(() => _viewer.Invocations.Last(static i => i.Identifier == "setPartState").Arguments[2] is int[] { Length: 1 } selected && selected[0] == 5);
+        var structure = _viewer.Invocations.Last(static i => i.Identifier == "setStructure");
+        // Version 1; added [1]; one child list, of the bracket (0): 1, 5, 2; no names; no pieces.
+        Assert.Equal([1, 1, 1, 1, 0, 3, 1, 5, 2, 0, 0], System.Runtime.InteropServices.MemoryMarshal.Cast<byte, int>((byte[])structure.Arguments[1]!).ToArray());
+        Assert.Equal("", structure.Arguments[2]);
         Assert.Equal(stats, Scene.Find(Id)!.Stats);
 
         await cut.InvokeAsync(() => cut.Instance.OnTreeDrop($"{Id.Value}:5", Id.Value, 2, copy: false));
@@ -226,16 +244,27 @@ public sealed class EditUiTests : BunitTestBase
 
     private Task Act(Action action) => Renderer.Dispatcher.InvokeAsync(action);
 
+    /// <summary>Waits for something no render shows, such as a call the Viewport makes after yielding (D199).</summary>
+    private static async Task EventuallyAsync(Func<bool> condition)
+    {
+        for (var tries = 0; tries < 100 && !condition(); tries++)
+        {
+            await Task.Delay(10, Xunit.TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(condition());
+    }
+
     private static AngleSharp.Dom.IElement Node(IRenderedComponent<ModelList> cut, int node) =>
         cut.Find($"[data-tree-node=\"{Id.Value}:{node}\"]");
 
     private static List<string> NodeTexts(IRenderedComponent<ModelList> cut) =>
-        [.. cut.FindAll("[data-testid=model-tree] .mud-treeview-item-content").Select(static node => node.TextContent.Trim())];
+        [.. cut.FindAll("[data-testid=model-tree-node] .j3d-tree-node-name").Select(static node => node.TextContent.Trim())];
 
-    /// <summary>Clicking a node's text selects it (M6), so expanding takes its arrow.</summary>
+    /// <summary>Clicking a row selects it (M6), so expanding takes its arrow.</summary>
     private static void ExpandNode(IRenderedComponent<ModelList> cut, string text) =>
-        cut.WaitForAssertion(() => cut.FindAll("[data-testid=model-tree] .mud-treeview-item-content")
-            .Single(node => node.TextContent.Trim() == text)
-            .QuerySelector(".mud-treeview-item-arrow button")!
+        cut.WaitForAssertion(() => cut.FindAll("[data-testid=model-tree-node]")
+            .Single(row => row.QuerySelector(".j3d-tree-node-name")?.TextContent.Trim() == text)
+            .QuerySelector("[data-testid=tree-node-toggle]")!
             .Click());
 }

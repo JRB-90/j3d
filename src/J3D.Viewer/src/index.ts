@@ -1,5 +1,6 @@
 import type { PlanNode } from '@j3d/occt/facade';
 import { afterPaint, saveFile } from './download';
+import { decodeEdits } from './edit/edits-codec';
 import { expandFileParts } from './edit/expand';
 import type { ModelEdits } from './edit/structure';
 import { fileInputAccept, kindOf } from './formats';
@@ -15,6 +16,7 @@ import { ModelStore } from './store/model-store';
 import type { StoredModel, StoredScene } from './store/types';
 import { createTestHookControls, installTestHook, isTestHookEnabled } from './test-hook';
 import { installTreeDrag } from './tree-drag';
+import { installTreeKeys } from './tree-rows';
 import type { Projection } from './view/camera-math';
 import { installDropTarget } from './view/drop-target';
 import { baseName } from './view/export-scene';
@@ -40,10 +42,14 @@ export interface ExportOutcome {
 
 /**
  * Expanded file parts' pieces (M15), each after its piece parent (-1: the part's new assembly), with
- * the file's name or "", and whether it draws something. Mirrors J3D.Web.Client/Interop/ExpandOutcome.cs.
+ * the file's name or "", and whether it draws something. Since M16 (D199) each part asked for comes
+ * with the index of its pieces in `pieceSets`, sent once for the parts placing one definition (as a list
+ * per part, the large plant's 840 took 145 ms for .NET to read). Mirrors J3D.Web.Client/Interop/ExpandOutcome.cs.
  */
 export interface ExpandOutcome {
-  expansions?: { node: number; pieces: { name: string; parent: number; part: boolean }[] }[];
+  nodes?: number[];
+  sets?: number[];
+  pieceSets?: { name: string; parent: number; part: boolean }[][];
   error?: string;
 }
 
@@ -96,9 +102,9 @@ export interface ViewerHandle {
   setOriginFrames(targets: MoveTarget[]): void;
   /**
    * A model's tree as edited (M14): applies all its edits, which are kept with it, and returns what it
-   * now draws, or null when nothing changed.
+   * now draws, or null when nothing changed. Since M16 the edits arrive packed (edits-codec.ts, D199).
    */
-  setStructure(id: string, edits: ModelEdits): ModelStats | null;
+  setStructure(id: string, numbers: Uint8Array, text: string): ModelStats | null;
   /** Saves the visible scene, or the selection, as GLB or STL: a download (M9, D119, D120). */
   exportMesh(format: MeshExportFormat, selection: boolean): Promise<ExportOutcome>;
   /**
@@ -203,8 +209,18 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   const unsubscribeDotnet = forwardModelEvents(models, dotnet);
   // STEP and BREP exports in progress, by model (M9).
   const exports = new Map<ModelId, AbortController>();
-  const flushStore = () => store.flush();
-  window.addEventListener('pagehide', flushStore);
+  // A page kept for going back only writes what's waiting; one going for good also gives back its
+  // WebGL context and workers at once. Firefox kept each reloaded page's viewer, context and all,
+  // until 25 reloads of the expanded plant ran out of memory (M16).
+  let disposed = false;
+  const onPageHide = (event: PageTransitionEvent) => {
+    if (event.persisted) {
+      store.flush();
+    } else {
+      handle.dispose();
+    }
+  };
+  window.addEventListener('pagehide', onPageHide);
 
   const inputs = new Map<HTMLInputElement, () => void>();
   const attachFileInput = (input: HTMLInputElement): (() => void) => {
@@ -231,12 +247,13 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   });
   // Nodes dragged in the model list's trees go to .NET, which owns the tree and its edits (M14, D182).
   const removeTreeDrag = installTreeDrag(document, ({ source, model, target, copy }) => call(dotnet, 'OnTreeDrop', source, model, target, copy));
+  const removeTreeKeys = installTreeKeys(document);
   const removeTestHook = testControls ? installTestHook(models, testControls, attachFileInput, view, store) : undefined;
 
   host.dataset['viewerReady'] = 'true';
   void dotnet.invokeMethodAsync('OnViewerReady', capabilities);
 
-  return {
+  const handle: ViewerHandle = {
     attachFileInput(input) {
       attachFileInput(input);
     },
@@ -312,7 +329,8 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     setOriginFrames(targets) {
       view?.setOriginFrames(targets);
     },
-    setStructure(id, edits) {
+    setStructure(id, numbers, text) {
+      const edits = decodeEdits(numbers, text);
       store.setEdits(id, edits);
       const applied = view?.setStructure(id, edits);
       // Nodes that changed parents, and copies, are kept where they now are, in their parents' frames.
@@ -340,12 +358,21 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       }
       try {
         const expansions = await expandFileParts(model.content, fileNodes);
-        return {
-          expansions: fileNodes.map((node) => ({
-            node,
-            pieces: (expansions.get(node) ?? []).map(({ name, parent, prototype }) => ({ name, parent, part: prototype >= 0 })),
-          })),
-        };
+        // .NET makes the edit as this returns: its item's "Expanding…" (D199) is painted first.
+        await afterPaint();
+        const pieceSets: { name: string; parent: number; part: boolean }[][] = [];
+        const setOf = new Map<string, number>();
+        const sets = fileNodes.map((node) => {
+          const pieces = (expansions.get(node) ?? []).map(({ name, parent, prototype }) => ({ name, parent, part: prototype >= 0 }));
+          const key = JSON.stringify(pieces);
+          let set = setOf.get(key);
+          if (set === undefined) {
+            set = pieceSets.push(pieces) - 1;
+            setOf.set(key, set);
+          }
+          return set;
+        });
+        return { nodes: fileNodes, sets, pieceSets };
       } catch (error) {
         console.error(`J3D: expanding parts of ${model.summary.fileName} failed.`, error);
         return { error: messageOf(error) };
@@ -394,9 +421,15 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       exports.get(id)?.abort();
     },
     dispose() {
+      // Once only: a page going for good disposes it before .NET's component might.
+      if (disposed) {
+        return;
+      }
+      disposed = true;
       exports.forEach((controller) => controller.abort());
       removeTestHook?.();
       removeTreeDrag();
+      removeTreeKeys();
       removeDropTarget();
       for (const detach of [...inputs.values()]) {
         detach();
@@ -404,13 +437,14 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       unsubscribeView?.();
       unsubscribeStore();
       unsubscribeDotnet();
-      window.removeEventListener('pagehide', flushStore);
+      window.removeEventListener('pagehide', onPageHide);
       store.dispose();
       models.dispose();
       view?.dispose();
       delete host.dataset['viewerReady'];
     },
   };
+  return handle;
 }
 
 /** Copies a measurement value to the clipboard (M7, D87). */
@@ -418,10 +452,7 @@ export async function copyText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-/** Scrolls an element into view if it isn't, e.g. a tree node a 3D pick revealed (D96). */
-export function scrollIntoView(selector: string): void {
-  document.querySelector(selector)?.scrollIntoView({ block: 'nearest' });
-}
+export { revealTreeRow } from './tree-rows';
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

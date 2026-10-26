@@ -35,7 +35,7 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
 
     private SceneState Scene => scene;
 
-    private (string Title, string Detail)? Summary => scene.Mode == SelectMode.Models ? DescribeModels(scene) : Describe(scene.Selection);
+    private (string Title, string Detail)? Summary => scene.Mode == SelectMode.Models ? DescribeModels(scene) : Describe(scene);
 
     private bool IsVisible => scene.Moving is not null || scene.MeasureMode || (scene.Mode == SelectMode.Features ? !scene.Features.IsEmpty : Summary is not null);
 
@@ -110,23 +110,28 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
 
     public void Dispose() => scene.Changed -= OnSceneChanged;
 
-    /// <summary>One part: its name and path. Several: how many, and in how many models.</summary>
-    internal static (string Title, string Detail)? Describe(IReadOnlyList<(ModelEntry Model, int Node)> selection)
+    /// <summary>
+    /// One part: its name and path. Several: how many, and in how many models, counted by model, since
+    /// listing thousands of selected parts on every render was slow (M16).
+    /// </summary>
+    internal static (string Title, string Detail)? Describe(SceneState scene)
     {
-        switch (selection)
+        List<ModelEntry> selected = [.. scene.Models.Where(static model => !model.Selected.IsEmpty)];
+        var parts = selected.Sum(static model => model.Selected.Count);
+        switch (selected)
         {
             case []:
                 return null;
 
-            case [var (model, node)]:
+            case [var model] when parts == 1:
                 var tree = model.Tree!;
+                var node = model.Selected.Single();
                 var path = tree.AncestorsOf(node).Select(ancestor => NameOf(tree, ancestor)).Prepend(model.Summary.FileName);
                 return (NameOf(tree, node), string.Join(PathSeparator, path));
 
             default:
-                var models = selection.Select(static part => part.Model.Id).Distinct().Count();
-                var count = selection.Count.ToString("N0", CultureInfo.InvariantCulture);
-                return ($"{count} parts selected", models == 1 ? $"in {selection[0].Model.Summary.FileName}" : $"in {models} models");
+                var count = parts.ToString("N0", CultureInfo.InvariantCulture);
+                return ($"{count} parts selected", selected.Count == 1 ? $"in {selected[0].Summary.FileName}" : $"in {selected.Count} models");
         }
     }
 

@@ -90,6 +90,9 @@ public sealed record ModelEntry(ModelSummary Summary)
     /// <summary>The STEP or BREP export in progress (M9, D125), or null. A model coming back from a delete has none.</summary>
     public ModelExport? Export { get; private init; }
 
+    /// <summary>How many parts Expand or Expand all is splitting, while it runs (M16, D199), or null.</summary>
+    public int? Expanding { get; private init; }
+
     public ModelId Id => Summary.Id;
 
     /// <summary>Queued or importing: removing it cancels the import.</summary>
@@ -168,6 +171,10 @@ public sealed record ModelEntry(ModelSummary Summary)
     public ModelEntry WithExport(ModelExport? export) =>
         export == Export || (export is not null && Status != ModelStatus.Loaded) ? this : this with { Export = export };
 
+    /// <summary>Expand started on so many parts, or ended (null). Only a loaded model expands.</summary>
+    public ModelEntry WithExpanding(int? parts) =>
+        parts == Expanding || (parts is not null && Status != ModelStatus.Loaded) ? this : this with { Expanding = parts };
+
     /// <summary>The model's files couldn't be kept: <paramref name="reason"/> says why (D115).</summary>
     public ModelEntry AsNotKept(string reason) => NotKept == reason ? this : this with { NotKept = reason };
 
@@ -205,7 +212,7 @@ public sealed record ModelEntry(ModelSummary Summary)
     public bool IsSelected(int node)
     {
         var parts = Tree?.PartsUnder(node) ?? [];
-        return parts.Count > 0 && parts.All(Selected.Contains);
+        return parts.Count > 0 && Selected.Count >= parts.Count && parts.All(Selected.Contains);
     }
 
     private PartVisibility Visibility(IReadOnlyList<int> parts)

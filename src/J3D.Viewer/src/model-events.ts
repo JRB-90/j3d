@@ -1,4 +1,4 @@
-import type { ModelEdits } from './edit/structure';
+import { encodeEdits } from './edit/edits-codec';
 import type { ModelManager } from './import/model-manager';
 import type { Bounds, ModelStats, TreeNode } from './import/types';
 import type { DotNetObjectReference } from './interop';
@@ -16,12 +16,12 @@ export interface TreeColumns {
   expandable?: number[];
 }
 
-/** What .NET is told about a loaded model (mirrors J3D.Web.Client/Interop/ModelLoadedInfo.cs). */
+/**
+ * What .NET is told about a loaded model (mirrors J3D.Web.Client/Interop/ModelLoadedInfo.cs). Since M16
+ * the tree and a restored model's kept edits cross packed beside it (D204): as JSON, .NET took 450 ms to
+ * read the large plant's after Expand all.
+ */
 export interface ModelLoadedInfo {
-  /** The tree as the file gives it; `edits` change it. */
-  tree: TreeColumns;
-  /** A restored model's kept edits (M14), already applied in the view; null when it has none. */
-  edits: ModelEdits | null;
   stats: ModelStats;
   bounds: Bounds;
   memoryBytes: number;
@@ -66,8 +66,10 @@ export function forwardModelEvents(models: Pick<ModelManager, 'subscribe'>, dotn
     queued: (summary) => send('OnModelQueued', summary),
     progress: (id, phase, fraction) => send('OnModelProgress', id, phase, fraction),
     loaded: ({ summary, tree, stats, bounds, memoryBytes, warnings, restored }) => {
-      const info: ModelLoadedInfo = { tree: toColumns(tree), edits: restored?.edits ?? null, stats, bounds, memoryBytes, warnings };
-      sendInOwnTask('OnModelLoaded', summary.id, info);
+      const info: ModelLoadedInfo = { stats, bounds, memoryBytes, warnings };
+      const columns = packTree(toColumns(tree));
+      const edits = restored?.edits ? encodeEdits(restored.edits) : null;
+      sendInOwnTask('OnModelLoaded', summary.id, info, columns.numbers, columns.text, edits?.numbers ?? null, edits?.text ?? null);
     },
     failed: (id, error) => send('OnModelFailed', id, error),
     removed: (id) => send('OnModelRemoved', id),
@@ -88,4 +90,14 @@ export function toColumns(tree: readonly (TreeNode & { pieces?: number })[]): Tr
     prototypes: tree.map((node) => node.prototype),
     ...(expandable.length > 0 ? { expandable } : {}),
   };
+}
+
+/**
+ * A tree's columns packed for .NET (M16, D204), as edits-codec.ts packs edits: `version, n,
+ * parents (n), prototypes (n), name lengths (n), expandable.length, ...expandable` as 32-bit integers,
+ * and the names one after another in `text`. J3D.Web.Client's TreeCodec reads it.
+ */
+export function packTree({ names, parents, prototypes, expandable = [] }: TreeColumns): { numbers: Uint8Array; text: string } {
+  const values = Int32Array.from([1, names.length, ...parents, ...prototypes, ...names.map((name) => name.length), expandable.length, ...expandable]);
+  return { numbers: new Uint8Array(values.buffer), text: names.join('') };
 }

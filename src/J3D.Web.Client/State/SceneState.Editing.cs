@@ -13,6 +13,15 @@ public sealed record Clipboard(ModelId Id, ImmutableArray<(int Node, int Parent)
 /// <summary>A tree node whose name is being edited in place (D183, D186); <paramref name="IsNew"/> for a new assembly's.</summary>
 public sealed record Renaming(ModelId Id, int Node, bool IsNew);
 
+/// <summary>An Expand worked out on a model's tree as it was (<paramref name="Before"/>), not yet made (M16, D199).</summary>
+public sealed record ExpandPlan(ModelId Id, ModelTree Before, TreeEdit Edit, IReadOnlyList<int> Assemblies)
+{
+    private ModelTree? _next;
+
+    /// <summary>The tree after the Expand, built the first time it's asked for: a step that can be a task of its own.</summary>
+    public ModelTree Next => _next ??= Edit.Build();
+}
+
 /// <summary>
 /// Editing models' trees (M14, D151â€“D152, D180â€“D187): Cut, Copy, Paste, Delete, New assembly, Ungroup,
 /// Rename and drops in the tree, each one undoable step (D145) that the <c>Viewport</c> sends to the
@@ -68,36 +77,35 @@ public sealed partial class SceneState
     /// model, the node last picked in the tree while the selection is exactly its visible parts, or
     /// else the topmost nodes whose visible parts are all selected. None outside Object mode.
     /// </summary>
-    public IReadOnlyList<(ModelEntry Model, int Node)> EditObjects
+    public IReadOnlyList<(ModelEntry Model, int Node)> EditObjects => Derive(nameof(EditObjects), FindEditObjects);
+
+    private IReadOnlyList<(ModelEntry Model, int Node)> FindEditObjects()
     {
-        get
+        if (Mode != SelectMode.Objects)
         {
-            if (Mode != SelectMode.Objects)
-            {
-                return [];
-            }
-
-            List<(ModelEntry, int)> objects = [];
-            foreach (var model in Models)
-            {
-                if (model.Tree is not { } tree || model.Selected.IsEmpty)
-                {
-                    continue;
-                }
-
-                if (_anchor is { } anchor && anchor.Id == model.Id && tree.Contains(anchor.Node) &&
-                    model.Selected.SetEquals(tree.PartsUnder(anchor.Node).Where(part => !model.Hidden.Contains(part))))
-                {
-                    objects.Add((model, anchor.Node));
-                }
-                else
-                {
-                    objects.AddRange(tree.CoveredBy(model.Selected, model.Hidden).Select(node => (model, node)));
-                }
-            }
-
-            return objects;
+            return [];
         }
+
+        List<(ModelEntry, int)> objects = [];
+        foreach (var model in Models)
+        {
+            if (model.Tree is not { } tree || model.Selected.IsEmpty)
+            {
+                continue;
+            }
+
+            if (_anchor is { } anchor && anchor.Id == model.Id && tree.Contains(anchor.Node) &&
+                model.Selected.SetEquals(tree.PartsUnder(anchor.Node).Where(part => !model.Hidden.Contains(part))))
+            {
+                objects.Add((model, anchor.Node));
+            }
+            else
+            {
+                objects.AddRange(tree.CoveredBy(model.Selected, model.Hidden).Select(node => (model, node)));
+            }
+        }
+
+        return objects;
     }
 
     /// <summary>Cut, Copy and New assembly take objects of one model (D180, D185).</summary>
@@ -351,9 +359,21 @@ public sealed partial class SceneState
     /// </summary>
     public void Expand(ModelId id, IReadOnlyList<int> parts, IReadOnlyList<Interop.PartExpansion> expansions)
     {
-        if (Find(id) is not { Tree: { } tree } model)
+        if (PlanExpand(id, parts, expansions) is { } plan)
         {
-            return;
+            ApplyExpand(plan);
+        }
+    }
+
+    /// <summary>
+    /// Works out an Expand's new tree without making it (M16, D199), so the work can be split from the
+    /// edit: Expand all of the large plant's 840 parts took 0.1 s here alone. Null when nothing expands.
+    /// </summary>
+    public ExpandPlan? PlanExpand(ModelId id, IReadOnlyList<int> parts, IReadOnlyList<Interop.PartExpansion> expansions)
+    {
+        if (Find(id) is not { Tree: { } tree })
+        {
+            return null;
         }
 
         var pieces = expansions.ToDictionary(static expansion => expansion.Node, static expansion => expansion.Pieces);
@@ -367,19 +387,27 @@ public sealed partial class SceneState
             }
         }
 
-        if (assemblies.Count == 0)
+        return assemblies.Count == 0 ? null : new ExpandPlan(id, tree, edit, assemblies);
+    }
+
+    /// <summary>Makes a planned Expand, unless the model's tree has changed since: then it returns false.</summary>
+    public bool ApplyExpand(ExpandPlan plan)
+    {
+        if (Find(plan.Id) is not { Tree: { } tree } model || !ReferenceEquals(tree, plan.Before))
         {
-            return;
+            return false;
         }
 
-        var next = edit.Build();
+        var next = plan.Next;
         var hidden = model.Hidden.Union(next.Edits.Pieces.Where(item => item.Key >= tree.Count && item.Value.Part && model.Hidden.Contains(item.Value.Expands)).Select(static item => item.Key));
-        ApplyEdit(model, next, hidden, Mode == SelectMode.Objects ? assemblies : null);
+        ApplyEdit(model, next, hidden, Mode == SelectMode.Objects ? plan.Assemblies : null);
         // The tree opens to the first assembly's pieces, as it does to a new assembly.
-        if (next.ChildrenOf(assemblies[0]) is [var first, ..])
+        if (next.ChildrenOf(plan.Assemblies[0]) is [var first, ..])
         {
             RevealRequested?.Invoke(model.Id, first);
         }
+
+        return true;
     }
 
     /// <summary>What a model draws after an edit, as the viewer counted it: its item's figures.</summary>
@@ -448,9 +476,12 @@ public sealed partial class SceneState
         var before = model.EditState;
         List<int> reparented = [.. before.Placements.Keys.Where(node => node >= 0 && (!next.Contains(node) || next.ParentOf(node) != tree.ParentOf(node)))];
         var placements = before.Placements.RemoveRange(reparented);
-        var selected = selectNodes is null
-            ? model.Selected
-            : PartSet.From(selectNodes.Where(next.Contains).SelectMany(next.PartsUnder).Where(part => !hidden.Contains(part)));
+        var selected = selectNodes is not null
+            ? PartSet.From(selectNodes.Where(next.Contains).SelectMany(next.PartsUnder).Where(part => !hidden.Contains(part)))
+            // A model selected in Model mode stays selected whole, Expand all's pieces included (M16).
+            : Mode == SelectMode.Models && !model.Selected.IsEmpty
+                ? PartSet.From(next.Parts.Where(part => !hidden.Contains(part)))
+                : model.Selected;
         var edited = model.WithEdit(new ModelEdit(next.Edits, hidden, selected, placements) { Tree = next });
         Record(new EditStep(model.Id, before, edited.EditState));
         if (selectNodes is not null)

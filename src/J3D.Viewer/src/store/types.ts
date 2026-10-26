@@ -13,8 +13,8 @@ export interface CameraSnapshot {
 }
 
 /**
- * A model the manifest lists, in list order, with its hidden part nodes (D82) and, since M13, its moves
- * (D145) and since M14 its edits, which the moves are in the frames of.
+ * A model the manifest lists, in list order, with its hidden part nodes (D82). In version 1 (M13–M15)
+ * it also held the model's moves (D145) and edits; since M16 those are in the model's own files (D205).
  */
 export interface ManifestModel {
   id: ModelId;
@@ -26,12 +26,22 @@ export interface ManifestModel {
 /**
  * The scene as stored (D82): the kept models in list order and the camera. It's written to two
  * files in turn with a rising `seq`, so a write cut short by closing the page leaves the other.
+ * Version 2 (M16, D205) leaves each model's moves and edits to its own files.
  */
 export interface Manifest {
-  version: 1;
+  version: 1 | 2;
   seq: number;
   models: ManifestModel[];
   camera: CameraSnapshot | null;
+}
+
+/**
+ * A model's moves (M13, D145) and edits (M14), which the moves are in the frames of: since M16 in the
+ * model's own `edits-0.json` and `edits-1.json`, written in turn, only when they change (D205).
+ */
+export interface KeptEdits {
+  placements: KeptPlacement[];
+  edits?: ModelEdits;
 }
 
 /** One stored file: its name in the model's folder, and the name and path it was imported with. */
@@ -63,9 +73,13 @@ export interface StoredModel {
  */
 export type StoreStatus = 'kept' | 'otherTab' | 'unavailable';
 
-/** What the store held when the page opened: the models to import again, in order, and the camera. */
+/**
+ * What the store held when the page opened: the models to import again, in order, and the camera; and
+ * since M16 how many kept models couldn't be read this time, which stay kept for the next (D200).
+ */
 export interface StoredScene {
   status: StoreStatus;
   models: StoredModel[];
   camera: CameraSnapshot | null;
+  unreadable: number;
 }

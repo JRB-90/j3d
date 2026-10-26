@@ -2,7 +2,7 @@
 // Blobs, which the browser passes by reference rather than copying.
 
 import type { ModelId } from '../import/types';
-import type { Manifest, StoredMeta } from './types';
+import type { KeptEdits, Manifest, StoredMeta } from './types';
 
 export type StoreRequest =
   | { type: 'open' }
@@ -10,7 +10,9 @@ export type StoreRequest =
   | { type: 'load'; id: ModelId }
   | { type: 'delete'; id: ModelId }
   | { type: 'clear' }
-  | { type: 'manifest'; manifest: Omit<Manifest, 'seq'> };
+  | { type: 'manifest'; manifest: Omit<Manifest, 'seq'> }
+  /** A model's moves and edits, or null when it has none (M16, D205). */
+  | { type: 'edits'; id: ModelId; kept: KeptEdits | null };
 
 /** A request with the id its answer echoes. The worker answers them one at a time, in order. */
 export type StoreRequestMessage = StoreRequest & { requestId: number };

@@ -276,7 +276,7 @@ describe('ModelManager', () => {
   });
 
   it("expands a kept model's expanded parts again before checking its edits, and drops them when it can't (M15, R25)", async () => {
-    const { manager, tasks } = setup();
+    const { manager, tasks, events } = setup();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const mesh = { indices: new Uint32Array(3), edges: new Float32Array(6) } as never;
     const result = (expand: (node: number) => Promise<never>): ImportResult => ({
@@ -325,6 +325,8 @@ describe('ModelManager', () => {
       { id: 'fits', edits: true, prototypes: 2, warnings: [] },
       { id: 'changed', edits: false, prototypes: 1, warnings: [EditsDroppedWarning] },
     ]);
+    // M16 (D203): the expanding is a phase of its own.
+    expect(events).toContain('progress fits applying 0');
     warn.mockRestore();
   });
 

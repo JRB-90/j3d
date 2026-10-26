@@ -98,6 +98,8 @@ export interface ModelParts {
    * under it moves with it. Returns the part nodes that moved.
    */
   setPlacement(node: number, local: Matrix4): number[];
+  /** Several placements at once: a restore's kept moves (M16, D204). */
+  setPlacements(placements: readonly { node: number; local: Matrix4 }[]): void;
   /**
    * Applies the model's tree as edited (M14, D151, D152): copies and new assemblies are added, nodes
    * that changed parents keep where they are in the world, and removed nodes are dropped from view
@@ -469,6 +471,10 @@ export class MeshParts implements ModelParts {
     const moved = new Set<Object3D>();
     object.traverse((child) => moved.add(child));
     return this.partNodes.filter((part) => moved.has(this.objects[part]!));
+  }
+
+  setPlacements(placements: readonly { node: number; local: Matrix4 }[]): void {
+    placements.forEach(({ node, local }) => this.setPlacement(node, local));
   }
 }
 

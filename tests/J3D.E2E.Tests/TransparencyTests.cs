@@ -59,6 +59,52 @@ public sealed class TransparencyTests(J3DAppFixture app) : ViewerPageTest(app)
         AssertNoConsoleErrors();
     }
 
+    /// <summary>
+    /// M16: a pasted copy (an edit's instanced mesh) of <c>translucent.step</c>'s 30 mm translucent cover
+    /// (node 2) is drawn. The viewer worked out the materials it sorts only when a model came or went, so
+    /// the copy's faces failed in the OIT passes and only its edges showed.
+    /// </summary>
+    [Fact]
+    public async Task A_pasted_copy_of_a_translucent_part_is_drawn()
+    {
+        await ImportAsync("translucent.step");
+        var id = Assert.Single(await WaitForImportsAsync(1)).Id;
+        await WaitForCameraRestAsync();
+        var cover = (await PartPointAsync(id, 2))!;
+        await Page.Mouse.ClickAsync((float)cover.X, (float)cover.Y);
+        await WaitForPartStateAsync(id, [], [2]);
+        await Page.Keyboard.PressAsync("Control+c");
+        await Page.Keyboard.PressAsync("Control+v");
+        await WaitForPartStateAsync(id, [], [3]);
+        await Page.Keyboard.PressAsync("w");
+        await Page.GetByTestId("move-x").FillAsync("50");
+        await Page.GetByTestId("move-x").PressAsync("Enter");
+        await Page.WaitForFunctionAsync("id => window.__j3dTest.placement(id, 3)?.local[12] === 50", id);
+
+        // A click on empty space clears the selection, whose overlay would draw over the copy anyway.
+        var viewport = (await Page.GetByTestId("viewport").BoundingBoxAsync())!;
+        var empty = new ScreenPoint(viewport.X + 20, viewport.Y + 20); // the Move panel is at the bottom
+        await Page.Mouse.ClickAsync((float)empty.X, (float)empty.Y);
+        await WaitForPartStateAsync(id, [], []);
+        await Page.Keyboard.PressAsync("f");
+        await WaitForCameraRestAsync();
+
+        // The middle of the copy's top face, away from its edges: grey like the cover's, not near black
+        // (without the fix it read 0, 1, 4 while the cover's read 90, 96, 101).
+        var top = await ProjectAsync(65, 15, 30);
+        double[][] points = [[top.X, top.Y]];
+        var pixels = await Page.EvaluateAsync<JsonElement>(
+            "points => ({ mode: window.__j3dTest.transparency(), pixels: window.__j3dTest.canvasPixels(points) })",
+            points);
+        var mode = pixels.GetProperty("mode").GetString();
+        Assert.SkipWhen(mode == "unsupported", "This browser's WebGL has no blendable float render targets, so translucency stays sorted (D130, R21).");
+        Assert.Equal("oit", mode);
+        var face = pixels.GetProperty("pixels")[0];
+        var strongest = Enumerable.Range(0, 3).Max(i => face[i].GetInt32());
+        await AssertRenderedAsync(strongest > 40, $"the copy's top face should be drawn: {face}");
+        AssertNoConsoleErrors();
+    }
+
     [Fact]
     public async Task An_opaque_scene_draws_as_before()
     {

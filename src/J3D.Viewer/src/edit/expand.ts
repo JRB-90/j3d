@@ -12,9 +12,13 @@ export function expansionsOf(content: ModelContent): Expansions {
  * Expands a BREP model's file parts in its worker, those not expanded yet, in order (M15, D154): their
  * pieces are kept with its content, and the prototypes they draw join its scene's, numbered as the
  * worker numbers them, since its answers come back in order. Throws {@link EditsMismatchError} when a
- * part can't be expanded.
+ * part can't be expanded. `onProgress` hears how many of the parts are done (a restore's phase, D203).
  */
-export async function expandFileParts(content: ModelContent, fileNodes: readonly number[]): Promise<Expansions> {
+export async function expandFileParts(
+  content: ModelContent,
+  fileNodes: readonly number[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<Expansions> {
   if (content.kind !== 'brep') {
     if (fileNodes.length > 0) {
       throw new EditsMismatchError("A mesh model's parts can't be expanded.");
@@ -22,7 +26,8 @@ export async function expandFileParts(content: ModelContent, fileNodes: readonly
     return None;
   }
   const expansions = (content.expansions ??= new Map());
-  for (const node of fileNodes) {
+  for (const [index, node] of fileNodes.entries()) {
+    onProgress?.(index, fileNodes.length);
     if (expansions.has(node)) {
       continue;
     }

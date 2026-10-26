@@ -4,8 +4,9 @@
  * `[data-tree-node="<model>:<node>"]`, draggable while edits are on offer; an assembly row is marked
  * `data-tree-assembly`, and a model's name `[data-model-drop="<model>"]`. A drop is offered on an
  * assembly or a model's name in the dragged node's model, outside the dragged node's own subtree
- * (its descendants' rows are inside its own); .NET decides the rest, as a drop moves the whole
- * selection when the dragged node is selected. Ctrl copies instead of moving (D183).
+ * (since M16 the rows are flat, D198, so each lists its ancestors in `data-tree-ancestors`); .NET
+ * decides the rest, as a drop moves the whole selection when the dragged node is selected. Ctrl
+ * copies instead of moving (D183).
  */
 export interface TreeDrop {
   /** The dragged node, `<model>:<node>`. */
@@ -22,7 +23,7 @@ export const TreeNodeType = 'application/x-j3d-tree-node';
 const DropTargetClass = 'j3d-drop-target';
 
 export function installTreeDrag(root: Document | HTMLElement, dropped: (drop: TreeDrop) => void): () => void {
-  let dragged: { key: string; model: string; row: HTMLElement } | undefined;
+  let dragged: { key: string; model: string; node: number } | undefined;
   let highlighted: HTMLElement | undefined;
 
   const highlight = (element: HTMLElement | undefined) => {
@@ -44,11 +45,13 @@ export function installTreeDrag(root: Document | HTMLElement, dropped: (drop: Tr
     }
     const row = event.target.closest<HTMLElement>('[data-tree-node]');
     const key = row?.dataset['treeNode'];
-    if (!row || !key || row.dataset['treeAssembly'] !== 'true' || dragged.row.contains(row)) {
+    if (!row || !key || row.dataset['treeAssembly'] !== 'true') {
       return undefined;
     }
     const [model, node] = splitKey(key);
-    return model === dragged.model ? { element: row, target: node } : undefined;
+    const ancestors = (row.dataset['treeAncestors'] ?? '').split(' ').filter(Boolean).map(Number);
+    const inside = node === dragged.node || ancestors.includes(dragged.node);
+    return model === dragged.model && !inside ? { element: row, target: node } : undefined;
   };
 
   const onDragStart = (event: DragEvent) => {
@@ -57,8 +60,9 @@ export function installTreeDrag(root: Document | HTMLElement, dropped: (drop: Tr
     if (!row || !key || !event.dataTransfer) {
       return;
     }
-    event.stopPropagation(); // the innermost row is the one dragged
-    dragged = { key, model: splitKey(key)[0], row };
+    event.stopPropagation();
+    const [model, node] = splitKey(key);
+    dragged = { key, model, node };
     // Firefox starts a drag only with data set.
     event.dataTransfer.setData(TreeNodeType, key);
     event.dataTransfer.effectAllowed = 'copyMove';

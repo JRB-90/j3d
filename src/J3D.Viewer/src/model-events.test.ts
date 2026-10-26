@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ModelManagerListener } from './import/model-manager';
 import type { LoadedModel, ModelSummary } from './import/types';
 import type { DotNetObjectReference } from './interop';
-import { forwardModelEvents } from './model-events';
+import { forwardModelEvents, packTree } from './model-events';
 
 function setup(invoke: (method: string, ...args: unknown[]) => Promise<unknown> = () => Promise.resolve()) {
   const listeners = new Set<ModelManagerListener>();
@@ -72,20 +72,24 @@ describe('forwardModelEvents', () => {
     emit((l) => l.loaded?.(model));
     vi.runAllTimers();
 
-    expect(calls).toEqual([
-      [
-        'OnModelLoaded',
-        'm1',
-        {
-          tree: { names: ['assembly', 'part'], parents: [-1, 0], prototypes: [-1, 0] },
-          edits: null,
-          stats: model.stats,
-          bounds: model.bounds,
-          memoryBytes: 4096,
-          warnings: ['A texture is missing.'],
-        },
-      ],
+    // Since M16 (D204) the tree crosses packed beside the info, and a restored model's edits too.
+    const [[method, id, info, numbers, text, edits, editNames]] = calls as [[string, string, unknown, Uint8Array, string, null, null]];
+    expect([method, id, info, text, edits, editNames]).toEqual([
+      'OnModelLoaded',
+      'm1',
+      { stats: model.stats, bounds: model.bounds, memoryBytes: 4096, warnings: ['A texture is missing.'] },
+      'assemblypart',
+      null,
+      null,
     ]);
+    // Version 1, two nodes: parents, prototypes, name lengths, no expandable parts.
+    expect([...new Int32Array(numbers.slice().buffer)]).toEqual([1, 2, -1, 0, -1, 0, 8, 4, 0]);
+  });
+
+  it('packs a tree with its expandable parts (M16, D204)', () => {
+    const { numbers, text } = packTree({ names: ['set', ''], parents: [-1, 0], prototypes: [-1, 3], expandable: [1] });
+    expect([...new Int32Array(numbers.buffer)]).toEqual([1, 2, -1, 0, -1, 3, 3, 0, 1, 1]);
+    expect(text).toBe('set');
   });
 
   it('sends OnModelLoaded in a task of its own, with later calls waiting behind it in order', () => {
