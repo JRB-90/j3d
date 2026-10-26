@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). **Iteration 3 in progress** (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) merged** (D165–D171), then a **clarity pass merged** (D172–D179); **M14 (assembly editing) built, in review** (D180–D187); M15 and M16 planned · **Last updated:** 2026-10-25
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). **Iteration 3 in progress** (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) merged** (D165–D171), then a **clarity pass merged** (D172–D179); **M14 (assembly editing) merged** (D180–D187); **M15 (exporting edits, and Expand) in progress** (D188–D196); M16 planned · **Last updated:** 2026-10-26
 
 ---
 
@@ -133,9 +133,9 @@ Edits change placements and structure, never shapes (D144). Each one can be undo
 
 **M15: exporting edits, and Expand**
 
-- [ ] A BREP model's STEP and BREP exports write its **edited assembly**: placements, structure, copies and deletions, with names and colours (D145).
-- [ ] When the selection lies in one BREP model, the Export menu also saves it as **STEP or BREP**: the selected objects with their subtrees, under their assembly path from the root (D155).
-- [ ] **Expand** on a compound part, and **Expand all** on a model, turn each such part into a sub-assembly with one part per solid, keeping names and colours. Expanding can be undone, is kept and is exported like any other edit (D154).
+- [ ] A BREP model's STEP and BREP exports write its **edited assembly**: placements, structure, copies and deletions, with names and colours, leaving out hidden parts and sharing what wasn't edited (D145, D188, D194–D196).
+- [ ] When the selection lies in one BREP model, the Export menu also saves it as **STEP or BREP**: the selected objects with their subtrees, under their assembly path from the root (D155, D192, D193).
+- [ ] **Expand** on a compound part, and **Expand all** on a model, turn each such part into a sub-assembly with one part per solid, keeping names and colours. Expanding can be undone, is kept and is exported like any other edit (D154, D189–D191).
 
 **M16: hardening**
 
@@ -341,6 +341,15 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D185 | A new assembly's place (M14) | **Under the selection's shared parent**, or their nearest common ancestor when the parents differ, in the first object's place among its siblings. Offered only when the selection lies in one model | Proposed as recommended. Chosen over always the model's top level. |
 | D186 | Names (M14) | **Copies keep their names**, as STEP's instances of one part share theirs; a new assembly is "Assembly 1", "Assembly 2" and so on (the next number free in its model), and its name opens for editing at once, as Explorer's New folder: Enter keeps what's typed, Esc keeps the default | Proposed as recommended. Chosen over numbered copies ("Bolt (2)"), and over renaming new assemblies only with F2. |
 | D187 | Edits by mode (M14) | **Object mode edits; Model mode only deletes**: in Model mode Delete removes the selected models after the confirmation (D29), and Cut, Copy, Paste, New assembly, Ungroup and Rename aren't offered; Feature mode offers no edits | Proposed as recommended. There's no copying between models (§1), and Model mode selects no tree nodes. Chosen over duplicating models on Copy and Paste (an import again, R20), and over no edits in Model mode. |
+| D188 | Shared definitions in STEP (M15, D165) | **Kept shared, split where edited**: a sub-assembly or part whose subtree has no edits (no moves inside it, copies, deletions, renames, expands or hidden parts, D194) still references its original definition, so the plant's six robots stay one definition placed six times; an edited occurrence gets a definition of its own. Part geometry is reused either way. A model with no edits and nothing hidden writes its file's document as before (M9) | Proposed as recommended. Chosen over every assembly written unique (an edited plant opening elsewhere as six robot definitions), and over copies made in J3D that are still identical sharing their original's definition. |
+| D189 | Expand's scope (M15, D154) | **Only the occurrence picked**: Expand splits that one occurrence of a compound part, as an edit in J3D's tree (the new parts are added nodes, so undo and a refresh work as other edits, R25), and Expand all splits every occurrence in the model. On STEP export the expanded occurrence gets a definition of its own, which OCCT's `XCAFDoc_Editor::Expand` splits | Proposed as recommended; follows D165. `XCAFDoc_Editor::Expand` acts on a part's definition, so on the file's document it would split every instance and renumber the tree that kept edits are recorded against. Chosen over expanding every instance of the definition. |
+| D190 | Expand's depth (M15, D154) | **Down to solids**: a compound nested in the part becomes a nested sub-assembly in turn (OCCT's recursive Expand) and each solid becomes a part; loose shells, faces or wires in a compound each become a part; a solid is never split into faces. Offered only on a part whose shape has two or more pieces | Proposed as recommended. Chosen over one level per Expand, and over solids only, flattened, with other pieces dropped. |
+| D191 | Expanded parts' names (M15, D154) | **The part's name and a number**: expanding "Bracket set" gives "Bracket set 1", "Bracket set 2" and so on in the file's order, unless the file names the sub-shapes, whose names and colours are kept; the expanded node keeps its name as an assembly | Proposed as recommended. Chosen over names by shape type ("Solid 1") and over leaving them unnamed. |
+| D192 | Where a selection's STEP and BREP are (M15, D155) | **The toolbar's Export menu, when they apply**: STEP and BREP appear under a divider below GLB and STL only while the selection is objects in one BREP model, and the context menu's Export offers the same; in Model mode, with one BREP model selected, they write that whole model; Feature mode doesn't offer them | Proposed as recommended. Chosen over always listing them, disabled with a reason, and over the context menu only. |
+| D193 | A selection's file name (M15, D128) | **The model's name**, as D128 gives a GLB of a selection in one model: `bracket.step` | The owner's choice, over `bracket selection.step` (recommended, so it can't be taken for the whole model's export) and over `selection.step`. |
+| D194 | Hidden parts in STEP and BREP (M15) | **Left out**: a model's STEP and BREP write what's shown, as GLB and STL do, and a selection never holds hidden parts (D98). Hiding counts as an edit for D188: a model with nothing hidden and no edits writes its file's document as before; once anything is hidden it's rebuilt, a sub-assembly with a hidden part inside getting a definition of its own | The owner's choice, over including them (recommended: hiding is a view setting, not an edit). **Amends D86** ("as imported"). Then, proposed as recommended: hiding counts as an edit, over leaving out hidden parts only from edited models. |
+| D195 | Empty assemblies in exports (M15) | **Left out**: an assembly with nothing exported under it isn't written, as D181 removes emptied ones; a model with everything hidden has nothing to export, and the export says so | Proposed as recommended. Chosen over keeping them, empty. |
+| D196 | The edited BREP's layout (M15) | **Nested, like the tree**: each assembly is a compound of its children at their placements and each part its shape placed, shared definitions staying shared as in STEP (D188); BREP holds no names or colours | Proposed as recommended. Chosen over one flat compound of every part at its world placement. |
 
 ---
 
@@ -1039,7 +1048,7 @@ Branch `feature/m13-moving`, from `main` at `fe9b5d9`. Decided at its start: D16
 
 Between M13 and M14, after `PRODUCT.md` and `DESIGN.md` were written ([JRB-90/j3d#18](https://github.com/JRB-90/j3d/pull/18), `9e94856`) and an Impeccable critique scored the app 27/40 (D172). Decided: D172–D179. The toolbar in five labelled groups, the projection switch under the view cube, sentence case and square corners, the panel's grouped and numbered rows, the Move fields' heading and Apply, the empty view's hint, and confirmations that focus Cancel (§6.4).
 
-### M14 — Assembly editing
+### M14 — Assembly editing ✅ ([JRB-90/j3d#20](https://github.com/JRB-90/j3d/pull/20), squash-merged as `2f8a9fe`)
 
 Branch `feature/m14-assembly-editing`, from `main` at `4c66824`. Decided at its start: D180–D187.
 
@@ -1058,6 +1067,8 @@ Branch `feature/m14-assembly-editing`, from `main` at `4c66824`. Decided at its 
 - **Tests:** viewer Vitest 213 (`structure.test.ts`, BREP and mesh edits and their undo, the store's edits, a restore whose edits don't fit, the edited export, the keys); client bUnit 233 (`EditStateTests` 15, `EditUiTests` 7, `ModelTreeTests` +4); E2E 92 with `EditTests` (6: copy and paste, New assembly from the menu with its name typed, tree drags onto an assembly and the model's name, edits kept across a reload, the GLB of an edited scene, a mesh copy kept). Locally: Chromium 90 passed and Firefox in Docker 90 passed, the opt-in large-file and stress tests skipped in each.
 
 ### M15 — Exporting edits, and Expand
+
+Branch `feature/m15-exporting-edits`, from `main` at `2f8a9fe`. Decided at its start: D188–D196.
 
 - **Facade (a WASM rebuild):** the edits applied to the model's XCAF document, or a new document built from J3D's tree, for STEP and BREP (D145); a document of the selection with its assembly path (D155); `XCAFDoc_Editor::Expand` on the chosen parts, with the new parts' meshes extracted and sent to the viewer (D154). The size change recorded in §6.1, as R19.
 - **Viewer and Blazor:** STEP and BREP in the Export menu for a selection in one BREP model; Expand and Expand all as edits.
