@@ -18,7 +18,7 @@ drawing all happen in the browser tab.
   sub-assemblies), and **Feature** the faces, edges and vertices of CAD models. Selected parts are highlighted in
   blue, named in a panel at the bottom left, and shown in the tree; selected features are listed in the panel with
   their values, and with the total length or area of several. What's under the pointer is highlighted faintly
-  before you click.
+  before you click. The tree also works from the keyboard, as a screen reader expects (see **Controls**).
 - **Move** a part, a sub-assembly (picked in the tree) or a whole model (in Model mode): turn on **Move** (or press
   `W`) to drag the arrows and planes of a triad at the object's origin, or press `E` for its rings to turn it; hold
   `Ctrl` to snap to whole millimetres and 15°. The panel shows the object's position (X, Y, Z in mm) and turn (Rx,
@@ -39,8 +39,9 @@ drawing all happen in the browser tab.
 - **Expand** a CAD part that holds several solids (a compound, such as a bolt set saved as one part): right-click it
   and choose **Expand**, and it becomes a sub-assembly with one part per solid, keeping the names and colours the
   file gives them (others are numbered after the part: "Bolt set 1", "Bolt set 2"). **Expand all** does the same for
-  every such part in the selected assemblies or models. Only the one you picked is split, not every copy of it, and
-  it's an edit like the others: it can be undone, is kept, and is exported.
+  every such part in the selected assemblies or models, saying "Expanding n parts…" in the model's item while it
+  works. Only the one you picked is split, not every copy of it, and it's an edit like the others: it can be undone,
+  is kept, and is exported.
 - **Right-click** a part, a tree node or empty space (a click that doesn't drag) for a menu of what you can do there:
   hide, isolate, move, measure from that point, edit and export the selection, or show all, fit all, paste and export
   the scene. Each command shows its key; `Esc` closes the menu.
@@ -59,7 +60,8 @@ drawing all happen in the browser tab.
 - **Your models are kept** for your next visit: each imported file (with its buffers, materials and textures) is
   copied into the browser's private storage for this page, and when you come back the models are imported again in
   their order, with the parts you hid still hidden, the parts you moved where you put them, your edits to their
-  assemblies, and the camera where you left it. **Clear all**, above the list,
+  assemblies ("Applying your edits" in the list while they're redone), and the camera where you left it. If a kept
+  model can't be read one time, J3D says so and keeps it for the next. **Clear all**, above the list,
   removes every model and everything kept. Only one tab keeps models: a second J3D tab says so and keeps nothing.
 - **Export** what you see: the toolbar's **Export** saves every visible part, or only the selection when there is one,
   as **GLB** (with colours, the tree and the BREP edges) or **STL** (binary or ASCII, one uncoloured mesh). A CAD
@@ -107,6 +109,8 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Select | Click it (a click that doesn't drag) | Tap it | Click a node in the tree selects every part under it (its model in Model mode) |
 | Add or remove | Ctrl+click | | Ctrl+click in the tree |
 | Clear the selection | Click empty space | Tap empty space | `Esc` |
+| Move through the tree | | | Click a node, then `↑` `↓`; `→` opens a node, then goes to its first child; `←` closes it, then goes to its parent; `Home`, `End` |
+| Select from the tree by key | | | `Enter` or `Space` selects the focused node; with `Ctrl`, adds or removes it |
 | Commands for what's under the pointer | Right-click (a click that doesn't drag) | | Right-click a node in the tree |
 | Hide the selection | | | **Hide** in the toolbar, or `H`; or a node's eye in the tree |
 | Show only the selection | | | **Isolate**, or `I` |
@@ -142,6 +146,8 @@ and so do models coming back from your last visit or an undo.
 - Kept models come back by being imported again, so a large file takes as long to return (after a refresh, or when
   its delete is undone) as it took to import: about 30 seconds for a 200 MB STEP. Selections, measurements and the
   undo history aren't kept across a refresh, and a measurement lasts only until the next click or `Esc`.
+- In testing, Firefox held on to some memory from each reload of J3D in the same tab, more with large models, until the
+  tab was closed. After many reloads, close the tab and open J3D in a new one; your models are kept.
 - Kept files count against the browser's storage for the page. When it's full, a model stays open for the visit and
   its list item says it wasn't kept. Browsers may also clear the storage of sites you haven't used for a while unless
   they grant it persistent storage, which J3D asks for (Firefox shows a prompt; Chrome decides by itself).
@@ -157,6 +163,11 @@ and so do models coming back from your last visit or an undo.
   placement (and the model's, if you moved it) in its children. Objects can't be moved or copied from one model to
   another, and a model whose kept edits no longer fit it (if a new version of J3D reads its file differently) comes
   back as imported, with a warning in the list.
+- Expanding a part that the file places many times makes each expanded occurrence a copy of its own in an exported
+  STEP, so Expand all on a large assembly makes a much larger file: the generated 10,000-part plant's grows from
+  1.8 MB to about 15 MB. On that plant, selecting, moving and editing take 0.05–0.2 seconds on a laptop, Expand all of
+  its 840 compound parts about 0.7 seconds (with "Expanding" in its item), and coming back after a refresh 2.5
+  seconds.
 - Not in this version yet: sections, exploded views, and a phone or tablet layout.
 
 ## Browsers

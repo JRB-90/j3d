@@ -94,7 +94,8 @@ BROWSER=chromium dotnet test --project tests/J3D.E2E.Tests --filter-class "*Mode
 - `HEADED=1` shows the browser. Firefox in CI runs headed under `xvfb-run` and one test class at a time (decision D51).
 - A failed pixel check saves the screenshots it sampled under the test output's `screenshots/` folder.
 - `J3D_STRESS=50` runs the opt-in `StressTests` for that many rounds: a measurement, then a model's Delete, which must
-  open its dialog every time (decision D140).
+  open its dialog every time (decision D140); and pasting into the expanded `plant.step` then reloading, every other
+  round at once, perhaps while the store is writing, after which the kept model must come back (D200).
 - Safari isn't supported, so Playwright's WebKit isn't tested (D137, D138).
 
 ### Firefox in Docker
@@ -142,6 +143,23 @@ each loaded file as STEP and BREP, after cancelling a STEP export part-way, and 
 
 ```bash
 J3D_LARGE_FIXTURES=200,curved-100 npm test --workspace @j3d/occt -- large
+```
+
+The two assemblies, the generated `plant-10000` (10,122 parts, D161) and the real `so101` arm (D160), are made the same
+way (`npm run fixtures:large -- plant-10000 so101`; see `tests/fixtures/README.md`). On them `LargeModelTests` also
+edits the model (D201): a click in each selection mode, typed moves of the model and of the tree's first
+sub-assembly with their undo, pasting, deleting and undoing a copy of it, Expand all with its undo and redo, the
+edited STEP (imported again, every part counted) and BREP, and a reload, after which the model must come back with
+its edits. It reports each step's time and longest task but asserts only what the step did:
+
+```bash
+J3D_LARGE_FIXTURES=plant-10000,so101 dotnet test --project tests/J3D.E2E.Tests --filter-class "*LargeModelTests" --output Detailed
+```
+
+CI runs it only when dispatched with `large_fixtures` (§9 of the plan):
+
+```bash
+gh workflow run ci.yml --ref <branch> -f large_fixtures=plant-10000,so101
 ```
 
 ### Threading benchmark
