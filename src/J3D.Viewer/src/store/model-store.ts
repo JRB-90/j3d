@@ -2,7 +2,8 @@ import { hasEdits, type ModelEdits } from '../edit/structure';
 import { basename, type BatchFile } from '../import/sidecars';
 import type { KeptPlacement, ModelId, ModelSummary } from '../import/types';
 import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol';
-import type { CameraSnapshot, Manifest, StoredMeta, StoredScene, StoreStatus } from './types';
+import type { OpenedStore } from './store-ops';
+import type { CameraSnapshot, KeptEdits, ManifestModel, StoredMeta, StoredScene, StoreStatus } from './types';
 
 /** The store worker, or a stand-in for tests. */
 export interface StoreWorker {
@@ -44,6 +45,8 @@ export class StoreFailure extends Error {
  * §6.2): each loaded model's files and the sidecars it used (D113), and a manifest of the kept
  * models in list order, their hidden parts and the camera, written a moment after each change.
  * Only the tab holding the Web Lock keeps anything (D109); a store worker does the writing (D112).
+ * Since M16 each model's moves and edits are written to its own files, only when they change (D205),
+ * and a listed model the store couldn't read stays listed for the next visit (D200).
  */
 export class ModelStore {
   /** What was stored when the page opened. Settles once; never rejects. */
@@ -64,6 +67,12 @@ export class ModelStore {
   private readonly complete = new Set<ModelId>();
   /** Models being copied; a delete meanwhile takes them out, so the finished copy isn't listed. */
   private readonly saving = new Set<ModelId>();
+  /** Models whose moves or edits changed since their files were written (D205). */
+  private readonly changedEdits = new Set<ModelId>();
+  /** Listed models the store couldn't read when it opened, listed again in each manifest (D200). */
+  private unreadable: ManifestModel[] = [];
+  /** A failed manifest write is tried once more (D200). */
+  private manifestRetried = false;
   private camera: CameraSnapshot | null = null;
   private manifestTimer: ReturnType<typeof setTimeout> | undefined;
   private releaseLock: (() => void) | undefined;
@@ -74,7 +83,7 @@ export class ModelStore {
     this.opened = this.open().catch((error: unknown) => {
       console.info("J3D: this browser can't keep models between visits.", error);
       this.close();
-      return { status: 'unavailable', models: [], camera: null };
+      return { status: 'unavailable', models: [], camera: null, unreadable: 0 };
     });
   }
 
@@ -112,6 +121,10 @@ export class ModelStore {
       return 'kept'; // deleted while it was being copied; the delete followed the copy
     }
     this.complete.add(summary.id);
+    // Moves or edits made while it was copied go to its files now.
+    if (this.placements.has(summary.id) || this.edits.has(summary.id)) {
+      this.changedEdits.add(summary.id);
+    }
     this.scheduleManifest();
     return 'kept';
   }
@@ -134,6 +147,7 @@ export class ModelStore {
     this.hidden.delete(id);
     this.placements.delete(id);
     this.edits.delete(id);
+    this.changedEdits.delete(id);
     if (this.status === 'kept') {
       this.request({ type: 'delete', id }).catch((error: unknown) => console.warn('J3D: a kept model could not be deleted.', error));
       if (listed) {
@@ -149,6 +163,8 @@ export class ModelStore {
     this.hidden.clear();
     this.placements.clear();
     this.edits.clear();
+    this.changedEdits.clear();
+    this.unreadable = [];
     this.order = [];
     clearTimeout(this.manifestTimer);
     this.manifestTimer = undefined;
@@ -183,9 +199,7 @@ export class ModelStore {
       this.placements.set(id, moved);
     }
     moved.set(node, [...matrix]);
-    if (this.complete.has(id)) {
-      this.scheduleManifest();
-    }
+    this.editsChanged(id);
   }
 
   /** A model's kept moves, to apply when it's imported again. */
@@ -200,9 +214,7 @@ export class ModelStore {
     } else if (!this.edits.delete(id)) {
       return;
     }
-    if (this.complete.has(id)) {
-      this.scheduleManifest();
-    }
+    this.editsChanged(id);
   }
 
   /** A model's kept edits, to apply when it's imported again. */
@@ -214,7 +226,15 @@ export class ModelStore {
   forgetEdits(id: ModelId): void {
     const edited = this.edits.delete(id);
     const moved = this.placements.delete(id);
-    if ((edited || moved) && this.complete.has(id)) {
+    if (edited || moved) {
+      this.editsChanged(id);
+    }
+  }
+
+  /** A kept model's moves or edits changed: its files are written with the next manifest (D205). */
+  private editsChanged(id: ModelId): void {
+    if (this.complete.has(id)) {
+      this.changedEdits.add(id);
       this.scheduleManifest();
     }
   }
@@ -255,26 +275,32 @@ export class ModelStore {
   private async open(): Promise<StoredScene> {
     if (!(await this.acquire())) {
       this.status = 'otherTab';
-      return { status: 'otherTab', models: [], camera: null };
+      return { status: 'otherTab', models: [], camera: null, unreadable: 0 };
     }
     if (this.disposed) {
       this.close();
-      return { status: 'unavailable', models: [], camera: null };
+      return { status: 'unavailable', models: [], camera: null, unreadable: 0 };
     }
     const worker = (this.options.createWorker ?? createStoreWorker)();
     worker.onmessage = ({ data }) => this.answer(data);
     this.worker = worker;
 
-    const { manifest, metas } = await this.request<{ manifest: Manifest | null; metas: Record<ModelId, StoredMeta> }>({ type: 'open' });
+    const { manifest, metas, edits, unreadable } = await this.request<OpenedStore>({ type: 'open' });
     this.status = 'kept';
-    const models = (manifest?.models ?? []).map(({ id, hidden, placements, edits }) => {
+    this.unreadable = unreadable;
+    const models = (manifest?.models ?? []).map(({ id, hidden }) => {
       this.complete.add(id);
       this.hidden.set(id, hidden);
-      if (placements?.length) {
-        this.placements.set(id, new Map(placements.map(({ node, matrix }) => [node, matrix])));
+      const kept = edits[id];
+      if (kept?.placements.length) {
+        this.placements.set(id, new Map(kept.placements.map(({ node, matrix }) => [node, matrix])));
       }
-      if (hasEdits(edits)) {
-        this.edits.set(id, edits);
+      if (hasEdits(kept?.edits)) {
+        this.edits.set(id, kept.edits!);
+      }
+      // A version 1 manifest held them: they move to the model's files with the next write (D205).
+      if (manifest?.version === 1 && kept) {
+        this.changedEdits.add(id);
       }
       return { summary: metas[id]!.summary, hidden };
     });
@@ -284,7 +310,10 @@ export class ModelStore {
       this.order = models.map(({ summary }) => summary.id);
     }
     this.camera = manifest?.camera ?? null;
-    return { status: 'kept', models, camera: this.camera };
+    if (this.changedEdits.size > 0) {
+      this.scheduleManifest();
+    }
+    return { status: 'kept', models, camera: this.camera, unreadable: unreadable.length };
   }
 
   /** Takes the store's lock if no other tab holds it, and keeps it until the store closes. */
@@ -347,19 +376,43 @@ export class ModelStore {
     this.manifestTimer = setTimeout(() => this.writeManifest(), this.options.manifestDelay ?? DefaultManifestDelay);
   }
 
+  /**
+   * Writes the changed models' moves and edits to their files, then the manifest (D205): the kept
+   * models in order with their hidden parts, then those the store couldn't read when it opened (D200),
+   * and the camera. A failed manifest is tried once more.
+   */
   private writeManifest(): void {
     clearTimeout(this.manifestTimer);
     this.manifestTimer = undefined;
-    const models = this.order
-      .filter((id) => this.complete.has(id))
-      .map((id) => {
-        const placements = this.placementsOf(id);
-        const edits = this.edits.get(id);
-        return { id, hidden: this.hidden.get(id) ?? [], ...(placements.length > 0 ? { placements } : {}), ...(edits ? { edits } : {}) };
-      });
-    this.request({ type: 'manifest', manifest: { version: 1, models, camera: this.camera } }).catch((error: unknown) =>
-      console.warn("J3D: the scene couldn't be kept.", error),
+    for (const id of this.changedEdits) {
+      if (this.complete.has(id)) {
+        this.request({ type: 'edits', id, kept: this.keptEditsOf(id) }).catch((error: unknown) =>
+          console.warn("J3D: a model's edits couldn't be kept.", error),
+        );
+      }
+    }
+    this.changedEdits.clear();
+    const models = [
+      ...this.order.filter((id) => this.complete.has(id)).map((id) => ({ id, hidden: this.hidden.get(id) ?? [] })),
+      ...this.unreadable,
+    ];
+    this.request({ type: 'manifest', manifest: { version: 2, models, camera: this.camera } }).then(
+      () => (this.manifestRetried = false),
+      (error: unknown) => {
+        console.warn("J3D: the scene couldn't be kept.", error);
+        if (!this.manifestRetried && !(error instanceof StoreFailure && error.full)) {
+          this.manifestRetried = true;
+          this.scheduleManifest();
+        }
+      },
     );
+  }
+
+  /** A model's moves and edits as its files keep them, or null when it has none. */
+  private keptEditsOf(id: ModelId): KeptEdits | null {
+    const placements = this.placementsOf(id);
+    const edits = this.edits.get(id);
+    return placements.length > 0 || edits ? { placements, ...(edits ? { edits } : {}) } : null;
   }
 
   private askToPersist(): void {

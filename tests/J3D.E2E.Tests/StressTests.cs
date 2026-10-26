@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Playwright;
 
 namespace J3D.E2E.Tests;
@@ -7,7 +8,8 @@ namespace J3D.E2E.Tests;
 /// M11 (D140): twice in M8's manual checklist, a model's Delete opened no dialog right after a
 /// measurement. On demand only: <c>J3D_STRESS=50</c> runs that many rounds of measuring across two
 /// models, then clicking Delete on the measured one, alternately while the measurement is still being
-/// worked out and once it's shown, and expects the dialog every time.
+/// worked out and once it's shown, and expects the dialog every time. Since M16 (D200) as many rounds
+/// of editing a kept model and reloading, half of them at once.
 /// </summary>
 public sealed class StressTests(J3DAppFixture app) : ViewerPageTest(app)
 {
@@ -68,4 +70,68 @@ public sealed class StressTests(J3DAppFixture app) : ViewerPageTest(app)
         Assert.Equal(2, (await ModelsAsync()).Count);
         AssertNoConsoleErrors();
     }
+
+    /// <summary>
+    /// M16 (D200): once in M16's timings a kept model was gone after a reload, its copy deleted. The
+    /// plant is expanded (large edits, kept in the model's own files since D205), then each round pastes
+    /// a copy of a part and reloads, every other round at once, perhaps while the store is writing. The
+    /// model must come back every time, with at least the parts it had before the last paste.
+    /// </summary>
+    [Fact]
+    public async Task A_kept_model_comes_back_after_every_reload_whatever_was_being_written()
+    {
+        Assert.SkipUnless(int.TryParse(Rounds, out var rounds) && rounds > 0, "Set J3D_STRESS to a number of rounds (e.g. 50).");
+
+        await ImportWithToolbarAsync("plant.step");
+        var id = Assert.Single(await WaitForImportsAsync(1)).Id;
+        await Page.GetByTestId("model-tree-toggle").ClickAsync();
+        await Page.GetByTestId("model-tree-node").First.Locator(".j3d-tree-node-name").ClickAsync(new() { Button = MouseButton.Right });
+        await Page.GetByTestId("context-expand-all").ClickAsync();
+        await Page.WaitForFunctionAsync("id => window.__j3dTest.partState(id).parts.length > 146", id, new() { Timeout = 30_000 });
+        var parts = await PartCountAsync(id);
+        var stopwatch = Stopwatch.StartNew();
+
+        for (var round = 1; round <= rounds; round++)
+        {
+            await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
+            var found = await Page.EvaluateAsync<JsonElement>(
+                "id => { const s = window.__j3dTest.partState(id); for (const node of s.parts) { const p = window.__j3dTest.partPoint(id, node); if (p) return p; } return null; }",
+                id);
+            var point = found.ValueKind == JsonValueKind.Object ? found.Deserialize<ScreenPoint>(Json) : null;
+            Assert.True(point is not null, $"round {round}: no part in view");
+            await Page.Mouse.ClickAsync((float)point.X, (float)point.Y);
+            await Page.WaitForFunctionAsync("id => window.__j3dTest.partState(id).selected.length === 1", id);
+            await Page.Keyboard.PressAsync("Control+c");
+            await Page.Keyboard.PressAsync("Control+v");
+            await Page.WaitForFunctionAsync("([id, parts]) => window.__j3dTest.partState(id).parts.length === parts + 1", new object[] { id, parts });
+            if (round % 2 == 0)
+            {
+                await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
+            }
+
+            await Page.ReloadAsync();
+            await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+            try
+            {
+                await Page.WaitForFunctionAsync(
+                    "id => window.__j3dTest.models().some(m => m.id === id && m.status === 'loaded') && window.__j3dTest.partState(id)",
+                    id,
+                    new() { Timeout = 30_000 });
+            }
+            catch (TimeoutException)
+            {
+                var state = await Page.EvaluateAsync<string>("() => JSON.stringify({ models: window.__j3dTest.models().map(m => [m.id, m.status]), store: window.__j3dTest.store() })");
+                Assert.Fail($"round {round}: the model didn't come back after the reload: {state}");
+            }
+
+            var now = await PartCountAsync(id);
+            Assert.True(round % 2 == 0 ? now == parts + 1 : now >= parts, $"round {round}: {now} parts after the reload, {parts} before the paste");
+            parts = now;
+        }
+
+        TestContext.Current.TestOutputHelper?.WriteLine($"{BrowserName}: {rounds} reloads in {stopwatch.Elapsed.TotalSeconds:F0} s, ending with {parts} parts");
+        AssertNoConsoleErrors();
+    }
+
+    private Task<int> PartCountAsync(string id) => Page.EvaluateAsync<int>("id => window.__j3dTest.partState(id).parts.length", id);
 }

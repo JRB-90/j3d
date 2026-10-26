@@ -17,9 +17,10 @@ public enum StoreStatus
 /// <summary>
 /// What the viewer's store held when the page opened (M8, D82; mirrors <c>StoredScene</c> in
 /// src/J3D.Viewer/src/store/types.ts): the kept models in list order, with their hidden parts, and the
-/// camera, which the viewer has already put back (D111). Only its projection matters here.
+/// camera, which the viewer has already put back (D111). Only its projection matters here. Since M16,
+/// how many kept models couldn't be read this time: they stay kept for the next visit (D200).
 /// </summary>
-public sealed record StoredScene(StoreStatus Status, IReadOnlyList<StoredModel> Models, StoredCamera? Camera)
+public sealed record StoredScene(StoreStatus Status, IReadOnlyList<StoredModel> Models, StoredCamera? Camera, int Unreadable = 0)
 {
     public static StoredScene Empty { get; } = new(StoreStatus.Kept, [], null);
 }

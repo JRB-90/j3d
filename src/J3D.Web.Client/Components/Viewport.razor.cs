@@ -345,6 +345,17 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
                 break;
         }
 
+        // A kept model the store couldn't read stays kept, for the next visit (D200).
+        if (stored.Unreadable > 0)
+        {
+            snackbar.Add(
+                stored.Unreadable == 1
+                    ? "A kept model couldn't be read this time. It's still kept, and J3D will try it again next time."
+                    : $"{stored.Unreadable} kept models couldn't be read this time. They're still kept, and J3D will try them again next time.",
+                Severity.Warning,
+                static options => options.VisibleStateDuration = 10_000);
+        }
+
         scene.Restore(stored.Models);
     }
 

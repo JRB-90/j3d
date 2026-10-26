@@ -216,6 +216,20 @@ public sealed class ViewportTests : BunitTestBase
         Assert.Equal(Projection.Orthographic, Session.Projection);
     }
 
+    [Theory]
+    [InlineData(1, "A kept model couldn't be read this time. It's still kept, and J3D will try it again next time.")]
+    [InlineData(2, "2 kept models couldn't be read this time. They're still kept, and J3D will try them again next time.")]
+    public async Task Says_when_kept_models_couldnt_be_read(int unreadable, string message)
+    {
+        // M16 (D200): the store keeps them for the next visit rather than deleting them.
+        _restoreScene.SetResult(StoredScene.Empty with { Unreadable = unreadable });
+        var cut = Render<Viewport>();
+
+        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
+
+        cut.WaitForAssertion(() => Assert.Equal((message, Severity.Warning), (Assert.Single(Snackbars.ShownSnackbars).Message, Assert.Single(Snackbars.ShownSnackbars).Severity)));
+    }
+
     [Fact]
     public async Task Has_the_viewer_delete_restore_forget_and_clear_models_as_the_scene_asks()
     {

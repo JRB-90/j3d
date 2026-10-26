@@ -12,6 +12,8 @@ export class FakeDisk {
   closed = 0;
   /** The size of each write, in order. */
   readonly writes: number[] = [];
+  /** How many of the next writes stop half-way with room to spare, as one did in M16 (D200). */
+  shortWrites = 0;
 
   constructor(
     public limit = Infinity,
@@ -124,7 +126,11 @@ export class FakeFileHandle implements FileHandle {
         if (buffer.byteLength > room && this.disk.fullWrites === 'throw') {
           throw new DOMException('Quota exceeded.', 'QuotaExceededError');
         }
-        const written = Math.max(0, Math.min(buffer.byteLength, room));
+        let written = Math.max(0, Math.min(buffer.byteLength, room));
+        if (this.disk.shortWrites > 0) {
+          this.disk.shortWrites--;
+          written = Math.floor(written / 2);
+        }
         const data = new Uint8Array(Math.max(this.data.byteLength, at + written));
         data.set(this.data);
         data.set(buffer.subarray(0, written), at);
