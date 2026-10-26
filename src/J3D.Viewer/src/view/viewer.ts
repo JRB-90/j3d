@@ -1163,6 +1163,7 @@ export class Viewer {
     this.viewCube.dispose();
     this.environment.dispose();
     this.renderer.dispose();
+    this.renderer.forceContextLoss(); // its buffers go now, not when the canvas is collected
     this.renderer.domElement.remove();
   }
 

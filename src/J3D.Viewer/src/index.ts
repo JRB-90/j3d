@@ -209,8 +209,18 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   const unsubscribeDotnet = forwardModelEvents(models, dotnet);
   // STEP and BREP exports in progress, by model (M9).
   const exports = new Map<ModelId, AbortController>();
-  const flushStore = () => store.flush();
-  window.addEventListener('pagehide', flushStore);
+  // A page kept for going back only writes what's waiting; one going for good also gives back its
+  // WebGL context and workers at once. Firefox kept each reloaded page's viewer, context and all,
+  // until 25 reloads of the expanded plant ran out of memory (M16).
+  let disposed = false;
+  const onPageHide = (event: PageTransitionEvent) => {
+    if (event.persisted) {
+      store.flush();
+    } else {
+      handle.dispose();
+    }
+  };
+  window.addEventListener('pagehide', onPageHide);
 
   const inputs = new Map<HTMLInputElement, () => void>();
   const attachFileInput = (input: HTMLInputElement): (() => void) => {
@@ -243,7 +253,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   host.dataset['viewerReady'] = 'true';
   void dotnet.invokeMethodAsync('OnViewerReady', capabilities);
 
-  return {
+  const handle: ViewerHandle = {
     attachFileInput(input) {
       attachFileInput(input);
     },
@@ -411,6 +421,11 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       exports.get(id)?.abort();
     },
     dispose() {
+      // Once only: a page going for good disposes it before .NET's component might.
+      if (disposed) {
+        return;
+      }
+      disposed = true;
       exports.forEach((controller) => controller.abort());
       removeTestHook?.();
       removeTreeDrag();
@@ -422,13 +437,14 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       unsubscribeView?.();
       unsubscribeStore();
       unsubscribeDotnet();
-      window.removeEventListener('pagehide', flushStore);
+      window.removeEventListener('pagehide', onPageHide);
       store.dispose();
       models.dispose();
       view?.dispose();
       delete host.dataset['viewerReady'];
     },
   };
+  return handle;
 }
 
 /** Copies a measurement value to the clipboard (M7, D87). */
