@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Playwright;
 
@@ -15,10 +16,64 @@ namespace J3D.E2E.Tests;
 /// <c>npm run fixtures:large -- 200 curved-100</c>, then run with
 /// <c>J3D_LARGE_FIXTURES=200,curved-100</c>; add <c>HEADED=1</c> to measure on the real GPU. Since M12
 /// also the generated plant (<c>plant-10000</c>, D161) and the real SO-101 arm (<c>so101</c>, D160).
+/// Since M16 (D201) those two assemblies are edited as well: selecting in each mode, typed moves,
+/// pasting, deleting and undoing, Expand all, the edited STEP and BREP, and a restore after a reload,
+/// each timed but only its outcome asserted.
 /// </summary>
 public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 {
     private static readonly string? Names = Environment.GetEnvironmentVariable("J3D_LARGE_FIXTURES");
+
+    /// <summary>Records the main thread's tasks over 50 ms, where the browser reports them.</summary>
+    private const string LongTaskLog =
+        """
+        () => {
+            window.__longTasks = [];
+            window.__longTaskObserver?.disconnect();
+            if (PerformanceObserver.supportedEntryTypes.includes('longtask')) {
+                window.__longTaskObserver = new PerformanceObserver((list) => window.__longTasks.push(...list.getEntries().map((e) => e.duration)));
+                window.__longTaskObserver.observe({ type: 'longtask' });
+            }
+        }
+        """;
+
+    /// <summary>The first part in view, as its node and a client point where it can be clicked.</summary>
+    private const string PartInView =
+        """
+        id => {
+            for (const node of window.__j3dTest.partState(id).parts) {
+                const point = window.__j3dTest.partPoint(id, node);
+                if (point) return { node, x: point.x, y: point.y };
+            }
+            return null;
+        }
+        """;
+
+    /// <summary>
+    /// The tree's root, its first sub-assembly among the first 20 children (plant's Line 1, whose row
+    /// is drawn once the root is open) or else the root itself, and how many parts that holds.
+    /// </summary>
+    private const string SubAssembly =
+        """
+        id => {
+            const tree = window.__j3dTest.models().find(m => m.id === id).tree;
+            const children = tree.map(() => []);
+            tree.forEach((n, i) => { if (n.parent >= 0) children[n.parent].push(i); });
+            const root = tree.findIndex(n => n.parent < 0);
+            const node = children[root].slice(0, 20).find(i => tree[i].prototype < 0) ?? root;
+            let parts = 0;
+            for (const stack = [node]; stack.length > 0;) {
+                const i = stack.pop();
+                if (tree[i].prototype >= 0) parts++;
+                stack.push(...children[i]);
+            }
+            return [root, node, parts];
+        }
+        """;
+
+    private const string PartsAre = "([id, parts]) => window.__j3dTest.partState(id).parts.length === parts";
+    private const string AllSelected = "([id, parts]) => window.__j3dTest.partState(id).selected.length === parts";
+    private const string PlacedAt = "([id, node, x]) => Math.abs(window.__j3dTest.placement(id, node).local[12] - x) < 1e-3";
 
     /// <summary>
     /// As scripts/generate-large-step.mjs names them: 200 is block copies, curved-100 curved parts,
@@ -60,6 +115,11 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
             if (model.Status == "failed")
             {
                 Assert.Equal("OutOfMemory", model.Error!.Code);
+            }
+            else if (name.StartsWith("plant-", StringComparison.Ordinal) || name == "so101")
+            {
+                TestContext.Current.TestOutputHelper?.WriteLine(
+                    $"{BrowserName} {fixture}, editing: {await EditAsync(model.Id, Path.GetFileName(fixture))}");
             }
 
             await RemoveAsync(model.Id); // free the heap before the next size
@@ -192,14 +252,242 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
             ? $"STEP cancelled {cancelling.Elapsed.TotalSeconds:F1} s after asking (longest task {Longest(await TakeLongTasksAsync())})"
             : $"STEP ended within 2 s, before the Cancel (longest task {Longest(await TakeLongTasksAsync())})";
 
-        var step = await DownloadAsync("step");
-        var brep = await DownloadAsync("brep");
+        var (step, _) = await DownloadAsync("step");
+        var (brep, _) = await DownloadAsync("brep");
         await Expect(item).ToHaveAttributeAsync("data-status", "loaded");
         return $"{cancelled}; {step}; {brep}";
     }
 
-    /// <summary>Exports the model and waits until the export ends, with its file's size or its failure.</summary>
-    private async Task<string> DownloadAsync(string format)
+    /// <summary>
+    /// Iteration 3 on an assembly (D201), each step timed from its click or key until the viewer shows
+    /// it, as a line for the test output. What each step does is asserted, not how long it takes: CI
+    /// draws in software. The edits it leaves (a move and Expand all) must come back after a reload.
+    /// </summary>
+    private async Task<string> EditAsync(string id, string fileName)
+    {
+        Assert.Equal("kept", await Page.EvaluateAsync<string>("async () => { await window.__j3dTest.storeIdle(); return window.__j3dTest.store().status; }"));
+        await Page.GetByTestId("home-button").ClickAsync();
+        await WaitForCameraRestAsync();
+        var parts = await PartCountAsync(id);
+        var selecting = await SelectInEachModeAsync(id, fileName, parts);
+
+        var found = await Page.EvaluateAsync<int[]>(SubAssembly, id);
+        var (root, node, count) = (found[0], found[1], found[2]);
+        var (editing, moved) = await EditSubAssemblyAsync(id, root, node, count, parts);
+        var (expanding, expanded) = await ExpandAllAsync(id, root, parts);
+        var exporting = await ExportEditedAsync(expanded);
+        var restoring = await RestoreAsync(id, node, moved, expanded);
+        return string.Join("; ", selecting, editing, expanding, exporting, restoring);
+    }
+
+    /// <summary>
+    /// A click on a part in Object mode, then <c>1</c>, a click in Model mode, a typed move of the whole
+    /// model and its undo, <c>2</c>, <c>3</c> and a click in Feature mode, back in Object mode at the end.
+    /// </summary>
+    private async Task<string> SelectInEachModeAsync(string id, string fileName, int parts)
+    {
+        var part = (await Page.EvaluateAsync<JsonElement>(PartInView, id)).Deserialize<PartPoint>(Json);
+        Assert.True(part is not null, "a part should be in view");
+        Task Click() => Page.Mouse.ClickAsync((float)part.X, (float)part.Y);
+        object[] all = [id, parts];
+
+        var objectClick = await TimedAsync(
+            Click, "([id, node]) => { const s = window.__j3dTest.partState(id).selected; return s.length === 1 && s[0] === node; }", new object[] { id, part.Node });
+        var modelKey = await TimedAsync(() => Page.Keyboard.PressAsync("1"), AllSelected, all);
+        await Page.Keyboard.PressAsync("Escape");
+        await Page.WaitForFunctionAsync("id => window.__j3dTest.partState(id).selected.length === 0", id);
+        var modelClick = await TimedAsync(Click, AllSelected, all);
+
+        // The whole model, by its own frame (D169), and back.
+        await Page.Keyboard.PressAsync("w");
+        await Expect(Page.GetByTestId("move-title")).ToHaveTextAsync(fileName);
+        await Page.GetByTestId("move-frame-world").ClickAsync();
+        var x = await LocalXAsync(id, -1);
+        var move = await TimedAsync(() => TypeAsync("move-x", x + 100), PlacedAt, new object[] { id, -1, x + 100 });
+        await Page.GetByTestId("move-x").BlurAsync(); // so the keys are the page's, not the field's
+        var undo = await TimedAsync(() => Page.Keyboard.PressAsync("Control+z"), PlacedAt, new object[] { id, -1, x });
+        await Page.Keyboard.PressAsync("Escape"); // ends the tool, keeping the selection
+
+        var objectKey = await TimedAsync(
+            () => Page.Keyboard.PressAsync("2"),
+            "([id, parts]) => document.querySelector('[data-testid=mode-object]').getAttribute('aria-pressed') === 'true' && window.__j3dTest.partState(id).selected.length === parts",
+            all);
+        var featureKey = await TimedAsync(
+            () => Page.Keyboard.PressAsync("3"), "() => document.querySelector('[data-testid=mode-feature]').getAttribute('aria-pressed') === 'true'");
+        var featureClick = await TimedAsync(Click, "() => window.__j3dTest.selectionState().features.length === 1");
+        await Page.Keyboard.PressAsync("Escape");
+        await Page.Keyboard.PressAsync("2");
+        await Expect(Page.GetByTestId("mode-object")).ToHaveAttributeAsync("aria-pressed", "true");
+
+        return $"a click on a part in Object mode {objectClick}; 1 (Model mode, all {parts} parts selected) {modelKey}; a click in Model mode {modelClick}; " +
+            $"a typed move of the model {move}, its undo {undo}; 2 {objectKey}; 3 {featureKey}; a click in Feature mode {featureClick}";
+    }
+
+    /// <summary>
+    /// Selects the sub-assembly from the tree, moves it by a typed value, undoes and redoes that (so it
+    /// stays moved), then pastes a copy, deletes it and undoes each. Returns the line and where it's moved to.
+    /// </summary>
+    private async Task<(string Line, double Moved)> EditSubAssemblyAsync(string id, int root, int node, int count, int parts)
+    {
+        var row = await TreeRowAsync(id, root, node);
+        var name = await row.InnerTextAsync();
+        var select = await TimedAsync(() => row.ClickAsync(), AllSelected, new object[] { id, count });
+
+        await Page.Keyboard.PressAsync("w");
+        await Expect(Page.GetByTestId("move-title")).ToHaveTextAsync(name);
+        await Page.GetByTestId("move-frame-parent").ClickAsync();
+        var x = await LocalXAsync(id, node);
+        var moved = Math.Round(x + 100, 3);
+        var move = await TimedAsync(() => TypeAsync("move-x", moved), PlacedAt, new object[] { id, node, moved });
+        await Page.GetByTestId("move-x").BlurAsync();
+        var undo = await TimedAsync(() => Page.Keyboard.PressAsync("Control+z"), PlacedAt, new object[] { id, node, x });
+        var redo = await TimedAsync(() => Page.Keyboard.PressAsync("Control+y"), PlacedAt, new object[] { id, node, moved });
+        await Page.Keyboard.PressAsync("Escape");
+
+        Task Press(string key) => Page.Keyboard.PressAsync(key);
+        await Press("Control+c");
+        var paste = await TimedAsync(() => Press("Control+v"), PartsAre, new object[] { id, parts + count });
+        var delete = await TimedAsync(() => Press("Delete"), PartsAre, new object[] { id, parts });
+        var undoDelete = await TimedAsync(() => Press("Control+z"), PartsAre, new object[] { id, parts + count });
+        var undoPaste = await TimedAsync(() => Press("Control+z"), PartsAre, new object[] { id, parts });
+
+        return ($"a click on {name} ({count} parts) in the tree {select}; a typed move of it {move}, its undo {undo} and redo {redo}; " +
+            $"pasting a copy of it {paste}, deleting that {delete}, undoing each {undoDelete} and {undoPaste}", moved);
+    }
+
+    /// <summary>
+    /// Expand all from the root's context menu (D197), its undo and its redo, so the model stays expanded.
+    /// Returns the line and the parts it has then; a model with no compound parts isn't offered it.
+    /// </summary>
+    private async Task<(string Line, int Parts)> ExpandAllAsync(string id, int root, int parts)
+    {
+        await (await TreeRowAsync(id, root, root)).ClickAsync(new() { Button = MouseButton.Right });
+        await Expect(Page.GetByTestId("context-isolate")).ToBeVisibleAsync();
+        var expandAll = Page.GetByTestId("context-expand-all");
+        if (await expandAll.CountAsync() == 0)
+        {
+            await Page.Keyboard.PressAsync("Escape");
+            return ("no compound parts, so no Expand all", parts);
+        }
+
+        var expand = await TimedAsync(
+            () => expandAll.ClickAsync(),
+            "([id, parts]) => window.__j3dTest.partState(id).parts.length > parts && !document.querySelector('[data-testid=model-expanding]')",
+            new object[] { id, parts },
+            10 * 60_000);
+        var expanded = await PartCountAsync(id);
+        var undo = await TimedAsync(() => Page.Keyboard.PressAsync("Control+z"), PartsAre, new object[] { id, parts });
+        var redo = await TimedAsync(() => Page.Keyboard.PressAsync("Control+y"), PartsAre, new object[] { id, expanded });
+        return ($"Expand all ({parts} parts into {expanded}) {expand}, its undo {undo} and redo {redo}", expanded);
+    }
+
+    /// <summary>The edited model as STEP, imported again with every part (R24), and as BREP.</summary>
+    private async Task<string> ExportEditedAsync(int parts)
+    {
+        var (step, file) = await DownloadAsync("step");
+        var (brep, _) = await DownloadAsync("brep");
+        if (file is null)
+        {
+            return $"edited {step}; edited {brep}"; // out of memory, which DownloadAsync checked
+        }
+
+        // The download is saved without its name, which the import needs for the format.
+        var folder = Directory.CreateTempSubdirectory("j3d-large-");
+        try
+        {
+            var path = Path.Combine(folder.FullName, file.SuggestedFilename);
+            await file.SaveAsAsync(path);
+            await Page.SetInputFilesAsync("[data-testid=j3d-test-input]", path);
+            await Page.WaitForFunctionAsync(
+                "() => { const models = window.__j3dTest.models(); return models.length === 2 && models.every(m => m.status === 'loaded' || m.status === 'failed'); }",
+                null,
+                new PageWaitForFunctionOptions { Timeout = 20 * 60_000, PollingInterval = 1000 });
+            var json = await Page.EvaluateAsync<JsonElement>("() => window.__j3dTest.models().map(({ tree, ...model }) => model)");
+            var again = json.Deserialize<TestModel[]>(Json)![1];
+            Assert.Equal("loaded", again.Status);
+            Assert.Equal(parts, again.Stats!.Instances);
+            await RemoveAsync(again.Id);
+            return $"edited {step}, imported again with its {parts} parts; edited {brep}";
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>Reloads, timed until the model is back with its parts; the moved sub-assembly must be where it was left.</summary>
+    private async Task<string> RestoreAsync(string id, int node, double moved, int parts)
+    {
+        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
+        await Page.AddInitScriptAsync($"({LongTaskLog})()"); // the restore's tasks, from the page's start
+        var stopwatch = Stopwatch.StartNew();
+        await Page.ReloadAsync();
+        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await Page.WaitForFunctionAsync(
+            "id => window.__j3dTest.models().some(m => m.id === id && (m.status === 'loaded' || m.status === 'failed')) && window.__j3dTest.partState(id)",
+            id,
+            new PageWaitForFunctionOptions { Timeout = 20 * 60_000, PollingInterval = 100 });
+        await Page.WaitForFunctionAsync(PartsAre, new object[] { id, parts }, new PageWaitForFunctionOptions { Timeout = 30_000, PollingInterval = 100 });
+        var elapsed = stopwatch.Elapsed;
+        var tasks = Longest(await TakeLongTasksAsync());
+
+        Assert.Equal(moved, await LocalXAsync(id, node), 3);
+        await Expect(Page.GetByTestId("model-item").GetByTestId("model-warnings")).ToHaveCountAsync(0);
+        return $"restored with its edits after a reload in {elapsed.TotalSeconds:F1} s (longest task {tasks})";
+    }
+
+    /// <summary>
+    /// A row's name in the model's tree, with the tree open, scrolled to its top (rows off screen aren't
+    /// drawn, D198) and the root opened if the row is under it.
+    /// </summary>
+    private async Task<ILocator> TreeRowAsync(string id, int root, int node)
+    {
+        if (await Page.GetByTestId("model-tree").CountAsync() == 0)
+        {
+            await Page.GetByTestId("model-tree-toggle").ClickAsync();
+        }
+
+        await Page.GetByTestId("model-tree").EvaluateAsync("tree => tree.scrollIntoView({ block: 'start' })");
+        var rootRow = Page.Locator($"[data-tree-node=\"{id}:{root}\"]");
+        if (node != root && await rootRow.GetAttributeAsync("aria-expanded") == "false")
+        {
+            await rootRow.GetByTestId("tree-node-toggle").ClickAsync();
+        }
+
+        return Page.Locator($"[data-tree-node=\"{id}:{node}\"] .j3d-tree-node-name");
+    }
+
+    /// <summary>
+    /// Does something, then waits until the page shows it's done (D63's method), as its time and the
+    /// longest task meanwhile.
+    /// </summary>
+    private async Task<string> TimedAsync(Func<Task> act, string done, object? arg = null, int timeout = 120_000)
+    {
+        await StartLongTaskLogAsync();
+        var stopwatch = Stopwatch.StartNew();
+        await act();
+        await Page.WaitForFunctionAsync(done, arg, new PageWaitForFunctionOptions { Timeout = timeout, PollingInterval = 20 });
+        var elapsed = stopwatch.Elapsed.TotalMilliseconds;
+        return $"{elapsed:F0} ms (longest task {Longest(await TakeLongTasksAsync())})";
+    }
+
+    /// <summary>Types a value in one of the Move fields and presses Enter.</summary>
+    private async Task TypeAsync(string field, double value)
+    {
+        await Page.GetByTestId(field).FillAsync(value.ToString("0.###", CultureInfo.InvariantCulture));
+        await Page.GetByTestId(field).PressAsync("Enter");
+    }
+
+    private Task<double> LocalXAsync(string id, int node) =>
+        Page.EvaluateAsync<double>("([id, node]) => window.__j3dTest.placement(id, node).local[12]", new object[] { id, node });
+
+    private Task<int> PartCountAsync(string id) => Page.EvaluateAsync<int>("id => window.__j3dTest.partState(id).parts.length", id);
+
+    /// <summary>
+    /// Exports the model and waits until the export ends, with its file's size or its failure as a line,
+    /// and the file when there is one.
+    /// </summary>
+    private async Task<(string Line, IDownload? File)> DownloadAsync(string format)
     {
         var downloaded = new TaskCompletionSource<IDownload>();
         void OnDownload(object? sender, IDownload download) => downloaded.TrySetResult(download);
@@ -218,13 +506,14 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
             // The browser reports the download a moment after the page has saved it.
             if (await Task.WhenAny(downloaded.Task, Task.Delay(10_000)) == downloaded.Task)
             {
-                var file = new FileInfo(await downloaded.Task.Result.PathAsync());
-                return $"{format.ToUpperInvariant()} of {file.Length / (1 << 20)} MB {elapsed} (longest task {tasks})";
+                var download = downloaded.Task.Result;
+                var file = new FileInfo(await download.PathAsync());
+                return ($"{format.ToUpperInvariant()} of {file.Length / (1 << 20)} MB {elapsed} (longest task {tasks})", download);
             }
 
             var error = Page.Locator(".mud-snackbar").Filter(new() { HasText = "Couldn't export" });
             await Expect(error).ToContainTextAsync("Out of memory");
-            return $"{format.ToUpperInvariant()} failed {elapsed} (longest task {tasks}): {await error.First.InnerTextAsync()}";
+            return ($"{format.ToUpperInvariant()} failed {elapsed} (longest task {tasks}): {await error.First.InnerTextAsync()}", null);
         }
         finally
         {
@@ -278,17 +567,7 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
     }
 
     /// <summary>Starts recording the main thread's tasks over 50 ms, where the browser reports them.</summary>
-    private async Task StartLongTaskLogAsync() => await Page.EvaluateAsync(
-        """
-        () => {
-            window.__longTasks = [];
-            window.__longTaskObserver?.disconnect();
-            if (PerformanceObserver.supportedEntryTypes.includes('longtask')) {
-                window.__longTaskObserver = new PerformanceObserver((list) => window.__longTasks.push(...list.getEntries().map((e) => e.duration)));
-                window.__longTaskObserver.observe({ type: 'longtask' });
-            }
-        }
-        """);
+    private async Task StartLongTaskLogAsync() => await Page.EvaluateAsync(LongTaskLog);
 
     /// <summary>The long tasks since the last call. Waits a moment first: the observer reports them asynchronously.</summary>
     private async Task<double[]?> TakeLongTasksAsync()
@@ -300,4 +579,6 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 
     private static string Longest(double[]? tasks) =>
         tasks is null ? "not reported" : tasks.Length == 0 ? "none over 50 ms" : $"{tasks.Max():F0} ms of {tasks.Length}";
+
+    private sealed record PartPoint(int Node, double X, double Y);
 }
