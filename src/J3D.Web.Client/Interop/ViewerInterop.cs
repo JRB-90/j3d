@@ -119,11 +119,15 @@ public sealed class ViewerInterop : IAsyncDisposable
         _viewer.InvokeAsync<ExportOutcome>("exportMesh", format, selection);
 
     /// <summary>
-    /// Saves a BREP model as imported, as STEP or BREP (D83). Its progress arrives through
-    /// <c>OnExportProgress</c> until it ends (D125).
+    /// Saves a BREP model as STEP or BREP (D83), as edited, or just its selection (M15, D145, D155). Its
+    /// progress arrives through <c>OnExportProgress</c> until it ends (D125).
     /// </summary>
-    public ValueTask<ExportOutcome> ExportModelAsync(ModelId id, BrepExportFormat format) =>
-        _viewer.InvokeAsync<ExportOutcome>("exportModel", id.Value, format);
+    public ValueTask<ExportOutcome> ExportModelAsync(ModelId id, BrepExportFormat format, bool selection = false) =>
+        _viewer.InvokeAsync<ExportOutcome>("exportModel", id.Value, format, selection);
+
+    /// <summary>Expands file parts of a BREP model in its worker (M15, D154): their pieces, for the edit.</summary>
+    public ValueTask<ExpandOutcome> ExpandPartsAsync(ModelId id, IReadOnlyList<int> fileNodes) =>
+        _viewer.InvokeAsync<ExpandOutcome>("expandParts", id.Value, fileNodes);
 
     /// <summary>Stops a model's STEP or BREP export, which then ends cancelled.</summary>
     public ValueTask CancelExportAsync(ModelId id) => _viewer.InvokeVoidAsync("cancelExport", id.Value);

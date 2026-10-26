@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TreeNode } from '../import/types';
-import { EditsMismatchError, hasEdits, ModelStructure, NoEdits, sameEdits, TopLevel, type ModelEdits } from './structure';
+import { EditsMismatchError, expandedFileNodes, hasEdits, ModelStructure, NoEdits, sameEdits, TopLevel, type ModelEdits } from './structure';
 
 /** root (0) › a (1, part) and sub (2) › b (3, part) and c (4, part); and a second root, d (5, part). */
 const tree: TreeNode[] = [
@@ -91,5 +91,93 @@ describe('ModelStructure (M14)', () => {
     expect(sameEdits(undefined, NoEdits)).toBe(true);
     expect(sameEdits(edits({ added: [1] }), edits({ added: [1] }))).toBe(true);
     expect(sameEdits(edits({ added: [1] }), edits({ added: [2] }))).toBe(false);
+    expect(sameEdits(edits({ added: [1] }), edits({ added: [1], pieces: [] }))).toBe(true); // edits kept before M15
+  });
+});
+
+describe('ModelStructure with Expand (M15)', () => {
+  const shift = (x: number) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1];
+  // Part d (5) expands into a sub-assembly (piece 0) of two solids (1, 2) and a third solid (3).
+  const expansions = new Map([
+    [
+      5,
+      [
+        { name: '', parent: -1, prototype: -1, matrix: shift(1) },
+        { name: 'Left', parent: 0, prototype: 3, matrix: shift(2) },
+        { name: '', parent: 0, prototype: 4, matrix: shift(3) },
+        { name: '', parent: -1, prototype: 4, matrix: shift(4) },
+      ],
+    ],
+  ]);
+  // d's assembly (6), then the pieces (7–10), in d's place at the top level.
+  const expanded = edits({
+    added: [-1, -1, -1, -1, -1],
+    children: [
+      { parent: TopLevel, nodes: [0, 6] },
+      { parent: 6, nodes: [7, 10] },
+      { parent: 7, nodes: [8, 9] },
+    ],
+    pieces: [
+      { node: 6, expands: 5, piece: -1, name: 'd', part: false },
+      { node: 7, expands: 5, piece: 0, name: 'd 1', part: false },
+      { node: 8, expands: 5, piece: 1, name: 'Left', part: true },
+      { node: 9, expands: 5, piece: 2, name: 'd 1 2', part: true },
+      { node: 10, expands: 5, piece: 3, name: 'd 2', part: true },
+    ],
+  });
+
+  it("puts an expanded part's pieces in its place, drawing the expansion's prototypes", () => {
+    const structure = new ModelStructure(tree, expanded, expansions);
+    expect(structure.isLive(5)).toBe(false);
+    expect(structure.order()).toEqual([0, 1, 2, 3, 4, 6, 7, 8, 9, 10]);
+    expect(structure.nodes.slice(6).map(({ name, prototype }) => [name, prototype])).toEqual([
+      ['d', -1],
+      ['d 1', -1],
+      ['Left', 3],
+      ['d 1 2', 4],
+      ['d 2', 4],
+    ]);
+    expect(structure.fileNodes.slice(6)).toEqual([-1, -1, -1, -1, -1]);
+    expect(structure.expansionOf(6)).toMatchObject({ expands: 5, piece: -1 });
+    // Each piece goes in its piece parent's frame, as the part has it.
+    expect(structure.pieceFrame(6)).toBeUndefined();
+    expect(structure.pieceFrame(7)).toEqual({ parent: 6, matrix: shift(1) });
+    expect(structure.pieceFrame(9)).toEqual({ parent: 7, matrix: shift(3) });
+    expect(structure.addedKey(9)).toBe('p5:2');
+    expect(structure.addedKey(6)).toBe('p5:-1');
+  });
+
+  it("names a piece's copy as the piece, and draws its prototype", () => {
+    const copied = edits({
+      ...expanded,
+      added: [...expanded.added, 9],
+      children: [...expanded.children.filter(({ parent }) => parent !== 6), { parent: 6, nodes: [7, 10, 11] }],
+    });
+    const structure = new ModelStructure(tree, copied, expansions);
+    expect(structure.nodes[11]).toEqual({ name: 'd 1 2', parent: 6, prototype: 4 });
+    expect(structure.addedKey(11)).toBe('c9');
+  });
+
+  it('needs the expansions of the parts it expands, in order of first use', () => {
+    expect(expandedFileNodes(tree.length, expanded)).toEqual([5]);
+    // A copy of d (6), expanded: its file part is d's.
+    expect(expandedFileNodes(tree.length, edits({ added: [5, -1], pieces: [{ node: 7, expands: 6, piece: -1, name: 'd', part: false }] }))).toEqual([5]);
+    expect(expandedFileNodes(tree.length, NoEdits)).toEqual([]);
+  });
+
+  it.each([
+    ['no expansion of the part', new Map()],
+    ['a piece the expansion lacks', new Map([[5, expansions.get(5)!.slice(0, 3)]])],
+    ['a part that is an assembly there', new Map([[5, expansions.get(5)!.map((piece, i) => (i === 1 ? { ...piece, prototype: -1 } : piece))]])],
+  ])('rejects %s (R25)', (_, wrong) => {
+    expect(() => new ModelStructure(tree, expanded, wrong)).toThrow(EditsMismatchError);
+  });
+
+  it.each([
+    ['a piece that is a copy', edits({ ...expanded, added: [-1, 5, -1, -1, -1] })],
+    ['a piece expanding a later node', edits({ ...expanded, pieces: [{ node: 6, expands: 8, piece: -1, name: 'd', part: false }] })],
+    ['an expanded assembly', edits({ added: [-1], pieces: [{ node: 6, expands: 2, piece: -1, name: 'sub', part: false }] })],
+  ])('rejects %s (R25)', (_, wrong) => {
+    expect(() => new ModelStructure(tree, wrong, expansions)).toThrow(EditsMismatchError);
   });
 });

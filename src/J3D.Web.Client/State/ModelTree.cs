@@ -18,11 +18,16 @@ public sealed partial class ModelTree
     /// <summary>The model's top level, as a parent.</summary>
     public const int TopLevel = -1;
 
+    /// <summary>The prototype of a piece Expand made that draws something (M15): the viewer knows its real one.</summary>
+    internal const int ExpandedPart = int.MaxValue;
+
     private readonly TreeColumns _file;
     private readonly int[] _parents;
     private readonly int[] _prototypes;
     private readonly int[] _sources;
     private readonly int[] _fileNodes;
+    private readonly string[] _addedNames;
+    private readonly HashSet<int> _expandable;
     private readonly Dictionary<int, IReadOnlyList<int>> _children = [];
     private readonly bool[] _live;
     private readonly List<int> _parts = [];
@@ -38,6 +43,8 @@ public sealed partial class ModelTree
         _prototypes = new int[count];
         _sources = new int[count];
         _fileNodes = new int[count];
+        _addedNames = new string[count - fileCount];
+        _expandable = [.. nodes.Expandable ?? []];
         _live = new bool[count];
         _partsUnder = new IReadOnlyList<int>?[count];
 
@@ -58,9 +65,20 @@ public sealed partial class ModelTree
             var node = fileCount + offset;
             var source = Edits.Added[offset];
             _sources[node] = source;
-            _fileNodes[node] = source >= 0 ? _fileNodes[source] : -1;
-            _prototypes[node] = source >= 0 ? _prototypes[source] : -1;
             _parents[node] = TopLevel;
+            if (Edits.Pieces.TryGetValue(node, out var piece))
+            {
+                // Expand's assembly and pieces (M15) draw nothing of the file's, and are named as Expand named them.
+                _fileNodes[node] = -1;
+                _prototypes[node] = piece.Part ? ExpandedPart : -1;
+                _addedNames[offset] = piece.Name;
+            }
+            else
+            {
+                _fileNodes[node] = source >= 0 ? _fileNodes[source] : -1;
+                _prototypes[node] = source >= 0 ? _prototypes[source] : -1;
+                _addedNames[offset] = source >= 0 ? DefaultNameOf(source) : "Assembly";
+            }
         }
 
         foreach (var (parent, list) in lists)
@@ -263,8 +281,17 @@ public sealed partial class ModelTree
     /// <summary>Starts an edit of this tree; its result is a new tree.</summary>
     public TreeEdit Edit() => new(this);
 
-    /// <summary>The name a node has without a rename: its file node's, or "Assembly" for a new assembly.</summary>
-    internal string DefaultNameOf(int index) => _fileNodes[index] is var file and >= 0 ? _file.Names[file] : "Assembly";
+    /// <summary>
+    /// A compound part Expand can split (M15, D189, D190): one of the file's, or a copy of one, in the model.
+    /// Expand's own pieces aren't, since it splits down to solids.
+    /// </summary>
+    public bool IsExpandable(int index) => IsPart(index) && _fileNodes[index] is var file and >= 0 && _expandable.Contains(file);
+
+    /// <summary>The file node a node draws as: itself, or the one it copies; -1 for new assemblies and Expand's nodes.</summary>
+    public int FileNodeOf(int index) => _fileNodes[index];
+
+    /// <summary>The name a node has without a rename: its file node's, a piece's as Expand named it, or "Assembly" for a new assembly.</summary>
+    internal string DefaultNameOf(int index) => index < FileCount ? _file.Names[index] : _addedNames[index - FileCount];
 
     internal int PrototypeOf(int index) => _prototypes[index];
 

@@ -6,11 +6,14 @@
 //
 // Pipeline: importFile (STEP/IGES/BREP -> XCAF document) -> mesh (BRepMesh per unique part)
 //           -> getSceneJson (assembly tree + instances) + extractPrototype(i) (geometry per part/style).
-// Later, on request: measureEntity/measurePair (M7) and exportFile (M9: STEP or BREP of the document).
+// Later, on request: measureEntity/measurePair (M7), exportFile (M9: STEP or BREP of the document),
+// expandNode (M15: a compound part's pieces, as new prototypes) and exportTree (M15: STEP or BREP of
+// J3D's edited tree, built into a new document).
 //
 // Addresses are returned as unsigned int: with MAXIMUM_MEMORY=4GB they can exceed INT_MAX.
 
 #include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_Copy.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
@@ -52,10 +55,14 @@
 #include <TCollection_AsciiString.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_LabelSequence.hxx>
+#include <TDF_TagSource.hxx>
 #include <TDF_Tool.hxx>
 #include <TDataStd_Name.hxx>
 #include <TDocStd_Document.hxx>
+#include <TopAbs.hxx>
 #include <TopExp.hxx>
+#include <TopoDS_Iterator.hxx>
+#include <NCollection_DataMap.hxx>
 #include <NCollection_IndexedDataMap.hxx>
 #include <NCollection_List.hxx>
 #include <TopTools_ShapeMapHasher.hxx>
@@ -65,8 +72,12 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 #include <XCAFApp_Application.hxx>
+#include <XCAFDoc_ColorTool.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
+#include <XCAFDoc_Editor.hxx>
+#include <XCAFDoc_LengthUnit.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
+#include <XCAFDoc_VisMaterial.hxx>
 #include <XCAFPrs_DocumentExplorer.hxx>
 #include <XCAFPrs_Style.hxx>
 
@@ -230,6 +241,82 @@ inline std::string styleKey(const XCAFPrs_Style& style) {
   std::snprintf(buffer, sizeof(buffer), "%.6f,%.6f,%.6f,%.6f", color.GetRGB().Red(), color.GetRGB().Green(),
                 color.GetRGB().Blue(), color.Alpha());
   return buffer;
+}
+
+inline bool sameColor(const Quantity_ColorRGBA& a, const Quantity_ColorRGBA& b) {
+  constexpr double tolerance = 1.0e-4;
+  return std::abs(a.GetRGB().Red() - b.GetRGB().Red()) < tolerance &&
+         std::abs(a.GetRGB().Green() - b.GetRGB().Green()) < tolerance &&
+         std::abs(a.GetRGB().Blue() - b.GetRGB().Blue()) < tolerance && std::abs(a.Alpha() - b.Alpha()) < tolerance;
+}
+
+/** Drawn alike: the same surface colour, or neither has one. */
+inline bool sameSurface(const XCAFPrs_Style& a, const XCAFPrs_Style& b) {
+  if (a.IsSetColorSurf() != b.IsSetColorSurf()) {
+    return false;
+  }
+  return !a.IsSetColorSurf() || sameColor(a.GetColorSurfRGBA(), b.GetColorSurfRGBA());
+}
+
+inline bool isIdentity(const gp_Trsf& trsf) {
+  for (int row = 1; row <= 3; ++row) {
+    for (int column = 1; column <= 4; ++column) {
+      if (std::abs(trsf.Value(row, column) - (row == column ? 1.0 : 0.0)) > 1.0e-12) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * A label's own colours over the style it inherits, as XCAFPrs_DocumentExplorer merges them: the
+ * definition's, then an instance's, which wins (M15). Only what J3D draws with: the surface colour and
+ * visibility.
+ */
+inline XCAFPrs_Style mergedStyle(const Handle(XCAFDoc_ColorTool)& colors, const XCAFPrs_Style& inherited,
+                                 const TDF_Label& label, const TDF_Label& refLabel) {
+  XCAFPrs_Style style = inherited;
+  const auto apply = [&](const TDF_Label& own) {
+    Quantity_ColorRGBA color;
+    if (colors->GetColor(own, XCAFDoc_ColorGen, color)) {
+      style.SetColorSurf(color);
+    }
+    if (colors->GetColor(own, XCAFDoc_ColorSurf, color)) {
+      style.SetColorSurf(color);
+    }
+    if (!colors->IsVisible(own)) {
+      style.SetVisibility(false);
+    }
+  };
+  apply(refLabel);
+  if (label != refLabel) {
+    apply(label);
+  }
+  return style;
+}
+
+/**
+ * The parts Expand makes of a shape (M15, D190): a compound's or compsolid's pieces, counting through
+ * nested compounds, which OCCT's recursive Expand turns into sub-assemblies. Anything else is one
+ * piece, so a lone solid or shell isn't offered.
+ */
+inline int pieceCount(const TopoDS_Shape& shape, bool top = true) {
+  const TopAbs_ShapeEnum type = shape.ShapeType();
+  if (type != TopAbs_COMPOUND && !(top && type == TopAbs_COMPSOLID)) {
+    return 1;
+  }
+  int count = 0;
+  for (TopoDS_Iterator child(shape); child.More(); child.Next()) {
+    count += pieceCount(child.Value(), false);
+  }
+  return count;
+}
+
+/** Expand names the pieces a file leaves unnamed after their shape type ("SOLID"); J3D numbers them (D191). */
+inline bool isShapeTypeName(const std::string& name) {
+  static const char* const types[] = {"COMPOUND", "COMPSOLID", "SOLID", "SHELL", "FACE", "WIRE", "EDGE", "VERTEX", "SHAPE"};
+  return std::any_of(std::begin(types), std::end(types), [&](const char* type) { return name == type; });
 }
 
 template <typename T>
@@ -835,13 +922,72 @@ public:
           if (document_.IsNull()) {
             return fail(j3d::StatusInternal, "No model to export.");
           }
+          TDF_LabelSequence roots;
+          shapeTool_->GetFreeShapes(roots);
           switch (format) {
-            case j3d::FormatStep: return exportStep();
-            case j3d::FormatBrep: return exportBrep();
+            case j3d::FormatStep: return exportStep(document_, nullptr);
+            case j3d::FormatBrep: return exportBrep(roots);
             default: return fail(j3d::StatusInternal, "Unknown export format.");
           }
         },
         "OCCT reported an error while writing the file.");
+    if (status != j3d::StatusOk) {
+      releaseOutput();
+    }
+    return status;
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Expand and edited exports (M15, decisions D154, D188–D196). Expand works on a copy of a compound
+  // part's definition in a second, working document, so the imported document and the tree it gives
+  // never change (kept edits are recorded against that tree, R25); each definition is expanded once,
+  // and its pieces are new prototypes. An edited model is written from a plan of J3D's tree, built
+  // into a new document with the definitions it reuses copied across, names and colours included.
+  // -------------------------------------------------------------------------------------------
+
+  /**
+   * Expands file node `node`'s compound part (D189–D191). JSON: { pieces: [{ name, parent, prototype,
+   * matrix }] } in tree order: each piece's parent an earlier piece, or -1 for the expanded node; its
+   * prototype, or -1 for a sub-assembly; its name, "" where the file gives none; its placement in its
+   * parent's frame. New prototypes follow the existing ones and are extracted as any other. Or
+   * {"error": "..."}.
+   */
+  std::string expandNode(int node) {
+    return measured([&] { return expansionJson(node); });
+  }
+
+  /**
+   * Writes J3D's tree from `plan` (M15): format 0 STEP, 2 BREP. One line per node, each after its
+   * parent: "kind parent ref piece matrix\tname". Kind 0 reuses its origin's definition whole, kind 1 is
+   * a new assembly whose children follow. The parent is an earlier line, or -1 for the top level; the
+   * origin is file node `ref` (-1 for none) or, with piece >= -1, that node's expansion (-1) or one of
+   * its pieces; the matrix is the placement in the parent's frame, 16 numbers column-major, and must be
+   * the identity at the top level for anything but a part. Returns a status code; the output is read as
+   * exportFile's.
+   */
+  int exportTree(int format, const std::string& plan) {
+    releaseOutput();
+    Handle(TDocStd_Document) document;
+    const int status = guarded(
+        [&] {
+          if (document_.IsNull()) {
+            return fail(j3d::StatusInternal, "No model to export.");
+          }
+          if (format != j3d::FormatStep && format != j3d::FormatBrep) {
+            return fail(j3d::StatusInternal, "Unknown export format.");
+          }
+          const std::vector<PlanNode> nodes = parsePlan(plan);
+          if (nodes.empty()) {
+            return fail(j3d::StatusEmpty, "There's nothing to export.");
+          }
+          TDF_LabelSequence roots;
+          document = buildDocument(nodes, roots);
+          return format == j3d::FormatStep ? exportStep(document, &roots) : exportBrep(roots);
+        },
+        "OCCT reported an error while writing the file.");
+    if (!document.IsNull()) {
+      XCAFApp_Application::GetApplication()->Close(document);
+    }
     if (status != j3d::StatusOk) {
       releaseOutput();
     }
@@ -1003,6 +1149,61 @@ private:
     std::vector<TopoDS_Vertex> vertices;
   };
 
+  // A scene node's labels and style, from buildScene (M15).
+  struct NodeSource {
+    TDF_Label label;      // the occurrence: a component, or a root's own label
+    TDF_Label refLabel;   // its definition
+    XCAFPrs_Style style;  // as drawn
+  };
+
+  // One piece of an expanded definition, in the working document (M15).
+  struct Piece {
+    TDF_Label label;     // its component
+    TDF_Label refLabel;  // its definition
+    int parent;          // an earlier piece, or -1 for the expanded definition
+    std::string name;    // "" where the file gives none
+    gp_Trsf local;
+  };
+
+  // A compound part's definition, copied into the working document and expanded once (D189).
+  struct Expansion {
+    TDF_Label definition;
+    std::vector<Piece> pieces;
+  };
+
+  // One line of an export plan (see exportTree).
+  static constexpr int PlanReuse = 0;
+  static constexpr int PlanAssembly = 1;
+  struct PlanNode {
+    int kind = PlanReuse;
+    int parent = -1;
+    int ref = -1;
+    int piece = -2;
+    gp_Trsf local;
+    bool located = false;
+    std::string name;
+  };
+
+  // A plan node's origin: the labels its attributes come from, and the style J3D draws it with.
+  struct Origin {
+    TDF_Label label;  // an occurrence, or null
+    TDF_Label refLabel;
+    XCAFPrs_Style style;
+    bool known = false;
+  };
+
+  // XCAF names labels it makes ("=>[0:1:1:2]") unless told not to; the switch is global, so it's put back.
+  class AutoNamingOff {
+  public:
+    AutoNamingOff() : previous_(XCAFDoc_ShapeTool::AutoNaming()) { XCAFDoc_ShapeTool::SetAutoNaming(false); }
+    ~AutoNamingOff() { XCAFDoc_ShapeTool::SetAutoNaming(previous_); }
+    AutoNamingOff(const AutoNamingOff&) = delete;
+    AutoNamingOff& operator=(const AutoNamingOff&) = delete;
+
+  private:
+    bool previous_;
+  };
+
   // Runs a query, turning OCCT and range failures into {"error": "..."}.
   template <typename Body>
   std::string measured(Body&& body) const {
@@ -1138,7 +1339,8 @@ private:
     return j3d::StatusOk;
   }
 
-  int exportStep() {
+  /** The document's free shapes, or just `roots` (M15: an edited tree's, which may be shared elsewhere). */
+  int exportStep(const Handle(TDocStd_Document)& document, const TDF_LabelSequence* roots) {
     j3d::reportProgress(j3d::PhaseTransferring, 0.0, true);
     STEPCAFControl_Writer writer;
     writer.SetColorMode(true);
@@ -1147,7 +1349,8 @@ private:
     writer.SetPropsMode(false);
 
     Handle(ProgressIndicator) progress = new ProgressIndicator(j3d::PhaseTransferring, true);
-    const bool transferred = writer.Transfer(document_, STEPControl_AsIs, nullptr, progress->Start());
+    const bool transferred = roots != nullptr ? writer.Transfer(*roots, STEPControl_AsIs, nullptr, progress->Start())
+                                              : writer.Transfer(document, STEPControl_AsIs, nullptr, progress->Start());
     if (progress->UserBreak()) {
       return fail(j3d::StatusCancelled, "Export cancelled.");
     }
@@ -1169,9 +1372,8 @@ private:
     return j3d::StatusOk;
   }
 
-  int exportBrep() {
-    TDF_LabelSequence roots;
-    shapeTool_->GetFreeShapes(roots);
+  /** The roots' shapes, one compound when there are several: an assembly is a compound of its placed children (D196). */
+  int exportBrep(const TDF_LabelSequence& roots) {
     TopoDS_Shape shape;
     if (roots.Length() == 1) {
       shape = XCAFDoc_ShapeTool::GetShape(roots.First());
@@ -1208,10 +1410,335 @@ private:
     return j3d::StatusOk;
   }
 
+  // --- Expand (M15) ---------------------------------------------------------------------------
+
+  std::string expansionJson(int node) {
+    const Expansion& expansion = expansionOf(node);
+    const std::vector<XCAFPrs_Style> styles = pieceStyles(expansion, nodeSources_[static_cast<std::size_t>(node)].style);
+    std::string json = "{\"pieces\":[";
+    for (std::size_t i = 0; i < expansion.pieces.size(); ++i) {
+      const Piece& piece = expansion.pieces[i];
+      int prototype = -1;
+      if (!XCAFDoc_ShapeTool::IsAssembly(piece.refLabel) && styles[i].IsVisible()) {
+        prototype = prototypeOf(piece.refLabel, styles[i], "x");
+      }
+      if (i > 0) {
+        json += ',';
+      }
+      json += "{\"name\":";
+      j3d::appendJsonString(json, piece.name);
+      json += ",\"parent\":" + std::to_string(piece.parent) + ",\"prototype\":" + std::to_string(prototype) + ",\"matrix\":";
+      j3d::appendMatrix(json, piece.local);
+      json += '}';
+    }
+    return json + "]}";
+  }
+
+  /** File node `node`'s definition, copied into the working document and expanded, the first time it's asked for. */
+  const Expansion& expansionOf(int node) {
+    if (node < 0 || node >= static_cast<int>(nodeSources_.size())) {
+      throw std::out_of_range("No such node.");
+    }
+    const NodeSource& source = nodeSources_[static_cast<std::size_t>(node)];
+    const TopoDS_Shape shape = XCAFDoc_ShapeTool::GetShape(source.refLabel);
+    if (XCAFDoc_ShapeTool::IsAssembly(source.refLabel) || shape.IsNull() || j3d::pieceCount(shape) < 2) {
+      throw std::invalid_argument("That part has nothing to expand.");
+    }
+    TCollection_AsciiString entry;
+    TDF_Tool::Entry(source.refLabel, entry);
+    const std::string key = entry.ToCString();
+    const auto found = expansions_.find(key);
+    if (found != expansions_.end()) {
+      return found->second;
+    }
+
+    if (workDocument_.IsNull()) {
+      XCAFApp_Application::GetApplication()->NewDocument(TCollection_ExtendedString("MDTV-XCAF"), workDocument_);
+      workShapeTool_ = XCAFDoc_DocumentTool::ShapeTool(workDocument_->Main());
+    }
+    // The copy's shapes are its own, meshed as the model was: sharing the file's solids, a STEP holding
+    // both the part and another occurrence's pieces lost the part's colour to them. Its sub-shapes'
+    // names and colours are carried across.
+    const AutoNamingOff autoNamingOff;
+    BRepBuilderAPI_Copy copier(shape, true, false);
+    const TDF_Label copy = workShapeTool_->AddShape(copier.Shape(), false);
+    NCollection_DataMap<Handle(XCAFDoc_VisMaterial), Handle(XCAFDoc_VisMaterial)> materials;
+    XCAFDoc_Editor::CloneMetaData(source.refLabel, copy, &materials);
+    TDF_LabelSequence subShapes;
+    XCAFDoc_ShapeTool::GetSubShapes(source.refLabel, subShapes);
+    for (int i = 1; i <= subShapes.Length(); ++i) {
+      const TDF_Label subShape = workShapeTool_->AddSubShape(copy, copier.ModifiedShape(XCAFDoc_ShapeTool::GetShape(subShapes.Value(i))));
+      if (!subShape.IsNull()) {
+        XCAFDoc_Editor::CloneMetaData(subShapes.Value(i), subShape, &materials);
+      }
+    }
+    BRepMesh_IncrementalMesh(copier.Shape(), linearDeflection_, false, angularDeflection_, j3d::useParallelMeshing());
+    if (!XCAFDoc_Editor::Expand(workDocument_->Main(), copy, true)) {
+      throw std::runtime_error("OCCT couldn't expand that part.");
+    }
+    Expansion expansion{copy, {}};
+    collectPieces(expansion, copy, -1);
+    return expansions_.emplace(key, std::move(expansion)).first->second;
+  }
+
+  /** An expanded definition's components, each before its own, in the order the file's walk would give them. */
+  static void collectPieces(Expansion& expansion, const TDF_Label& definition, int parent) {
+    TDF_LabelSequence components;
+    XCAFDoc_ShapeTool::GetComponents(definition, components, false);
+    for (int i = 1; i <= components.Length(); ++i) {
+      const TDF_Label& component = components.Value(i);
+      TDF_Label refLabel = component;
+      XCAFDoc_ShapeTool::GetReferredShape(component, refLabel);
+      std::string name = j3d::labelName(component);
+      if (name.empty()) {
+        name = j3d::labelName(refLabel);
+      }
+      if (j3d::isShapeTypeName(name)) {
+        name.clear();
+      } else if (j3d::labelName(component).empty() && !name.empty()) {
+        // An instance takes its name from its definition, as the file's do, so a reused expansion writes it.
+        TDataStd_Name::Set(component, TCollection_ExtendedString(name.c_str(), true));
+      }
+      const int index = static_cast<int>(expansion.pieces.size());
+      expansion.pieces.push_back({component, refLabel, parent, name, XCAFDoc_ShapeTool::GetLocation(component).Transformation()});
+      if (XCAFDoc_ShapeTool::IsAssembly(refLabel)) {
+        collectPieces(expansion, refLabel, index);
+      }
+    }
+  }
+
+  /** Each piece's style under an occurrence drawn with `style`: its own colours over its parent's. */
+  std::vector<XCAFPrs_Style> pieceStyles(const Expansion& expansion, const XCAFPrs_Style& style) const {
+    const Handle(XCAFDoc_ColorTool) colors = XCAFDoc_DocumentTool::ColorTool(workDocument_->Main());
+    std::vector<XCAFPrs_Style> styles;
+    styles.reserve(expansion.pieces.size());
+    for (const Piece& piece : expansion.pieces) {
+      styles.push_back(j3d::mergedStyle(colors, piece.parent < 0 ? style : styles[static_cast<std::size_t>(piece.parent)],
+                                        piece.label, piece.refLabel));
+    }
+    return styles;
+  }
+
+  /** The prototype drawing `label` with `style`, made the first time; `scope` keeps the working document's apart. */
+  int prototypeOf(const TDF_Label& label, const XCAFPrs_Style& style, const char* scope) {
+    TCollection_AsciiString entry;
+    TDF_Tool::Entry(label, entry);
+    const std::string key = std::string(scope) + entry.ToCString() + "|" + j3d::styleKey(style);
+    const auto found = prototypeByKey_.find(key);
+    if (found != prototypeByKey_.end()) {
+      return found->second;
+    }
+    const TopoDS_Shape shape = XCAFDoc_ShapeTool::GetShape(label);
+    if (shape.IsNull()) {
+      return -1;
+    }
+    const int index = static_cast<int>(prototypes_.size());
+    prototypes_.push_back({label, shape, style});
+    prototypeByKey_.emplace(key, index);
+    return index;
+  }
+
+  /**
+   * Copies the colours, layers, names and other attributes of each cloned label across, as
+   * XCAFDoc_Editor::Extract does. Names are then copied as they are: CloneMetaData rewrites XCAF's own
+   * "=>[0:1:1:2]" to point at the copy, and J3D shows the file's names.
+   */
+  static void copyMetaData(const NCollection_DataMap<TDF_Label, TDF_Label>& cloned) {
+    NCollection_DataMap<Handle(XCAFDoc_VisMaterial), Handle(XCAFDoc_VisMaterial)> materials;
+    for (NCollection_DataMap<TDF_Label, TDF_Label>::Iterator pair(cloned); pair.More(); pair.Next()) {
+      XCAFDoc_Editor::CloneMetaData(pair.Key(), pair.Value(), &materials);
+      Handle(TDataStd_Name) name;
+      if (pair.Key().FindAttribute(TDataStd_Name::GetID(), name)) {
+        TDataStd_Name::Set(pair.Value(), name->Get());
+      }
+    }
+  }
+
+  // --- Edited exports (M15) -------------------------------------------------------------------
+
+  std::vector<PlanNode> parsePlan(const std::string& plan) const {
+    std::vector<PlanNode> nodes;
+    std::size_t start = 0;
+    while (start < plan.size()) {
+      std::size_t end = plan.find('\n', start);
+      if (end == std::string::npos) {
+        end = plan.size();
+      }
+      const std::string line = plan.substr(start, end - start);
+      start = end + 1;
+      if (line.empty()) {
+        continue;
+      }
+      const std::size_t tab = line.find('\t');
+      const std::string fields = line.substr(0, tab);
+      PlanNode node;
+      node.name = tab == std::string::npos ? std::string() : line.substr(tab + 1);
+      const char* cursor = fields.c_str();
+      char* next = nullptr;
+      int* const integers[] = {&node.kind, &node.parent, &node.ref, &node.piece};
+      for (int* value : integers) {
+        *value = static_cast<int>(std::strtol(cursor, &next, 10));
+        if (next == cursor) {
+          throw std::invalid_argument("The export plan couldn't be read.");
+        }
+        cursor = next;
+      }
+      while (*cursor == ' ') {
+        ++cursor;
+      }
+      node.local = j3d::parseMatrix(cursor);
+      node.located = !j3d::isIdentity(node.local);
+      const int index = static_cast<int>(nodes.size());
+      if ((node.kind != PlanReuse && node.kind != PlanAssembly) || node.parent < -1 || node.parent >= index ||
+          (node.parent >= 0 && nodes[static_cast<std::size_t>(node.parent)].kind != PlanAssembly) ||
+          node.ref < -1 || node.ref >= static_cast<int>(nodeSources_.size()) || (node.kind == PlanReuse && node.ref < 0)) {
+        throw std::invalid_argument("The export plan doesn't fit the model.");
+      }
+      nodes.push_back(std::move(node));
+    }
+    return nodes;
+  }
+
+  /** Where a plan node comes from: the file's occurrence and definition, or a piece of an expansion. */
+  Origin originOf(const PlanNode& node, std::unordered_map<int, std::vector<XCAFPrs_Style>>& styles) {
+    if (node.ref < 0) {
+      return {};
+    }
+    const NodeSource& source = nodeSources_[static_cast<std::size_t>(node.ref)];
+    const TDF_Label component = source.label != source.refLabel ? source.label : TDF_Label();
+    if (node.piece < -1) {
+      return {component, source.refLabel, source.style, true};
+    }
+    const Expansion& expansion = expansionOf(node.ref);
+    if (node.piece == -1) {
+      return {component, expansion.definition, source.style, true};
+    }
+    if (node.piece >= static_cast<int>(expansion.pieces.size())) {
+      throw std::invalid_argument("The export plan names a piece the part doesn't have.");
+    }
+    auto found = styles.find(node.ref);
+    if (found == styles.end()) {
+      found = styles.emplace(node.ref, pieceStyles(expansion, source.style)).first;
+    }
+    const Piece& piece = expansion.pieces[static_cast<std::size_t>(node.piece)];
+    return {piece.label, piece.refLabel, found->second[static_cast<std::size_t>(node.piece)], true};
+  }
+
+  /**
+   * The plan as a new XCAF document (D188, D196): reused definitions are copied across with
+   * XCAFDoc_Editor::CloneShapeLabel, which keeps what's shared shared, and new assemblies are made
+   * with their components. Each new label takes its origin's attributes, then J3D's name. Last, each
+   * node's colour is checked against what J3D draws: where the new structure would change it (a node
+   * moved out of, or into, a coloured assembly), the instance is given its colour.
+   */
+  Handle(TDocStd_Document) buildDocument(const std::vector<PlanNode>& plan, TDF_LabelSequence& roots) {
+    Handle(TDocStd_Document) document;
+    XCAFApp_Application::GetApplication()->NewDocument(TCollection_ExtendedString("MDTV-XCAF"), document);
+    const Handle(XCAFDoc_ShapeTool) tool = XCAFDoc_DocumentTool::ShapeTool(document->Main());
+    const Handle(XCAFDoc_ColorTool) colors = XCAFDoc_DocumentTool::ColorTool(document->Main());
+    Handle(XCAFDoc_LengthUnit) unit;
+    if (document_->Main().Root().FindAttribute(XCAFDoc_LengthUnit::GetID(), unit)) {
+      XCAFDoc_LengthUnit::Set(document->Main().Root(), unit->GetUnitName(), unit->GetUnitValue());
+    }
+    const AutoNamingOff autoNamingOff;
+
+    NCollection_DataMap<TDF_Label, TDF_Label> cloned;
+    std::vector<std::pair<TDF_Label, TDF_Label>> attributes;  // an origin's label -> a new one
+    std::unordered_map<int, std::vector<XCAFPrs_Style>> pieceStyleCache;
+    std::vector<Origin> origins(plan.size());
+    std::vector<TDF_Label> definitions(plan.size());
+    std::vector<TDF_Label> occurrences(plan.size());
+    for (std::size_t i = 0; i < plan.size(); ++i) {
+      const PlanNode& node = plan[i];
+      const Origin origin = originOf(node, pieceStyleCache);
+      TDF_Label definition;
+      if (node.kind == PlanAssembly) {
+        definition = tool->NewShape();
+        if (origin.known) {
+          attributes.emplace_back(origin.refLabel, definition);
+        }
+      } else {
+        definition = XCAFDoc_Editor::CloneShapeLabel(origin.refLabel, XCAFDoc_DocumentTool::ShapeTool(origin.refLabel), tool, cloned);
+      }
+
+      TDF_Label occurrence;
+      if (node.parent >= 0) {
+        occurrence = tool->AddComponent(definitions[static_cast<std::size_t>(node.parent)], definition, TopLoc_Location(node.local));
+        if (!origin.label.IsNull()) {
+          attributes.emplace_back(origin.label, occurrence);
+        }
+      } else if (node.located) {
+        if (node.kind != PlanReuse || XCAFDoc_ShapeTool::IsAssembly(definition)) {
+          throw std::invalid_argument("Only a part can be placed at the top level of an export.");
+        }
+        occurrence = placedPart(tool, definition, node.local, origin.refLabel, attributes);
+        roots.Append(occurrence);
+      } else {
+        occurrence = definition;
+        roots.Append(definition);
+      }
+      origins[i] = origin;
+      definitions[i] = definition;
+      occurrences[i] = occurrence;
+    }
+    tool->UpdateAssemblies();
+
+    copyMetaData(cloned);
+    NCollection_DataMap<Handle(XCAFDoc_VisMaterial), Handle(XCAFDoc_VisMaterial)> materials;
+    for (const auto& [from, to] : attributes) {
+      XCAFDoc_Editor::CloneMetaData(from, to, &materials, true, true, true, true, false);
+    }
+
+    std::vector<XCAFPrs_Style> drawn(plan.size());
+    for (std::size_t i = 0; i < plan.size(); ++i) {
+      const PlanNode& node = plan[i];
+      if (!node.name.empty()) {
+        const TCollection_ExtendedString name(node.name.c_str(), true);
+        TDataStd_Name::Set(occurrences[i], name);
+        if (node.kind == PlanAssembly && definitions[i] != occurrences[i]) {
+          TDataStd_Name::Set(definitions[i], name);
+        }
+      }
+
+      const XCAFPrs_Style inherited = node.parent >= 0 ? drawn[static_cast<std::size_t>(node.parent)] : XCAFPrs_Style();
+      XCAFPrs_Style style = j3d::mergedStyle(colors, inherited, occurrences[i], definitions[i]);
+      const Origin& origin = origins[i];
+      if (origin.known && !j3d::sameSurface(style, origin.style)) {
+        colors->SetColor(occurrences[i], j3d::styleColor(origin.style), XCAFDoc_ColorSurf);
+        style = j3d::mergedStyle(colors, inherited, occurrences[i], definitions[i]);
+      }
+      drawn[i] = style;
+    }
+    return document;
+  }
+
+  /**
+   * A part moved at the top level, where XCAF has no component to place it: a part of its own whose
+   * shape is the definition's moved, with its sub-shapes (and so their colours) moved alike.
+   */
+  static TDF_Label placedPart(const Handle(XCAFDoc_ShapeTool)& tool, const TDF_Label& definition, const gp_Trsf& placement,
+                              const TDF_Label& origin, std::vector<std::pair<TDF_Label, TDF_Label>>& attributes) {
+    const TopLoc_Location location(placement);
+    const TDF_Label part = TDF_TagSource::NewChild(tool->Label());
+    tool->SetShape(part, XCAFDoc_ShapeTool::GetShape(definition).Moved(location));
+    attributes.emplace_back(origin, part);
+    TDF_LabelSequence subShapes;
+    XCAFDoc_ShapeTool::GetSubShapes(definition, subShapes);
+    for (int i = 1; i <= subShapes.Length(); ++i) {
+      const TDF_Label placed = tool->AddSubShape(part, XCAFDoc_ShapeTool::GetShape(subShapes.Value(i)).Moved(location));
+      if (!placed.IsNull()) {
+        attributes.emplace_back(subShapes.Value(i), placed);
+      }
+    }
+    return part;
+  }
+
   // Walks the XCAF document into the flat scene tree and the list of unique (part, style) prototypes.
+  // Each node's labels and style are kept, for Expand and for exporting the edited tree (M15).
   void buildScene() {
     prototypes_.clear();
-    std::unordered_map<std::string, int> prototypeByKey;
+    prototypeByKey_.clear();
+    nodeSources_.clear();
     std::vector<int> parentAtDepth;
     std::string nodes = "[";
     std::string instances = "[";
@@ -1234,15 +1761,15 @@ private:
         TCollection_AsciiString entry;
         TDF_Tool::Entry(node.RefLabel, entry);
         const std::string key = std::string(entry.ToCString()) + "|" + j3d::styleKey(node.Style);
-        const auto found = prototypeByKey.find(key);
-        if (found != prototypeByKey.end()) {
+        const auto found = prototypeByKey_.find(key);
+        if (found != prototypeByKey_.end()) {
           prototypeIndex = found->second;
         } else {
           const TopoDS_Shape shape = XCAFDoc_ShapeTool::GetShape(node.RefLabel);
           if (!shape.IsNull()) {
             prototypeIndex = static_cast<int>(prototypes_.size());
             prototypes_.push_back({node.RefLabel, shape, node.Style});
-            prototypeByKey.emplace(key, prototypeIndex);
+            prototypeByKey_.emplace(key, prototypeIndex);
           }
         }
 
@@ -1266,7 +1793,13 @@ private:
                ",\"matrix\":";
       // The placement in the parent's frame (M13, D150): a root's is its world placement.
       j3d::appendMatrix(nodes, node.LocalTrsf.Transformation());
+      // A compound part that Expand would split (M15, D190).
+      const int pieces = prototypeIndex >= 0 ? j3d::pieceCount(prototypes_[prototypeIndex].shape) : 1;
+      if (pieces >= 2) {
+        nodes += ",\"pieces\":" + std::to_string(pieces);
+      }
       nodes += '}';
+      nodeSources_.push_back({node.Label, node.RefLabel, node.Style});
 
       parentAtDepth.resize(depth + 1);
       parentAtDepth[depth] = nodeCount;
@@ -1453,6 +1986,12 @@ private:
   Handle(TDocStd_Document) document_;
   Handle(XCAFDoc_ShapeTool) shapeTool_;
   std::vector<Prototype> prototypes_;
+  std::unordered_map<std::string, int> prototypeByKey_;
+  std::vector<NodeSource> nodeSources_;
+  // Expand's copies (M15), by the imported definition's entry.
+  Handle(TDocStd_Document) workDocument_;
+  Handle(XCAFDoc_ShapeTool) workShapeTool_;
+  std::unordered_map<std::string, Expansion> expansions_;
   mutable std::vector<Topology> topology_;
   std::string sceneJson_ = "{\"nodes\":[],\"instances\":[]}";
   std::string lastError_;

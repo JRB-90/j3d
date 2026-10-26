@@ -244,7 +244,7 @@ export class MeshParts implements ModelParts {
     const previous = this.structure;
     const fileCount = previous.fileTree.length;
     let kept = fileCount;
-    while (kept < Math.min(previous.count, next.count) && previous.sources[kept] === next.sources[kept]) {
+    while (kept < Math.min(previous.count, next.count) && previous.addedKey(kept) === next.addedKey(kept)) {
       kept++;
     }
     const discarded = this.objects.splice(kept);

@@ -154,6 +154,44 @@ public sealed class EditUiTests : BunitTestBase
     }
 
     [Fact]
+    public async Task The_context_menu_expands_a_compound_part_with_its_pieces_from_the_viewer()
+    {
+        // M15, D154, D197: in a second bracket, the unnamed part (4) is compound; Plate (top) (3) isn't.
+        var id = new ModelId("m2");
+        await Act(() =>
+        {
+            Scene.Add(Summary(id.Value, "compound.step"));
+            Scene.MarkLoaded(id, Info() with { Tree = Info().Tree with { Expandable = [4] } });
+        });
+        var expand = _viewer.Setup<ExpandOutcome>("expandParts", static _ => true);
+        await StartViewerAsync();
+        var popovers = Render<MudPopoverProvider>();
+        Render<ContextMenu>();
+
+        await Act(() => Scene.OpenContextMenu(id, 3, 100, 100, canMeasure: false));
+        popovers.WaitForAssertion(() => Assert.NotEmpty(popovers.FindAll("[data-testid=context-cut]")));
+        Assert.Empty(popovers.FindAll("[data-testid=context-expand]"));
+        Assert.Empty(popovers.FindAll("[data-testid=context-expand-all]"));
+
+        await Act(() => Scene.OpenNodeContextMenu(id, 0, 100, 100)); // the whole bracket: Expand all
+        popovers.WaitForAssertion(() => Assert.NotEmpty(popovers.FindAll("[data-testid=context-expand-all]")));
+
+        await Act(() => Scene.Pick(id, 4, additive: false)); // a right click in the selection keeps it
+        await Act(() => Scene.OpenContextMenu(id, 4, 100, 100, canMeasure: false));
+        popovers.WaitForAssertion(() => Assert.NotEmpty(popovers.FindAll("[data-testid=context-expand]")));
+        Assert.Empty(popovers.FindAll("[data-testid=context-expand-all]"));
+        popovers.Find("[data-testid=context-expand]").Click();
+
+        var invocation = Assert.Single(_viewer.Invocations, static i => i.Identifier == "expandParts");
+        Assert.Equal(id.Value, invocation.Arguments[0]);
+        Assert.Equal([4], (IEnumerable<int>)invocation.Arguments[1]!);
+        expand.SetResult(new ExpandOutcome([new PartExpansion(4, [new ExpansionPiece("", -1, true), new ExpansionPiece("", -1, true)])]));
+        var tree = () => Scene.Find(id)!.Tree!;
+        popovers.WaitForAssertion(() => Assert.Equal([3, 5], tree().ChildrenOf(2)));
+        Assert.Equal(["Part 1", "Part 2"], tree().ChildrenOf(5).Select(tree().NameOf));
+    }
+
+    [Fact]
     public async Task The_viewport_relays_the_keys_and_drops_and_sends_each_edit_with_the_selection()
     {
         JSInterop.Mode = JSRuntimeMode.Strict;

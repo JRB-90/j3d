@@ -20,6 +20,9 @@ public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISn
 
     internal static readonly MeshExportFormat[] MeshFormats = [MeshExportFormat.Glb, MeshExportFormat.StlBinary, MeshExportFormat.StlAscii];
 
+    /// <summary>A selection in one BREP model also saves as these (M15, D192).</summary>
+    internal static readonly BrepExportFormat[] BrepFormats = [BrepExportFormat.Step, BrepExportFormat.Brep];
+
     private static readonly SelectMode[] SelectModes = [SelectMode.Models, SelectMode.Objects, SelectMode.Features];
 
     private ElementReference _input;

@@ -355,6 +355,51 @@ describe('edits (M14, D151, D152)', () => {
     expect(x(parts.placement(4).parentWorld)).toBe(10);
     expect(x(scene.instances[1]!.matrix)).toBe(11);
   });
+
+  it("draws an expanded part's pieces where they are in it, with the prototypes Expand added, and undoes it (M15)", () => {
+    const scene = assembly();
+    const { object, parts } = buildBrepObject('m', scene, new MaterialCache());
+    // b (2, at 11) expands into two pieces at 1 and 2 in it, drawing a new prototype (1).
+    scene.prototypes.push(prototype());
+    const expansions = new Map([[2, [1, 2].map((at) => ({ name: '', parent: -1, prototype: 1, matrix: translated(at) }))]]);
+    const expanded = new ModelStructure(
+      scene.nodes,
+      {
+        ...NoEdits,
+        added: [-1, -1, -1],
+        children: [
+          { parent: 0, nodes: [1, 4] },
+          { parent: 4, nodes: [5, 6] },
+        ],
+        pieces: [
+          { node: 4, expands: 2, piece: -1, name: 'b', part: false },
+          { node: 5, expands: 2, piece: 0, name: 'b 1', part: true },
+          { node: 6, expands: 2, piece: 1, name: 'b 2', part: true },
+        ],
+      },
+      expansions,
+    );
+
+    const kept = parts.setStructure(expanded);
+
+    expect(kept.map(({ node, matrix }) => [node, x(matrix)])).toEqual([
+      [4, 1],
+      [5, 1],
+      [6, 2],
+    ]);
+    expect(parts.partNodes).toEqual([1, 3, 5, 6]);
+    const mesh = copies(object)!;
+    expect(mesh.count).toBe(2);
+    expect([0, 1].map((slot) => x(mesh.getMatrixAt(slot, new Matrix4())))).toEqual([12, 13]);
+    expect(parts.exportScene().instances.map(({ node, prototype }) => [node, prototype])).toEqual([[1, 0], [3, 0], [5, 1], [6, 1]]);
+    // The assembly moves its pieces, as the part moved itself.
+    parts.setPlacement(4, new Matrix4().makeTranslation(5, 0, 0));
+    expect([0, 1].map((slot) => x(mesh.getMatrixAt(slot, new Matrix4())))).toEqual([16, 17]);
+
+    parts.setStructure(new ModelStructure(scene.nodes));
+    expect(mesh.count).toBe(0);
+    expect(parts.partNodes).toEqual([1, 2, 3]);
+  });
 });
 
 describe('toUnorm8', () => {

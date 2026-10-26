@@ -4,32 +4,24 @@ import type { ModelStructure } from './structure';
 
 /**
  * What an edited model draws (M14): its live nodes, and the placements, triangles and edge segments
- * of its live parts, copies counted as their sources are. Prototypes and textures stay as imported,
- * since copies share them.
+ * of its live parts, copies counted as their sources are. Textures stay as imported, and prototypes
+ * too, since copies share them, but for those Expand adds (M15).
  */
 export function editedStats(content: ModelContent, structure: ModelStructure, imported: ModelStats): ModelStats {
   let instances = 0;
   let triangles = 0;
   let edges = 0;
+  let prototypes = imported.prototypes;
   if (content.kind === 'brep') {
+    // A BREP part node is placed once, drawing its prototype; Expand's prototypes follow the file's (M15).
     const { scene } = content;
-    const ofNode = new Map<number, number[]>();
-    scene.instances.forEach((instance) => {
-      const list = ofNode.get(instance.node);
-      if (list) {
-        list.push(instance.prototype);
-      } else {
-        ofNode.set(instance.node, [instance.prototype]);
-      }
-    });
     for (const node of structure.parts()) {
-      for (const prototype of ofNode.get(structure.fileNodes[node]!) ?? []) {
-        const mesh = scene.prototypes[prototype]!;
-        instances++;
-        triangles += mesh.indices.length / 3;
-        edges += mesh.edges.length / 6;
-      }
+      const mesh = scene.prototypes[structure.nodes[node]!.prototype]!;
+      instances++;
+      triangles += mesh.indices.length / 3;
+      edges += mesh.edges.length / 6;
     }
+    prototypes = scene.prototypes.length;
   } else {
     for (const node of structure.parts()) {
       const object = content.nodes[structure.fileNodes[node]!] as Partial<Mesh & InstancedMesh> | undefined;
@@ -40,5 +32,5 @@ export function editedStats(content: ModelContent, structure: ModelStructure, im
       }
     }
   }
-  return { ...imported, nodes: structure.order().length, instances, triangles: Math.floor(triangles), edges };
+  return { ...imported, nodes: structure.order().length, prototypes, instances, triangles: Math.floor(triangles), edges };
 }

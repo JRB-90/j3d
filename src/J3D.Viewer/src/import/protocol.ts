@@ -1,7 +1,7 @@
 // Messages between the main thread and the import workers. Bulk data always travels in transferred
 // ArrayBuffers; everything else is small.
 
-import type { EntityRef, ImportedScene } from '@j3d/occt/facade';
+import type { EntityRef, ExpandedPiece, ImportedScene, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
 import type { SerializedMeshScene } from './mesh/serialize';
 import type { Bounds, ImportError, ImportPhase, ModelStats } from './types';
 
@@ -20,21 +20,30 @@ export interface FailedMessage {
 }
 
 /** Main thread → model worker (one per BREP model; it keeps the model alive until terminated). */
-export type ModelWorkerRequest = ImportRequestMessage | MeasureRequest | ExportRequest;
+export type ModelWorkerRequest = ImportRequestMessage | MeasureRequest | ExportRequest | ExpandRequest;
 
 /** What a BREP model can be saved as (M9, D83). */
 export type BrepExportFormat = 'step' | 'brep';
 
 /**
- * Saving the whole model (M9, D83, D125). It's answered in turn with the queries. `cancel`, when the
- * page is cross-origin isolated, is a shared Int32 flag the page sets to 1 to stop OCCT mid-export,
- * since the worker can't take a message while OCCT runs.
+ * Saving the model (M9, D83, D125): as imported, or since M15 its edited tree as `plan` gives it. It's
+ * answered in turn with the queries. `cancel`, when the page is cross-origin isolated, is a shared
+ * Int32 flag the page sets to 1 to stop OCCT mid-export, since the worker can't take a message while
+ * OCCT runs.
  */
 export interface ExportRequest {
   type: 'export';
   id: number;
   format: BrepExportFormat;
+  plan?: PlanNode[];
   cancel?: SharedArrayBuffer;
+}
+
+/** A file part's pieces (M15, D154), answered with `expanded` (or `measureFailed`) in turn with the queries. */
+export interface ExpandRequest {
+  type: 'expand';
+  id: number;
+  node: number;
 }
 
 /**
@@ -68,6 +77,8 @@ export type ModelWorkerResponse =
   | { type: 'exportProgress'; id: number; fraction: number | null }
   | { type: 'exported'; id: number; bytes: ArrayBuffer }
   | { type: 'exportFailed'; id: number; cancelled: boolean; message: string }
+  /** The prototypes the pieces draw that weren't drawn before, numbered after the model's (transferred). */
+  | { type: 'expanded'; id: number; pieces: ExpandedPiece[]; prototypes: PrototypeMesh[] }
   | {
       type: 'loaded';
       scene: ImportedScene;

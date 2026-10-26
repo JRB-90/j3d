@@ -26,7 +26,8 @@ public sealed record ModelLoadedInfo(
 /// <param name="Names">Each node's name in the file; may be empty.</param>
 /// <param name="Parents">Each node's parent index, or -1 for a root.</param>
 /// <param name="Prototypes">The prototype each part node draws, or -1 for a group or assembly.</param>
-public sealed record TreeColumns(IReadOnlyList<string> Names, IReadOnlyList<int> Parents, IReadOnlyList<int> Prototypes)
+/// <param name="Expandable">The compound parts Expand can split (M15, D190); null when there are none.</param>
+public sealed record TreeColumns(IReadOnlyList<string> Names, IReadOnlyList<int> Parents, IReadOnlyList<int> Prototypes, IReadOnlyList<int>? Expandable = null)
 {
     public int Count => Names.Count;
 

@@ -24,6 +24,39 @@ public sealed partial class SceneState
     /// <summary>Raised when Delete should remove whole models (Model mode, D187): the list asks first (D29).</summary>
     public event Action<IReadOnlyList<ModelId>>? DeleteModelsRequested;
 
+    /// <summary>
+    /// Raised for a STEP or BREP export from the Export menu (M15, D192): the model's list item runs it,
+    /// of its selection, or (false, in Model mode) of the whole model.
+    /// </summary>
+    public event Action<ModelId, BrepExportFormat, bool>? ModelExportRequested;
+
+    /// <summary>
+    /// The one BREP model a STEP or BREP export of the selection comes from (D155, D192): objects all in
+    /// one BREP model in Object mode, or one selected BREP model in Model mode; else null.
+    /// </summary>
+    public ModelEntry? SelectionBrepModel
+    {
+        get
+        {
+            List<ModelEntry> models = Mode switch
+            {
+                SelectMode.Objects => [.. Models.Where(static model => !model.Selected.IsEmpty)],
+                SelectMode.Models => [.. Models.Where(IsModelSelected)],
+                _ => [],
+            };
+            return models is [{ Summary.Kind: ModelKind.Brep, Status: ModelStatus.Loaded } only] ? only : null;
+        }
+    }
+
+    /// <summary>STEP or BREP of the selection's BREP model (D192): its selection, or in Model mode all of it.</summary>
+    public void RequestModelExport(BrepExportFormat format)
+    {
+        if (SelectionBrepModel is { } model)
+        {
+            ModelExportRequested?.Invoke(model.Id, format, Mode == SelectMode.Objects);
+        }
+    }
+
     /// <summary>What Cut or Copy last took, or null.</summary>
     public Clipboard? Clipboard { get; private set; }
 
@@ -276,6 +309,76 @@ public sealed partial class SceneState
         else if (nodes.Any(item => tree.ParentOf(item) != target))
         {
             ApplyEdit(model, tree.Edit().Move(nodes, target).Build(), model.Hidden, nodes);
+        }
+    }
+
+    /// <summary>Expand takes one object, a compound part (M15, D154, D190).</summary>
+    public (ModelEntry Model, int Node)? ExpandTarget =>
+        EditObjects is [var only] && only.Model.Tree!.IsExpandable(only.Node) ? only : null;
+
+    /// <summary>
+    /// Expand all (D154, D197): the compound parts under the objects in Object mode, unless the one object
+    /// is a compound part (that's Expand), or in the selected models in Model mode; by model, in tree order.
+    /// </summary>
+    public IReadOnlyList<(ModelId Id, IReadOnlyList<int> Parts)> ExpandAllTargets
+    {
+        get
+        {
+            IEnumerable<(ModelId, IReadOnlyList<int>)> targets = Mode switch
+            {
+                SelectMode.Objects when ExpandTarget is null => EditObjects
+                    .GroupBy(static item => item.Model.Id)
+                    .Select(static group =>
+                    {
+                        var tree = group.First().Model.Tree!;
+                        IReadOnlyList<int> parts = [.. group.SelectMany(item => tree.PartsUnder(item.Node)).Where(tree.IsExpandable).Distinct()];
+                        return (group.Key, parts);
+                    }),
+                SelectMode.Models => Models
+                    .Where(model => IsModelSelected(model) && model.Tree is not null)
+                    .Select(static model => (model.Id, (IReadOnlyList<int>)[.. model.Tree!.Parts.Where(model.Tree.IsExpandable)])),
+                _ => [],
+            };
+            return [.. targets.Where(static target => target.Item2.Count > 0)];
+        }
+    }
+
+    /// <summary>
+    /// Expand and Expand all (M15, D154, D189): each part gives way to an assembly of its pieces, as the
+    /// viewer's expansions of their file parts give them, all in one step. In Object mode the assemblies
+    /// are then selected; a hidden part's pieces stay hidden, as a hidden part's copies do (assumption 17),
+    /// and the tree shows the first assembly's pieces.
+    /// </summary>
+    public void Expand(ModelId id, IReadOnlyList<int> parts, IReadOnlyList<Interop.PartExpansion> expansions)
+    {
+        if (Find(id) is not { Tree: { } tree } model)
+        {
+            return;
+        }
+
+        var pieces = expansions.ToDictionary(static expansion => expansion.Node, static expansion => expansion.Pieces);
+        var edit = tree.Edit();
+        List<int> assemblies = [];
+        foreach (var part in parts)
+        {
+            if (tree.IsExpandable(part) && pieces.TryGetValue(tree.FileNodeOf(part), out var expansion))
+            {
+                assemblies.Add(edit.Expand(part, expansion));
+            }
+        }
+
+        if (assemblies.Count == 0)
+        {
+            return;
+        }
+
+        var next = edit.Build();
+        var hidden = model.Hidden.Union(next.Edits.Pieces.Where(item => item.Key >= tree.Count && item.Value.Part && model.Hidden.Contains(item.Value.Expands)).Select(static item => item.Key));
+        ApplyEdit(model, next, hidden, Mode == SelectMode.Objects ? assemblies : null);
+        // The tree opens to the first assembly's pieces, as it does to a new assembly.
+        if (next.ChildrenOf(assemblies[0]) is [var first, ..])
+        {
+            RevealRequested?.Invoke(model.Id, first);
         }
     }
 

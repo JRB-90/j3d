@@ -36,11 +36,24 @@
                     <MudMenuItem Icon="@Icons.Material.Outlined.FolderOff" OnClick="Scene.Ungroup" data-testid="context-ungroup"><span class="j3d-menu-command"><span>Ungroup</span><kbd class="j3d-key">Ctrl+Shift+G</kbd></span></MudMenuItem>
                 }
                 <MudMenuItem Icon="@Icons.Material.Outlined.DriveFileRenameOutline" Disabled="@(!Scene.CanRename)" OnClick="Scene.BeginRename" data-testid="context-rename"><span class="j3d-menu-command"><span>Rename</span><kbd class="j3d-key">F2</kbd></span></MudMenuItem>
+                @* Expand (M15, D154, D197): only where there's a compound part to split. *@
+                @if (Scene.ExpandTarget is not null)
+                {
+                    <MudMenuItem Icon="@Icons.Material.Outlined.AccountTree" OnClick="Expand" data-testid="context-expand">Expand</MudMenuItem>
+                }
+                @if (Scene.ExpandAllTargets.Count > 0)
+                {
+                    <MudMenuItem Icon="@Icons.Material.Outlined.AccountTree" OnClick="ExpandAll" data-testid="context-expand-all">Expand all</MudMenuItem>
+                }
                 <MudDivider Class="my-1" />
             }
             else if (target.OnTarget && Scene.Mode == SelectMode.Models)
             {
                 <MudMenuItem Icon="@Icons.Material.Outlined.Delete" Disabled="@(!Scene.CanDelete)" OnClick="Scene.DeleteSelection" data-testid="context-delete"><span class="j3d-menu-command"><span>Delete</span><kbd class="j3d-key">Del</kbd></span></MudMenuItem>
+                @if (Scene.ExpandAllTargets.Count > 0)
+                {
+                    <MudMenuItem Icon="@Icons.Material.Outlined.AccountTree" OnClick="ExpandAll" data-testid="context-expand-all">Expand all</MudMenuItem>
+                }
             }
             else if (!target.OnTarget && Scene.CanPaste)
             {
@@ -53,6 +66,15 @@
                     @foreach (var format in Toolbar.MeshFormats)
                     {
                         <MudMenuItem Label="@format.DisplayName" OnClick="@(() => Scene.RequestExport(format, true))" data-testid="@($"context-export-{Toolbar.FormatKey(format)}")" />
+                    }
+                    @* STEP and BREP of a selection in one BREP model (M15, D192). *@
+                    @if (Scene.SelectionBrepModel is not null)
+                    {
+                        <MudDivider Class="my-1" />
+                        @foreach (var format in Toolbar.BrepFormats)
+                        {
+                            <MudMenuItem Label="@format.DisplayName" OnClick="@(() => Scene.RequestModelExport(format))" data-testid="@($"context-export-{format.ToString().ToLowerInvariant()}")" />
+                        }
                     }
                 </MudMenu>
             }

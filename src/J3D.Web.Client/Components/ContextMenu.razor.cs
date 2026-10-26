@@ -13,7 +13,7 @@ namespace J3D.Web.Client.Components;
 /// all, Fit all, Export the scene), and "Measure from here" wherever there's an entity under the
 /// pointer. Iteration 3's later milestones add their commands here.
 /// </summary>
-public sealed partial class ContextMenu(SceneState scene, ViewerSession session) : IDisposable
+public sealed partial class ContextMenu(SceneState scene, ViewerSession session, ISnackbar snackbar) : IDisposable
 {
     private MudMenu? _menu;
     private ContextMenuTarget? _target;
@@ -38,6 +38,24 @@ public sealed partial class ContextMenu(SceneState scene, ViewerSession session)
             await _menu.OpenMenuAsync(new MouseEventArgs { ClientX = target.X, ClientY = target.Y, PageX = target.X, PageY = target.Y });
         }
     });
+
+    /// <summary>Expand (M15, D154): the one compound part. A menu item awaits its click handler, so it runs on its own.</summary>
+    private void Expand()
+    {
+        if (Scene.ExpandTarget is { } target)
+        {
+            _ = InvokeAsync(() => ExpandCommand.RunAsync(scene, session, snackbar, target.Model.Id, [target.Node]));
+        }
+    }
+
+    /// <summary>Expand all (D154, D197): every compound part in the objects, or in the selected models.</summary>
+    private void ExpandAll()
+    {
+        foreach (var (id, parts) in Scene.ExpandAllTargets)
+        {
+            _ = InvokeAsync(() => ExpandCommand.RunAsync(scene, session, snackbar, id, parts));
+        }
+    }
 
     /// <summary>Move (M13): the Move tool on with its arrows, unless it's on already.</summary>
     private void StartMoving()

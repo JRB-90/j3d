@@ -27,6 +27,9 @@ import {
 } from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { editedStats } from '../edit/stats';
+import type { PlanNode } from '@j3d/occt/facade';
+import { expansionsOf } from '../edit/expand';
+import { exportPlan, writesAsImported, type PlanSource } from '../edit/export-plan';
 import { ModelStructure, sameEdits, type ModelEdits } from '../edit/structure';
 import type { BrepMeasurer, KeptPlacement, LoadedModel, ModelId, ModelStats, Vector3Tuple } from '../import/types';
 import type { CameraSnapshot } from '../store/types';
@@ -206,6 +209,8 @@ interface SceneModel {
   stats: ModelStats;
   /** Its import's content, for its counts once edited. */
   imported: LoadedModel['content'];
+  /** A BREP model's tree as edited and placed now, for its STEP and BREP exports (M15). */
+  planSource?: (hidden: ReadonlySet<number>) => PlanSource;
   /** BREP models' measurement channel (M7). */
   measure?: BrepMeasurer | undefined;
   prototypes?: MeasureModel['prototypes'];
@@ -476,6 +481,7 @@ export class Viewer {
         structure,
         name: model.summary.fileName,
         content: () => ({ kind: 'brep', scene: built.parts.exportScene() }),
+        planSource: (hidden) => built.parts.planSource(expansionsOf(model.content), hidden),
         stats: model.stats,
         imported: model.content,
         measure: model.content.measure,
@@ -514,7 +520,7 @@ export class Viewer {
     // A kept model's edits (M14), checked as it loaded (R25), then its moves (M13, D145), which since
     // M14 include the placements its edits worked out.
     if (model.restored?.edits) {
-      entry.structure = new ModelStructure(model.tree, model.restored.edits);
+      entry.structure = new ModelStructure(model.tree, model.restored.edits, expansionsOf(model.content));
       entry.parts.setStructure(entry.structure);
     }
     for (const { node, matrix } of [...(model.restored?.placements ?? [])].sort((a, b) => a.node - b.node)) {
@@ -599,7 +605,7 @@ export class Viewer {
     }
     let structure: ModelStructure;
     try {
-      structure = new ModelStructure(entry.structure.fileTree, edits);
+      structure = new ModelStructure(entry.structure.fileTree, edits, expansionsOf(entry.imported));
     } catch (error) {
       console.error(`J3D: ${entry.name}'s edits don't fit its tree.`, error);
       return undefined;
@@ -766,6 +772,27 @@ export class Viewer {
     } finally {
       built.dispose();
     }
+  }
+
+  /**
+   * How a BREP model's STEP or BREP export writes it (M15): undefined when it writes as imported (no
+   * edits, nothing moved or hidden, D188, D194), else the plan of its edited tree, or of its selection
+   * (D155). Rejects when there's nothing to write (D195).
+   */
+  exportPlan(id: ModelId, selection: boolean): PlanNode[] | undefined {
+    const entry = this.models.get(id);
+    if (!entry?.planSource) {
+      throw new Error("The model isn't a BREP model.");
+    }
+    const source = entry.planSource(entry.hidden);
+    if (!selection && writesAsImported(source)) {
+      return undefined;
+    }
+    const plan = exportPlan(source, selection ? new Set(entry.selected) : undefined);
+    if (plan.length === 0) {
+      throw new Error(selection ? 'Nothing is selected.' : 'There are no visible parts to export.');
+    }
+    return plan;
   }
 
   /** Frames every visible part without changing the view direction (button and `F` key; D78). */

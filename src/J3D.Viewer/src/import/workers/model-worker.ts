@@ -10,6 +10,7 @@ import { occtOutput } from '../occt-output';
 import { throttleProgress } from '../progress';
 import type {
   BrepExportFormat,
+  ExpandRequest,
   ExportRequest,
   ImportRequestMessage,
   MeasureRequest,
@@ -48,14 +49,30 @@ scope.onmessage = ({ data }) => {
     void runImport(data);
   } else if (data.type === 'export') {
     exportModel(data);
+  } else if (data.type === 'expand') {
+    expand(data);
   } else {
     measure(data);
   }
 };
 
+/** A file part's pieces and the prototypes new to the main thread, transferred (M15, D154). */
+function expand(request: ExpandRequest): void {
+  try {
+    if (!model) {
+      throw new Error('The model is not loaded.');
+    }
+    const { pieces, prototypes } = model.expand(request.node);
+    scope.postMessage({ type: 'expanded', id: request.id, pieces, prototypes }, sceneTransferables({ nodes: [], instances: [], prototypes }));
+  } catch (error) {
+    scope.postMessage({ type: 'measureFailed', id: request.id, message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 /**
- * Writes the whole model as STEP or BREP (M9, D83) and transfers the bytes. OCCT reports progress
- * about ten times a second, and polls the shared flag the page sets to cancel (D125).
+ * Writes the model as STEP or BREP (M9, D83), as imported or from the plan of its edited tree (M15),
+ * and transfers the bytes. OCCT reports progress about ten times a second, and polls the shared flag
+ * the page sets to cancel (D125).
  */
 function exportModel(request: ExportRequest): void {
   const flag = request.cancel ? new Int32Array(request.cancel) : undefined;
@@ -68,12 +85,13 @@ function exportModel(request: ExportRequest): void {
     if (isCancelled()) {
       throw new OcctExportError(ExportStatus.Cancelled, 'Export cancelled.');
     }
-    const bytes = output.muted(() =>
-      loaded.exportFile(exportFormats[request.format], {
-        onProgress: (_, fraction) => scope.postMessage({ type: 'exportProgress', id: request.id, fraction: fraction < 0 ? null : fraction }),
-        isCancelled,
-      }),
-    );
+    const options = {
+      onProgress: (_: unknown, fraction: number) => scope.postMessage({ type: 'exportProgress', id: request.id, fraction: fraction < 0 ? null : fraction }),
+      isCancelled,
+    };
+    const format = exportFormats[request.format];
+    const { plan } = request;
+    const bytes = output.muted(() => (plan ? loaded.exportTree(format, plan, options) : loaded.exportFile(format, options)));
     scope.postMessage({ type: 'exported', id: request.id, bytes: bytes.buffer }, [bytes.buffer]);
   } catch (error) {
     scope.postMessage({

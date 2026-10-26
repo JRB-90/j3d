@@ -73,9 +73,13 @@ public sealed class ViewerSession
     public async Task<ExportOutcome?> ExportMeshAsync(MeshExportFormat format, bool selection) =>
         IsReady ? await _viewer!.ExportMeshAsync(format, selection) : null;
 
-    /// <summary>Saves a BREP model as STEP or BREP (M9). Null without a viewer.</summary>
-    public async Task<ExportOutcome?> ExportModelAsync(ModelId id, BrepExportFormat format) =>
-        _viewer is not null ? await _viewer.ExportModelAsync(id, format) : null;
+    /// <summary>Saves a BREP model, or its selection (M15, D155), as STEP or BREP (M9). Null without a viewer.</summary>
+    public async Task<ExportOutcome?> ExportModelAsync(ModelId id, BrepExportFormat format, bool selection = false) =>
+        _viewer is not null ? await _viewer.ExportModelAsync(id, format, selection) : null;
+
+    /// <summary>Expands file parts of a BREP model (M15, D154). Null without a viewer.</summary>
+    public async Task<ExpandOutcome?> ExpandPartsAsync(ModelId id, IReadOnlyList<int> fileNodes) =>
+        IsReady ? await _viewer!.ExpandPartsAsync(id, fileNodes) : null;
 
     /// <summary>Stops a model's STEP or BREP export (D125).</summary>
     public async Task CancelExportAsync(ModelId id)

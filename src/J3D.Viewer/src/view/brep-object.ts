@@ -17,7 +17,8 @@ import {
   type MeshStandardMaterial,
   type Object3D,
 } from 'three';
-import { ModelStructure, TopLevel } from '../edit/structure';
+import type { PlanSource } from '../edit/export-plan';
+import { ModelStructure, TopLevel, type Expansions } from '../edit/structure';
 import type { KeptPlacement } from '../import/types';
 import { EdgeVisibilityAttribute, type LinearRgba, type MaterialCache } from './materials';
 import {
@@ -43,6 +44,8 @@ export interface BrepObject {
   parts: ModelParts & {
     /** The scene as edited, for exports: the live nodes' placements, on the imported prototypes. */
     exportScene(): ImportedScene;
+    /** The tree as edited and placed now, for STEP and BREP exports (M15). */
+    planSource(expansions: Expansions, hidden: ReadonlySet<number>): PlanSource;
   };
   /** Frees the geometry and releases the materials. The object is left empty. */
   dispose(): void;
@@ -317,7 +320,7 @@ class BrepParts implements ModelParts {
     const fileCount = this.scene.nodes.length;
     const previous = this.structure;
     let kept = fileCount;
-    while (kept < Math.min(previous.count, next.count) && previous.sources[kept] === next.sources[kept]) {
+    while (kept < Math.min(previous.count, next.count) && previous.addedKey(kept) === next.addedKey(kept)) {
       kept++;
     }
     for (let node = previous.count - 1; node >= kept; node--) {
@@ -344,8 +347,17 @@ class BrepParts implements ModelParts {
       }
       let world = after.get(node);
       if (!world) {
+        // Expand's assembly takes its part's place, and its pieces go where they are in the part (M15).
+        const expanded = next.expansionOf(node);
+        const frame = next.pieceFrame(node);
         const source = next.sources[node]!;
-        world = source >= 0 ? worldAfter(source) : worldAfter(next.nodes[node]!.parent);
+        world = frame
+          ? worldAfter(frame.parent).clone().multiply(new Matrix4().fromArray(frame.matrix))
+          : expanded
+            ? worldAfter(expanded.expands)
+            : source >= 0
+              ? worldAfter(source)
+              : worldAfter(next.nodes[node]!.parent);
         after.set(node, world);
       }
       return world;
@@ -381,8 +393,13 @@ class BrepParts implements ModelParts {
 
     for (let node = kept; node < next.count; node++) {
       const world = worlds[node - kept]!;
-      for (const filePlacement of this.filePlacements.get(next.fileNodes[node]!) ?? []) {
-        this.addPlacement(node, this.instances[filePlacement]!.prototype, world);
+      const fileNode = next.fileNodes[node]!;
+      if (fileNode >= 0) {
+        for (const filePlacement of this.filePlacements.get(fileNode) ?? []) {
+          this.addPlacement(node, this.instances[filePlacement]!.prototype, world);
+        }
+      } else if (next.nodes[node]!.prototype >= 0) {
+        this.addPlacement(node, next.nodes[node]!.prototype, world); // a piece of an expanded part, or a copy of one (M15)
       }
     }
 
@@ -393,6 +410,17 @@ class BrepParts implements ModelParts {
     // Once for all the copies made or dropped: per copy, a pasted line of hundreds of parts took quadratic time.
     this.additions.forEach((addition) => addition.mesh?.computeBoundingSphere());
     return changed.map(({ node, matrix }) => ({ node, matrix }));
+  }
+
+  planSource(expansions: Expansions, hidden: ReadonlySet<number>): PlanSource {
+    return {
+      structure: this.structure,
+      fileTree: this.scene.nodes,
+      expansions,
+      local: (node) => Array.from(this.locals.subarray(node * 16, node * 16 + 16)),
+      frame: this.frame.toArray(),
+      hidden,
+    };
   }
 
   /** The scene as edited, for exports: live nodes' placements only. */

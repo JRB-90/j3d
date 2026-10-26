@@ -1,3 +1,4 @@
+import type { ExpandedPiece } from '@j3d/occt/facade';
 import type { TreeNode } from '../import/types';
 
 /**
@@ -13,7 +14,28 @@ export interface ModelEdits {
   children: { parent: number; nodes: number[] }[];
   /** Names given by Rename and New assembly, and copies of renamed nodes. */
   names: { node: number; name: string }[];
+  /** Added nodes that Expand made (M15); absent from edits kept before M15. */
+  pieces?: ExpandedNode[];
 }
+
+/**
+ * An added node that Expand made (M15, D154, D189): the assembly that takes a compound part's place
+ * (piece -1), or one of the part's pieces. Its added source is -1, as a new assembly's.
+ */
+export interface ExpandedNode {
+  node: number;
+  /** The part it expands: a file node, or a copy of one. It leaves the tree as the assembly takes its place. */
+  expands: number;
+  /** Its piece in the part's expansion, or -1 for the assembly. */
+  piece: number;
+  /** Its name before any rename: the file's, or numbered after its parent (D191). */
+  name: string;
+  /** It draws something: .NET's tree tells parts by this; the viewer checks it against the expansion. */
+  part: boolean;
+}
+
+/** Each expanded file part's pieces, as the facade gives them (M15): their prototypes are the model's. */
+export type Expansions = ReadonlyMap<number, readonly ExpandedPiece[]>;
 
 export const NoEdits: ModelEdits = { added: [], children: [], names: [] };
 
@@ -29,7 +51,22 @@ export class EditsMismatchError extends Error {
 }
 
 export function hasEdits(edits: ModelEdits | undefined): edits is ModelEdits {
-  return !!edits && (edits.added.length > 0 || edits.children.length > 0 || edits.names.length > 0);
+  return !!edits && (edits.added.length > 0 || edits.children.length > 0 || edits.names.length > 0 || (edits.pieces?.length ?? 0) > 0);
+}
+
+/** The file parts whose expansions these edits need (M15), in the order they're first expanded. */
+export function expandedFileNodes(fileCount: number, edits: ModelEdits | undefined): number[] {
+  // Each added node's file node, followed back through its sources.
+  const fileNodes = new Map<number, number>();
+  edits?.added.forEach((source, offset) => fileNodes.set(fileCount + offset, source < fileCount ? source : (fileNodes.get(source) ?? -1)));
+  const needed: number[] = [];
+  for (const { expands } of edits?.pieces ?? []) {
+    const file = expands < fileCount ? expands : (fileNodes.get(expands) ?? -1);
+    if (file >= 0 && !needed.includes(file)) {
+      needed.push(file);
+    }
+  }
+  return needed;
 }
 
 /**
@@ -42,8 +79,14 @@ export class ModelStructure {
   readonly nodes: TreeNode[];
   /** Each added node's source (see {@link ModelEdits.added}); -1 for the file's nodes. */
   readonly sources: number[];
-  /** The file's node ids each added part draws: its source, followed back to the file. */
+  /** The file's node ids each added part draws: its source, followed back to the file; -1 for Expand's nodes and their copies. */
   readonly fileNodes: number[];
+  /** Each node's name before any rename. */
+  private readonly defaultNames: string[];
+  /** Expand's nodes (M15). */
+  private readonly expanded = new Map<number, ExpandedNode>();
+  /** Each piece's piece parent (the assembly, or a piece above it) and its placement in that parent's frame. */
+  private readonly pieceFrames = new Map<number, { parent: number; matrix: readonly number[] }>();
   private readonly childLists = new Map<number, number[]>();
   private readonly liveFlags: Uint8Array;
   private orderCache: number[] | undefined;
@@ -51,9 +94,19 @@ export class ModelStructure {
   constructor(
     readonly fileTree: readonly TreeNode[],
     readonly edits: ModelEdits = NoEdits,
+    expansions: Expansions = new Map(),
   ) {
     const fileCount = fileTree.length;
     const total = fileCount + edits.added.length;
+    for (const piece of edits.pieces ?? []) {
+      if (!Number.isInteger(piece.node) || piece.node < fileCount || piece.node >= total || edits.added[piece.node - fileCount] !== -1 || this.expanded.has(piece.node)) {
+        throw new EditsMismatchError(`Node ${piece.node} is given as Expand's, but it isn't a new node.`);
+      }
+      if (!Number.isInteger(piece.expands) || piece.expands < 0 || piece.expands >= piece.node) {
+        throw new EditsMismatchError(`Node ${piece.node} expands node ${piece.expands}, which comes after it or doesn't exist.`);
+      }
+      this.expanded.set(piece.node, piece);
+    }
     const names = new Map<number, string>();
     for (const { node, name } of edits.names) {
       if (!Number.isInteger(node) || node < 0 || node >= total) {
@@ -63,8 +116,10 @@ export class ModelStructure {
     }
 
     this.nodes = fileTree.map((node, index) => ({ name: names.get(index) ?? node.name, parent: node.parent, prototype: node.prototype }));
+    this.defaultNames = fileTree.map((node) => node.name);
     this.sources = fileTree.map(() => -1);
     this.fileNodes = fileTree.map((_, index) => index);
+    const pieceNodes = new Map<string, number>();
     edits.added.forEach((source, offset) => {
       const id = fileCount + offset;
       if (!Number.isInteger(source) || source < -1 || source >= id) {
@@ -72,7 +127,16 @@ export class ModelStructure {
       }
       const copied = source >= 0 ? this.nodes[source]! : undefined;
       const fileNode = source >= 0 ? this.fileNodes[source]! : -1;
-      this.nodes.push({ name: names.get(id) ?? (fileNode >= 0 ? fileTree[fileNode]!.name : 'Assembly'), parent: TopLevel, prototype: copied?.prototype ?? -1 });
+      const expanded = this.expanded.get(id);
+      // A copy's name before any rename is its source's: the file's, a piece's or a new assembly's.
+      const defaultName = expanded ? expanded.name : fileNode >= 0 ? fileTree[fileNode]!.name : copied ? this.defaultNames[source]! : 'Assembly';
+      let prototype = copied?.prototype ?? -1;
+      if (expanded) {
+        prototype = this.expandedPrototype(expanded, expansions, pieceNodes);
+        pieceNodes.set(`${expanded.expands}:${expanded.piece}`, id);
+      }
+      this.nodes.push({ name: names.get(id) ?? defaultName, parent: TopLevel, prototype });
+      this.defaultNames.push(defaultName);
       this.sources.push(source);
       this.fileNodes.push(fileNode);
     });
@@ -127,6 +191,22 @@ export class ModelStructure {
     return this.nodes.length;
   }
 
+  /** Expand's node, if this is one (M15). */
+  expansionOf(node: number): ExpandedNode | undefined {
+    return this.expanded.get(node);
+  }
+
+  /** Where Expand puts a piece: its piece parent (the assembly, or a piece) and its placement in that parent's frame. */
+  pieceFrame(node: number): { parent: number; matrix: readonly number[] } | undefined {
+    return this.pieceFrames.get(node);
+  }
+
+  /** What an added node is, to tell whether an id still holds the same one after an undo: a copy of a node, Expand's, or a new assembly. */
+  addedKey(node: number): string {
+    const expanded = this.expanded.get(node);
+    return expanded ? `p${expanded.expands}:${expanded.piece}` : `c${this.sources[node] ?? -1}`;
+  }
+
   /** In the model: reachable from its top level. */
   isLive(node: number): boolean {
     return this.liveFlags[node] === 1;
@@ -171,6 +251,26 @@ export class ModelStructure {
     return nodes;
   }
 
+  /** Checks an Expand node against its part's expansion, noting a piece's frame; returns the prototype it draws. */
+  private expandedPrototype(expanded: ExpandedNode, expansions: Expansions, pieceNodes: ReadonlyMap<string, number>): number {
+    const part = this.nodes[expanded.expands];
+    const fileNode = this.fileNodes[expanded.expands] ?? -1;
+    const pieces = fileNode >= 0 ? expansions.get(fileNode) : undefined;
+    if (!part || part.prototype < 0 || !pieces) {
+      throw new EditsMismatchError(`Node ${expanded.node} expands node ${expanded.expands}, which isn't an expanded part.`);
+    }
+    if (expanded.piece === -1) {
+      return -1;
+    }
+    const piece = Number.isInteger(expanded.piece) ? pieces[expanded.piece] : undefined;
+    const parent = piece ? pieceNodes.get(`${expanded.expands}:${piece.parent}`) : undefined;
+    if (!piece || parent === undefined || piece.prototype >= 0 !== expanded.part) {
+      throw new EditsMismatchError(`Node ${expanded.node} is piece ${expanded.piece} of node ${expanded.expands}, which its expansion doesn't have.`);
+    }
+    this.pieceFrames.set(expanded.node, { parent, matrix: piece.matrix });
+    return piece.prototype;
+  }
+
   private listOf(parent: number): number[] {
     let list = this.childLists.get(parent);
     if (!list) {
@@ -183,5 +283,9 @@ export class ModelStructure {
 
 /** The same edits, compared by value: .NET sends them whole, often unchanged. */
 export function sameEdits(a: ModelEdits | undefined, b: ModelEdits | undefined): boolean {
-  return JSON.stringify(a ?? NoEdits) === JSON.stringify(b ?? NoEdits);
+  const text = (edits: ModelEdits | undefined) => {
+    const { added, children, names, pieces } = edits ?? NoEdits;
+    return JSON.stringify({ added, children, names, pieces: pieces ?? [] });
+  };
+  return text(a) === text(b);
 }

@@ -1,10 +1,11 @@
 using System.Collections.Immutable;
+using System.Globalization;
 
 namespace J3D.Web.Client.State;
 
 /// <summary>
-/// One edit of a <see cref="ModelTree"/> (M14): nodes moved, copied, grouped, ungrouped, removed and
-/// renamed, building the model's next <see cref="ModelEdits"/>. Only the child lists it touches are
+/// One edit of a <see cref="ModelTree"/> (M14): nodes moved, copied, grouped, ungrouped, removed,
+/// renamed and since M15 expanded, building the model's next <see cref="ModelEdits"/>. Only the child lists it touches are
 /// copied. An assembly a move or removal leaves with nothing in it goes too (D181); empty assemblies
 /// the file has stay.
 /// </summary>
@@ -16,12 +17,14 @@ public sealed class TreeEdit
     private readonly Dictionary<int, int> _parents = [];
     private readonly HashSet<int> _emptied = [];
     private ImmutableDictionary<int, string> _names;
+    private ImmutableDictionary<int, ExpandedNode> _pieces;
 
     internal TreeEdit(ModelTree tree)
     {
         _tree = tree;
         _added = [.. tree.Edits.Added];
         _names = tree.Edits.Names;
+        _pieces = tree.Edits.Pieces;
     }
 
     private int Count => _tree.FileCount + _added.Count;
@@ -123,6 +126,51 @@ public sealed class TreeEdit
         return this;
     }
 
+    /// <summary>
+    /// Expand (M15, D154, D189–D191): a compound part gives way to a new assembly in its place, named as
+    /// the part is now, holding the part's pieces as its expansion has them (each after its piece parent,
+    /// -1 being the assembly). A piece the file doesn't name is named after its parent and its place among
+    /// its siblings: "Bracket set 1", "Bracket set 2", or "Part 1" under a part with no name. Returns the
+    /// assembly's id.
+    /// </summary>
+    public int Expand(int part, IReadOnlyList<Interop.ExpansionPiece> pieces)
+    {
+        var parent = ParentOf(part);
+        var list = ListOf(parent);
+        var assembly = Count;
+        var name = _tree.NameOf(part);
+        _added.Add(-1);
+        _pieces = _pieces.SetItem(assembly, new ExpandedNode(part, -1, name, Part: false));
+        list[list.IndexOf(part)] = assembly;
+        _parents[assembly] = parent;
+        _parents[part] = Removed;
+        _lists[assembly] = [];
+
+        var ids = new int[pieces.Count];
+        var names = new string[pieces.Count];
+        var siblings = new Dictionary<int, int>();
+        for (var index = 0; index < pieces.Count; index++)
+        {
+            var piece = pieces[index];
+            var owner = piece.Parent >= 0 && piece.Parent < index ? piece.Parent : -1;
+            var place = siblings[owner] = siblings.GetValueOrDefault(owner) + 1;
+            var parentName = owner < 0 ? name : names[owner];
+            names[index] = piece.Name.Length > 0 ? piece.Name : $"{(parentName.Length > 0 ? parentName : "Part")} {place.ToString(CultureInfo.InvariantCulture)}";
+            var id = ids[index] = Count;
+            _added.Add(-1);
+            _pieces = _pieces.SetItem(id, new ExpandedNode(part, index, names[index], piece.Part));
+            var ownerId = owner < 0 ? assembly : ids[owner];
+            _lists[ownerId].Add(id);
+            _parents[id] = ownerId;
+            if (!piece.Part)
+            {
+                _lists[id] = [];
+            }
+        }
+
+        return assembly;
+    }
+
     public TreeEdit Rename(int node, string name)
     {
         _names = node < _tree.Count && name == _tree.DefaultNameOf(node) ? _names.Remove(node) : _names.SetItem(node, name);
@@ -148,7 +196,7 @@ public sealed class TreeEdit
             }
         }
 
-        return new ModelTree(_tree.File, new ModelEdits([.. _added], children, _names));
+        return new ModelTree(_tree.File, new ModelEdits([.. _added], children, _names, _pieces));
     }
 
     private const int Removed = -2;
