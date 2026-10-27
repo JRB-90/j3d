@@ -229,10 +229,11 @@ a:focus-visible {
     font-size: 1.125rem;
 }
 
-/* Narrower windows (D135) keep the app bar on one line down to 900 px. Below 1,340 px Import, Export and
-   Fit all show only their icons (conventional ones, with tooltips); below 1,180 px every tool does (raised
-   from 1,280 and 1,100 when Rotate joined the tools, M17). */
-@media (max-width: 1339.98px) {
+/* Narrower windows (D135) keep the app bar on one line down to 900 px. Below 1,400 px Import, Export and
+   Fit all show only their icons (conventional ones, with tooltips); below 1,240 px every tool does (raised
+   from 1,280 and 1,100 when Rotate joined the tools, M17). The labels are in the system font, which is wider on
+   Linux than Segoe UI, so these leave room for both. */
+@media (max-width: 1399.98px) {
     .j3d-toolbar-group--first .j3d-tool-label {
         display: none;
     }
@@ -253,7 +254,7 @@ a:focus-visible {
     }
 }
 
-@media (max-width: 1179.98px) {
+@media (max-width: 1239.98px) {
     .j3d-toolbar .j3d-tool-label {
         display: none;
     }

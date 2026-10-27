@@ -353,10 +353,10 @@ which are drawn on the canvas at 600. Emphasis comes from Text Bright against Te
 
   About sits at the far right. Controls within a group are 2 px apart, and each group has 8 px either side of its
   hairline.
-- **Labels by width:** at 1,340 px and above, every tool and mode shows its label. Between 1,180 and 1,340 px Import,
-  Export and Fit all drop theirs. Below 1,180 px every tool is a 32 px icon. (1,280 and 1,100 px until Rotate joined
-  the tools in M17.) Visibility and History are icons at any
-  width. Tooltips always name the action and its key. The bar stays on one line down to 900 px. There's no phone or
+- **Labels by width:** at 1,400 px and above, every tool and mode shows its label. Between 1,240 and 1,400 px Import,
+  Export and Fit all drop theirs. Below 1,240 px every tool is a 32 px icon. (1,280 and 1,100 px until Rotate joined
+  the tools in M17; the room left allows for Linux's fallback font, which is wider than Segoe UI.) Visibility and
+  History are icons at any width. Tooltips always name the action and its key. The bar stays on one line down to 900 px. There's no phone or
   tablet layout.
 - **Viewport corners:**
   - **Top right:** the view cube (110 px, 12 px from the corner), with Home just left of it and the
