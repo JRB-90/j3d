@@ -20,14 +20,15 @@ public sealed class ShellTests(J3DAppFixture app) : PageTest, IClassFixture<J3DA
 
     /// <summary>
     /// D135: the app bar stays one line from 900 px up. Since the clarity pass every tool and mode shows its
-    /// label from 1,280 px; between 1,100 and 1,280 px Import, Export and Fit all keep only their icons, and
-    /// below 1,100 px every tool does. Nothing in the bar is clipped and the toolbar ends before the About
-    /// button (M12).
+    /// label from 1,340 px (1,280 until Rotate joined the tools in M17); between 1,180 and 1,340 px Import,
+    /// Export and Fit all keep only their icons, and below 1,180 px every tool does. Nothing in the bar is
+    /// clipped and the toolbar ends before the About button (M12).
     /// </summary>
     [Theory]
-    [InlineData(1280, true, true)]
+    [InlineData(1340, true, true)]
+    [InlineData(1339, false, true)]
     [InlineData(1180, false, true)]
-    [InlineData(1000, false, false)]
+    [InlineData(1179, false, false)]
     [InlineData(900, false, false)]
     public async Task The_app_bar_stays_on_one_line(int width, bool filesLabelled, bool toolsLabelled)
     {

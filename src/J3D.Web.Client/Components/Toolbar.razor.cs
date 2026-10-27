@@ -156,18 +156,5 @@ public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISn
         }
     }
 
-    /// <summary>The Move button: on with the arrows (as W), or off whichever mode it's in.</summary>
-    private void ToggleMove()
-    {
-        if (scene.Moving is { } mode)
-        {
-            scene.SetMoveMode(mode);
-        }
-        else
-        {
-            scene.SetMoveMode(MoveMode.Translate);
-        }
-    }
-
     private Task FitAllAsync() => session.FitAllAsync();
 }

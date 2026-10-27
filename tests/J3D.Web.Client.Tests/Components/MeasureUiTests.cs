@@ -246,6 +246,29 @@ public sealed class MeasureUiTests : BunitTestBase
         Assert.Equal([1, 3, 4], Scene.Find(Id)!.Selected.Order()); // Model mode: the whole bracket
     }
 
+    [Fact]
+    public async Task An_undone_feature_selection_goes_back_to_the_viewer_after_its_mode()
+    {
+        JSInterop.Mode = JSRuntimeMode.Strict;
+        _viewer.SetupVoid("setPartState", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("setSelectionMode", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("restoreFeatures", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("setModelOrder", static _ => true).SetVoidResult();
+        _viewer.SetupVoid("dispose").SetVoidResult();
+        var cut = Render<Viewport>();
+
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("selectFeatures"));
+        await cut.InvokeAsync(() => cut.Instance.OnFeaturesSelected(new FeatureSelection([Measure("f1", "Face of Pin", ("Area", "1.000 mm²"))], [], "[1]", ByUser: true)));
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("selectObjects"));
+        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("undo"));
+
+        cut.WaitForAssertion(() => Assert.Single(_viewer.Invocations, static i => i.Identifier == "restoreFeatures"));
+        Assert.Equal("[1]", _viewer.Invocations.Single(static i => i.Identifier == "restoreFeatures").Arguments[0]);
+        var calls = _viewer.Invocations.Select(static i => i.Identifier).ToList();
+        Assert.True(calls.LastIndexOf("setSelectionMode") < calls.IndexOf("restoreFeatures")); // Feature mode first, which clears them
+        Assert.Equal(SelectMode.Features, Scene.Mode);
+    }
+
     private Task Act(Action action) => Renderer.Dispatcher.InvokeAsync(action);
 
     private static MeasureInfo Measure(string id, string title, params (string Name, string Value)[] rows) => new(

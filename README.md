@@ -20,8 +20,9 @@ drawing all happen in the browser tab.
   their values, and with the total length or area of several. What's under the pointer is highlighted faintly
   before you click. The tree also works from the keyboard, as a screen reader expects (see **Controls**).
 - **Move** a part, a sub-assembly (picked in the tree) or a whole model (in Model mode): turn on **Move** (or press
-  `W`) to drag the arrows and planes of a triad at the object's origin, or press `E` for its rings to turn it; hold
-  `Ctrl` to snap to whole millimetres and 15°. The panel shows the object's position (X, Y, Z in mm) and turn (Rx,
+  `W`) to drag the arrows and planes of a triad at the object's origin, or **Rotate** (`E`) for its rings to turn it;
+  the **Move | Rotate** switch at the top of the panel changes between them. Hold `Ctrl` to snap to whole
+  millimetres and 15°. The panel shows the object's position (X, Y, Z in mm) and turn (Rx,
   Ry, Rz in degrees, about X, then Y, then Z) in its **Parent**'s frame or the **World**'s; type new values and press
   Enter (or **Apply**) to put it there, or in **Local** type a move about the object's own axes; the panel says which
   ("Position in its parent", "Move by"). Moving one of several copies of a
@@ -43,11 +44,16 @@ drawing all happen in the browser tab.
   works. Only the one you picked is split, not every copy of it, and it's an edit like the others: it can be undone,
   is kept, and is exported.
 - **Right-click** a part, a tree node or empty space (a click that doesn't drag) for a menu of what you can do there:
-  hide, isolate, move, measure from that point, edit and export the selection, or show all, fit all, paste and export
+  hide, isolate, move, rotate, measure from that point, edit and export the selection, or show all, fit all, paste and export
   the scene. Each command shows its key; `Esc` closes the menu.
 - **Hide, isolate and show** parts with the eye beside each model and tree node, or the toolbar buttons and keys
-  below. Isolating fits the view to what's left. **Undo and redo** cover hiding and showing, moving, editing the
-  assembly, and deleting a model.
+  below. Isolating fits the view to what's left. **Undo and redo** cover selecting (each click, Ctrl+click, tree
+  pick or clear, and a mode switch that changes the selection), hiding and showing, moving, editing the assembly,
+  and deleting a model; their tooltips say what they'll undo or redo. Undo keeps your last 50 edits however much you
+  select in between, and the last 50 selections besides.
+- **Step back through views**: the arrows beside **Home** (or `[` and `]`) go to the previous and next place the
+  camera came to rest, a turn, pan or zoom, Fit all, Home, a view cube click or a projection switch. They're apart
+  from Undo, so undoing an edit never moves the camera, and they last until the page is closed.
 - **Measure** CAD models exactly from their BREP geometry: turn on **Measure** (or press `M`) and click a face, edge
   or vertex. That first pick is the **reference**: its own value is drawn on it (an edge's length, a circle's
   diameter, a face's area) and its properties (area, length, radius, normal, axis…) and its part's volume and size
@@ -105,6 +111,7 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Zoom | Wheel (towards the pointer) | Pinch | |
 | Fit everything visible in view | | | **Fit all** in the toolbar, or `F` |
 | Isometric view of everything | | | **Home**, beside the view cube |
+| Previous view, next view | | | The arrows beside **Home**, or `[` and `]` |
 | Select models, objects or features | | | The **Model**, **Object** and **Feature** switch in the toolbar, or `1`, `2`, `3` |
 | Select | Click it (a click that doesn't drag) | Tap it | Click a node in the tree selects every part under it (its model in Model mode) |
 | Add or remove | Ctrl+click | | Ctrl+click in the tree |
@@ -116,7 +123,7 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Show only the selection | | | **Isolate**, or `I` |
 | Show everything | | | **Show all**, or `Shift+H` |
 | Move the selected part, sub-assembly or model | Drag the triad's arrows or planes; `Ctrl` snaps | | **Move** in the toolbar, or `W`; type X, Y, Z in the panel and press Enter |
-| Turn it | Drag the triad's rings; `Ctrl` snaps to 15° | | `E`; type Rx, Ry, Rz in the panel and press Enter |
+| Turn it | Drag the triad's rings; `Ctrl` snaps to 15° | | **Rotate** in the toolbar or the right-click menu, or `E`; **Move \| Rotate** in the panel; type Rx, Ry, Rz and press Enter |
 | Show origin frames | | | **Origin frames** in the toolbar, or `O` |
 | Cut, copy, paste the selected objects | | | Right-click menu, or `Ctrl+X`, `Ctrl+C`, `Ctrl+V` |
 | Delete the selected objects (or, in Model mode, models) | | | Right-click menu, or `Delete` |
@@ -125,7 +132,7 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Group the selection, or ungroup an assembly | | | **New assembly** (`Ctrl+G`), **Ungroup** (`Ctrl+Shift+G`) in the right-click menu |
 | Rename a node | | | **Rename** in the right-click menu, or `F2`; `Enter` keeps it, `Esc` doesn't |
 | Split a compound part into its solids | | | **Expand** (one part) or **Expand all** (an assembly's, or a model's) in the right-click menu |
-| Undo, redo (hiding, showing, moving, editing, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
+| Undo, redo (selecting, hiding, showing, moving, editing, deleting) | | | **Undo**, **Redo**, or `Ctrl+Z`, `Ctrl+Y` |
 | Measure | Click a face, edge or vertex (the reference), then others | Tap | **Measure** in the toolbar, or `M`; **Measure from here** in the right-click menu; `Esc` ends it |
 | End the Move or Measure tool | | | `Esc` (again to clear the selection) |
 | Export the scene or the selection | | | **Export** in the toolbar: GLB, STL (binary) or STL (ASCII), and STEP or BREP of a selection in one CAD model |

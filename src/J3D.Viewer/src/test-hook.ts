@@ -54,6 +54,8 @@ export interface TestHook {
   readonly rendering: boolean;
   /** The camera, or null without WebGL2. */
   camera(): CameraState | null;
+  /** The view history (M17, D220): how many views, and whether Previous and Next view can go. */
+  viewHistory(): ReturnType<Viewer['viewHistoryState']> | null;
   /** Frames drawn so far: rendering is on demand, so this stays still while nothing changes. */
   frames(): number;
   /** Where a view cube region (e.g. `top-front-right`) is on screen, or null when it faces away. */
@@ -171,6 +173,7 @@ export function installTestHook(
     liveWorkers: () => liveWorkers.count,
     rendering: viewer !== undefined,
     camera: () => viewer?.cameraState() ?? null,
+    viewHistory: () => viewer?.viewHistoryState() ?? null,
     frames: () => viewer?.frameCount ?? 0,
     viewCubePoint: (id) => {
       const region = findRegion(id);

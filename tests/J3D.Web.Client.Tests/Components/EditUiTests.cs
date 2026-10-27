@@ -125,7 +125,7 @@ public sealed class EditUiTests : BunitTestBase
         await field.InputAsync(new ChangeEventArgs { Value = "Changed" });
         await field.KeyDownAsync(new KeyboardEventArgs { Key = "Escape" });
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=tree-rename]")));
-        Assert.False(Scene.CanUndo);
+        Assert.Equal("selecting 1 part", Scene.UndoLabel); // no rename, only the pick (D219)
 
         await Act(Scene.Cut);
         cut.WaitForAssertion(() => Assert.Contains("j3d-tree-node--cut", Node(cut, 1).ClassName, StringComparison.Ordinal));

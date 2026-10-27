@@ -16,8 +16,10 @@
         outline: none;
     }
 
-    /* The viewer's Home button sits at the top-left corner of the view cube (110 px, 12 px from the corner). */
-    .j3d-viewport ::deep .j3d-home-button {
+    /* The viewer's Home button sits at the top-left corner of the view cube (110 px, 12 px from the corner),
+       with Previous view and Next view to its left (M17, D221). */
+    .j3d-viewport ::deep .j3d-home-button,
+    .j3d-viewport ::deep .j3d-view-button {
         position: absolute;
         top: 8px;
         right: 102px;
@@ -31,14 +33,30 @@
         cursor: pointer;
     }
 
+    .j3d-viewport ::deep .j3d-next-view {
+        right: 134px;
+    }
+
+    .j3d-viewport ::deep .j3d-previous-view {
+        right: 164px;
+    }
+
         .j3d-viewport ::deep .j3d-home-button:hover,
-        .j3d-viewport ::deep .j3d-home-button:focus-visible {
+        .j3d-viewport ::deep .j3d-home-button:focus-visible,
+        .j3d-viewport ::deep .j3d-view-button:enabled:hover,
+        .j3d-viewport ::deep .j3d-view-button:focus-visible {
             color: #4f9dff;
             background: rgba(79, 157, 255, 0.12);
             outline: none;
         }
 
-        .j3d-viewport ::deep .j3d-home-button svg {
+        .j3d-viewport ::deep .j3d-view-button:disabled {
+            color: #4a5059; /* Control Off */
+            cursor: default;
+        }
+
+        .j3d-viewport ::deep .j3d-home-button svg,
+        .j3d-viewport ::deep .j3d-view-button svg {
             display: block;
             width: 100%;
             height: 100%;

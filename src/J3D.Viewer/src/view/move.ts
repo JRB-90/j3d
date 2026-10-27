@@ -83,6 +83,11 @@ export class MoveTool {
     return this.mode !== null && this.target !== undefined;
   }
 
+  /** The triad's mode while it's on (M17, for tests): the arrows or the rings. */
+  get activeMode(): MoveMode | null {
+    return this.isActive ? this.mode : null;
+  }
+
   get isDragging(): boolean {
     return this.controls.dragging;
   }

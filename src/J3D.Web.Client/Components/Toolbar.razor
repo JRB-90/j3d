@@ -105,16 +105,31 @@
             </MudButton>
         </MudTooltip>
 
-        <MudTooltip Text="@(Scene.Moving is null ? "Move the selected object (W; E turns it)" : "Stop moving (W or E)")">
+        @* Move and Rotate (M17, D208, D222): one tool with the triad's arrows or its rings; each button turns
+           it on in its mode, switches to it, or turns it off when it's already in it. *@
+        <MudTooltip Text="@(Scene.Moving == MoveMode.Translate ? "Stop moving (W or Esc)" : "Move the selected object (W)")">
             <MudButton StartIcon="@Icons.Material.Outlined.OpenWith"
                        Color="Color.Inherit"
                        Disabled="@(!Session.IsReady)"
-                       OnClick="ToggleMove"
-                       Class="@ToolClass(Scene.Moving is not null)"
+                       OnClick="@(() => Scene.SetMoveMode(MoveMode.Translate))"
+                       Class="@ToolClass(Scene.Moving == MoveMode.Translate)"
                        aria-label="Move"
-                       aria-pressed="@(Scene.Moving is not null ? "true" : "false")"
+                       aria-pressed="@(Scene.Moving == MoveMode.Translate ? "true" : "false")"
                        data-testid="move-button">
                 <span class="j3d-tool-label">Move</span>
+            </MudButton>
+        </MudTooltip>
+
+        <MudTooltip Text="@(Scene.Moving == MoveMode.Rotate ? "Stop rotating (E or Esc)" : "Rotate the selected object (E)")">
+            <MudButton StartIcon="@Icons.Material.Outlined._3dRotation"
+                       Color="Color.Inherit"
+                       Disabled="@(!Session.IsReady)"
+                       OnClick="@(() => Scene.SetMoveMode(MoveMode.Rotate))"
+                       Class="@ToolClass(Scene.Moving == MoveMode.Rotate)"
+                       aria-label="Rotate"
+                       aria-pressed="@(Scene.Moving == MoveMode.Rotate ? "true" : "false")"
+                       data-testid="rotate-button">
+                <span class="j3d-tool-label">Rotate</span>
             </MudButton>
         </MudTooltip>
 
@@ -163,9 +178,9 @@
         </MudTooltip>
     </div>
 
-    @* The undo history (D84). *@
+    @* The undo history (D84), its tooltips naming the step (M17, D224). *@
     <div class="j3d-toolbar-group" role="group" aria-label="History">
-        <MudTooltip Text="Undo (Ctrl+Z)">
+        <MudTooltip Text="@(Scene.UndoLabel is { } undo ? $"Undo {undo} (Ctrl+Z)" : "Undo (Ctrl+Z)")">
             <MudIconButton Icon="@Icons.Material.Outlined.Undo"
                            Color="Color.Inherit"
                            Disabled="@(!Session.IsReady || !Scene.CanUndo)"
@@ -174,7 +189,7 @@
                            aria-label="Undo"
                            data-testid="undo-button" />
         </MudTooltip>
-        <MudTooltip Text="Redo (Ctrl+Y)">
+        <MudTooltip Text="@(Scene.RedoLabel is { } redo ? $"Redo {redo} (Ctrl+Y)" : "Redo (Ctrl+Y)")">
             <MudIconButton Icon="@Icons.Material.Outlined.Redo"
                            Color="Color.Inherit"
                            Disabled="@(!Session.IsReady || !Scene.CanRedo)"

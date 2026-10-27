@@ -11,6 +11,22 @@ import type { Highlight } from './parts';
 export interface FeatureSelectionInfo {
   features: MeasureInfo[];
   totals: MeasureRow[];
+  /**
+   * Every selected feature, described or not, as one string (M17): .NET compares it to tell a change, and
+   * hands it back to select them again when a selection is undone (D219).
+   */
+  keys: string;
+  /** A click (or a right click) changed the selection, rather than a part hidden, a model removed or an undo. */
+  byUser: boolean;
+}
+
+/** One selected feature as its key says: enough to find it again where its part is now. */
+interface FeatureKey {
+  id: ModelId;
+  node: number;
+  kind: 'face' | 'edge' | 'vertex';
+  index: number;
+  point: [number, number, number];
 }
 
 interface Selected extends Picked {
@@ -31,6 +47,8 @@ export class FeatureSelection {
   private selected: Selected[] = [];
   private hovered: (Picked & { highlight: Highlight | undefined }) | undefined;
   private next = 0;
+  /** Whether the change being reported is the user's own (a click), for .NET's undo history (D219). */
+  private byUser = false;
 
   constructor(
     private readonly host: MeasureHost,
@@ -68,8 +86,36 @@ export class FeatureSelection {
     this.select(this.featureAt(x, y), additive);
   }
 
-  /** Selects a feature (or nothing), as a click would. */
+  /** Selects a feature (or nothing), as a click would: a change the user made (D219). */
   select(picked: Picked | undefined, additive: boolean): void {
+    this.byUser = true;
+    try {
+      this.change(picked, additive);
+    } finally {
+      this.byUser = false;
+    }
+  }
+
+  /**
+   * Selects the features a {@link FeatureSelectionInfo.keys} names, in place of the selection: an undone
+   * or redone selection step (M17, D219). Those whose parts or models have gone are left out.
+   */
+  restore(keys: string): void {
+    const wanted: Picked[] = [];
+    for (const key of parseKeys(keys)) {
+      const entity = this.host.model(key.id)?.parts.entityOf?.(key.node, key.kind, key.index, key.point);
+      if (entity) {
+        wanted.push({ id: key.id, entity });
+      }
+    }
+    this.remove(this.selected, false);
+    for (const picked of wanted) {
+      this.add(picked);
+    }
+    this.report();
+  }
+
+  private change(picked: Picked | undefined, additive: boolean): void {
     if (!picked) {
       if (!additive) {
         this.clear();
@@ -91,10 +137,14 @@ export class FeatureSelection {
         return;
       }
     }
+    this.add(picked);
+    this.report();
+  }
+
+  private add(picked: Picked): void {
     const entry: Selected = { ...picked, key: ++this.next, highlight: this.highlightOf(picked, 'selected') };
     this.selected.push(entry);
     this.host.requestRender();
-    this.report();
     void this.describe(entry);
   }
 
@@ -162,7 +212,12 @@ export class FeatureSelection {
 
   private report(): void {
     const described = this.selected.filter((selected) => selected.info);
-    this.onChange({ features: described.map((selected) => selected.info!), totals: totals(described.map((selected) => selected.measure)) });
+    this.onChange({
+      features: described.map((selected) => selected.info!),
+      totals: totals(described.map((selected) => selected.measure)),
+      keys: featureKeys(this.selected),
+      byUser: this.byUser,
+    });
   }
 
   private highlightOf(picked: Picked, kind: 'selected' | 'hovered'): Highlight | undefined {
@@ -186,4 +241,27 @@ export function totals(measures: readonly (EntityMeasure | undefined)[]): Measur
     rows.push({ name: `Total area (${faces.length} faces)`, value: area(faces.reduce((sum, face) => sum + face.area, 0)) });
   }
   return rows;
+}
+
+/** The selected features as one string (M17): empty when there are none. */
+export function featureKeys(selected: readonly Picked[]): string {
+  const keys: FeatureKey[] = [];
+  for (const { id, entity } of selected) {
+    if (entity.kind !== 'point') {
+      keys.push({ id, node: entity.node, kind: entity.kind, index: entity.ref.index, point: [...entity.point] });
+    }
+  }
+  return keys.length === 0 ? '' : JSON.stringify(keys);
+}
+
+function parseKeys(keys: string): FeatureKey[] {
+  if (!keys) {
+    return [];
+  }
+  try {
+    const parsed: unknown = JSON.parse(keys);
+    return Array.isArray(parsed) ? (parsed as FeatureKey[]) : [];
+  } catch {
+    return [];
+  }
 }

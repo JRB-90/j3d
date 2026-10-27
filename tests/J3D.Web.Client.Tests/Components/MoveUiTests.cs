@@ -37,11 +37,23 @@ public sealed class MoveUiTests : BunitTestBase
         var frames = () => cut.Find("[data-testid=origin-frames-button]");
         cut.WaitForAssertion(() => Assert.False(move().HasAttribute("disabled")));
 
+        var rotate = () => cut.Find("[data-testid=rotate-button]");
         move().Click();
         Assert.Equal(MoveMode.Translate, Scene.Moving);
         Assert.Equal("true", move().GetAttribute("aria-pressed"));
-        await Act(() => Scene.SetMoveMode(MoveMode.Rotate));
-        move().Click(); // off, whichever mode it's in
+        Assert.Equal("false", rotate().GetAttribute("aria-pressed"));
+
+        // Rotate (M17, D222): switches to the rings, and Move back to the arrows; the one that's on turns it off.
+        rotate().Click();
+        Assert.Equal(MoveMode.Rotate, Scene.Moving);
+        Assert.Equal("true", rotate().GetAttribute("aria-pressed"));
+        Assert.Equal("false", move().GetAttribute("aria-pressed"));
+        rotate().Click();
+        Assert.Null(Scene.Moving);
+        rotate().Click();
+        move().Click();
+        Assert.Equal(MoveMode.Translate, Scene.Moving);
+        move().Click();
         Assert.Null(Scene.Moving);
 
         frames().Click();
@@ -74,7 +86,7 @@ public sealed class MoveUiTests : BunitTestBase
         cut.Find("[data-testid=move-y]").Input("2,5"); // a comma works as the decimal point
         cut.Find("[data-testid=move-z]").Input("abc");
         cut.Find("[data-testid=move-z]").KeyDown(new KeyboardEventArgs { Key = "Enter" });
-        Assert.False(Scene.CanUndo); // not a number: nothing moves, and the text stays
+        Assert.StartsWith("selecting", Scene.UndoLabel); // not a number: nothing moves, and the text stays
         Assert.Equal("abc", cut.Find("[data-testid=move-z]").GetAttribute("value"));
 
         cut.Find("[data-testid=move-z]").Input("-1");
@@ -131,6 +143,36 @@ public sealed class MoveUiTests : BunitTestBase
 
         popovers.WaitForAssertion(() => Assert.Equal(MoveMode.Translate, Scene.Moving));
         Assert.Equal((Id, 3), Scene.MoveTarget);
+
+        // Rotate (M17, D222): the rings, from the menu too.
+        await Act(() => Scene.OpenContextMenu(Id, 3, 100, 100, canMeasure: true));
+        popovers.WaitForAssertion(() => Assert.NotEmpty(popovers.FindAll("[data-testid=context-rotate]")));
+        Assert.Contains("E", popovers.Find("[data-testid=context-rotate]").TextContent);
+        popovers.Find("[data-testid=context-rotate]").Click();
+        popovers.WaitForAssertion(() => Assert.Equal(MoveMode.Rotate, Scene.Moving));
+    }
+
+    [Fact]
+    public async Task The_panel_switches_between_the_arrows_and_the_rings_and_keeps_all_six_fields()
+    {
+        await StartViewerAsync();
+        var cut = Render<SelectionPanel>();
+        await Act(() =>
+        {
+            Scene.SelectNode(Id, 2, additive: false);
+            Scene.SetMoveMode(MoveMode.Translate);
+            Scene.ReportMoveTarget(new MoveTargetInfo(Id, 2, Translated(5, 0, 0), Translated(100, 0, 0), 1));
+        });
+
+        var panel = cut.Find("[data-testid=move-panel]");
+        Assert.Equal("move-mode", panel.FirstElementChild!.GetAttribute("data-testid")); // at the top (D223)
+        cut.Find("[data-testid=move-mode-rotate]").Click();
+        Assert.Equal(MoveMode.Rotate, Scene.Moving);
+        Assert.Equal(6, cut.FindAll(".j3d-move-field input").Count);
+        cut.Find("[data-testid=move-mode-rotate]").Click(); // the one that's on stays on
+        Assert.Equal(MoveMode.Rotate, Scene.Moving);
+        cut.Find("[data-testid=move-mode-translate]").Click();
+        Assert.Equal(MoveMode.Translate, Scene.Moving);
     }
 
     [Fact]

@@ -40,6 +40,11 @@
     margin: 6px 0;
 }
 
+/* Move | Rotate (M17, D223), at the top: the triad's mode, above what it acts on. */
+.j3d-selection-panel ::deep .j3d-move-mode {
+    margin-bottom: 8px;
+}
+
 .j3d-move-fields {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

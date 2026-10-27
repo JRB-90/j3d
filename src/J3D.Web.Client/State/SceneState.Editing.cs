@@ -161,7 +161,7 @@ public sealed partial class SceneState
                 return;
             }
 
-            ApplyEdit(model, tree.Edit().Move(moving, parent, target.After).Build(), model.Hidden, moving);
+            ApplyEdit("Paste", model, tree.Edit().Move(moving, parent, target.After).Build(), model.Hidden, moving);
             return;
         }
 
@@ -170,7 +170,7 @@ public sealed partial class SceneState
         var next = edit.Build();
         // A copy of a hidden part is hidden too (assumption 17).
         var hidden = model.Hidden.Union(Enumerable.Range(tree.Count, next.Count - tree.Count).Where(node => model.Hidden.Contains(next.SourceOf(node))));
-        ApplyEdit(model, next, hidden, copies);
+        ApplyEdit("Paste", model, next, hidden, copies);
     }
 
     /// <summary>
@@ -199,7 +199,7 @@ public sealed partial class SceneState
             var before = model.EditState;
             var next = model.Tree!.Edit().Remove(group.Select(static item => item.Node)).Build();
             var edited = model.WithEdit(before with { Edits = next.Edits, Tree = next, Selected = PartSet.Empty });
-            steps.Add(new EditStep(model.Id, before, edited.EditState));
+            steps.Add(new EditStep(model.Id, before, edited.EditState, "Delete"));
             models = models.Replace(model, edited);
         }
 
@@ -234,7 +234,7 @@ public sealed partial class SceneState
         var tree = model.Tree!;
         var edit = tree.Edit();
         var group = edit.Group(objects.Nodes, tree.NextAssemblyName());
-        ApplyEdit(model, edit.Build(), model.Hidden, [group]);
+        ApplyEdit("New assembly", model, edit.Build(), model.Hidden, [group]);
         Renaming = new Renaming(model.Id, group, IsNew: true);
         RevealRequested?.Invoke(model.Id, group);
         Set(Models, always: true);
@@ -249,7 +249,7 @@ public sealed partial class SceneState
             var tree = model.Tree!;
             List<int> assemblies = [.. group.Select(static item => item.Node)];
             var children = assemblies.SelectMany(tree.ChildrenOf).ToList();
-            ApplyEdit(model, tree.Edit().Ungroup(assemblies).Build(), model.Hidden, children);
+            ApplyEdit("Ungroup", model, tree.Edit().Ungroup(assemblies).Build(), model.Hidden, children);
         }
     }
 
@@ -283,7 +283,7 @@ public sealed partial class SceneState
             return;
         }
 
-        ApplyEdit(model, tree.Edit().Rename(renaming.Node, trimmed).Build(), model.Hidden, selectNodes: null);
+        ApplyEdit("Rename", model, tree.Edit().Rename(renaming.Node, trimmed).Build(), model.Hidden, selectNodes: null);
     }
 
     /// <summary>
@@ -312,11 +312,11 @@ public sealed partial class SceneState
             var edit = tree.Edit();
             var copies = edit.Copy(nodes.Select(item => (item, tree.ParentOf(item))), target);
             var next = edit.Build();
-            ApplyEdit(model, next, model.Hidden.Union(Enumerable.Range(tree.Count, next.Count - tree.Count).Where(added => model.Hidden.Contains(next.SourceOf(added)))), copies);
+            ApplyEdit("Copy in the tree", model, next, model.Hidden.Union(Enumerable.Range(tree.Count, next.Count - tree.Count).Where(added => model.Hidden.Contains(next.SourceOf(added)))), copies);
         }
         else if (nodes.Any(item => tree.ParentOf(item) != target))
         {
-            ApplyEdit(model, tree.Edit().Move(nodes, target).Build(), model.Hidden, nodes);
+            ApplyEdit("Move in the tree", model, tree.Edit().Move(nodes, target).Build(), model.Hidden, nodes);
         }
     }
 
@@ -400,7 +400,7 @@ public sealed partial class SceneState
 
         var next = plan.Next;
         var hidden = model.Hidden.Union(next.Edits.Pieces.Where(item => item.Key >= tree.Count && item.Value.Part && model.Hidden.Contains(item.Value.Expands)).Select(static item => item.Key));
-        ApplyEdit(model, next, hidden, Mode == SelectMode.Objects ? plan.Assemblies : null);
+        ApplyEdit("Expand", model, next, hidden, Mode == SelectMode.Objects ? plan.Assemblies : null);
         // The tree opens to the first assembly's pieces, as it does to a new assembly.
         if (next.ChildrenOf(plan.Assemblies[0]) is [var first, ..])
         {
@@ -470,7 +470,7 @@ public sealed partial class SceneState
     /// node's moves are dropped once its parent changes, since they're in the old parent's frame and the
     /// viewer keeps its place (D151).
     /// </summary>
-    private void ApplyEdit(ModelEntry model, ModelTree next, PartSet hidden, IReadOnlyList<int>? selectNodes)
+    private void ApplyEdit(string label, ModelEntry model, ModelTree next, PartSet hidden, IReadOnlyList<int>? selectNodes)
     {
         var tree = model.Tree!;
         var before = model.EditState;
@@ -483,7 +483,7 @@ public sealed partial class SceneState
                 ? PartSet.From(next.Parts.Where(part => !hidden.Contains(part)))
                 : model.Selected;
         var edited = model.WithEdit(new ModelEdit(next.Edits, hidden, selected, placements) { Tree = next });
-        Record(new EditStep(model.Id, before, edited.EditState));
+        Record(new EditStep(model.Id, before, edited.EditState, label));
         if (selectNodes is not null)
         {
             _anchor = selectNodes is [var only] ? (model.Id, only) : null;

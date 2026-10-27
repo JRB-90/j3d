@@ -57,12 +57,12 @@ public sealed partial class ContextMenu(SceneState scene, ViewerSession session,
         }
     }
 
-    /// <summary>Move (M13): the Move tool on with its arrows, unless it's on already.</summary>
-    private void StartMoving()
+    /// <summary>Move or Rotate (M13; M17, D222): the Move tool on with its arrows or its rings, unless it's in that mode already.</summary>
+    private void StartMoving(MoveMode mode)
     {
-        if (Scene.Moving is null)
+        if (Scene.Moving != mode)
         {
-            Scene.SetMoveMode(MoveMode.Translate);
+            Scene.SetMoveMode(mode);
         }
     }
 }
