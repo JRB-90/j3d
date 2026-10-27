@@ -12,7 +12,10 @@ export type StoreRequest =
   | { type: 'clear' }
   | { type: 'manifest'; manifest: Omit<Manifest, 'seq'> }
   /** A model's moves and edits, or null when it has none (M16, D205). */
-  | { type: 'edits'; id: ModelId; kept: KeptEdits | null };
+  | { type: 'edits'; id: ModelId; kept: KeptEdits | null }
+  /** Objects that arrived from another model, as a file in this one's folder (M18, D225). */
+  | { type: 'writeArrival'; id: ModelId; name: string; file: Blob }
+  | { type: 'readArrival'; id: ModelId; name: string };
 
 /** A request with the id its answer echoes. The worker answers them one at a time, in order. */
 export type StoreRequestMessage = StoreRequest & { requestId: number };

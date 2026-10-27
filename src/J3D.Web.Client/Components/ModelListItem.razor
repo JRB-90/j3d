@@ -121,6 +121,16 @@
                                    Class="j3d-model-progress"
                                    data-testid="export-progress" />
             }
+            @if (Model.Bringing is { } bringing)
+            {
+                @* Objects arriving from another model (M18, D233). *@
+                <div class="j3d-model-detail" data-testid="model-bringing">@BringingText(bringing)</div>
+                <MudProgressLinear Color="Color.Primary"
+                                   Size="Size.Small"
+                                   Rounded="true"
+                                   Indeterminate="true"
+                                   Class="j3d-model-progress" />
+            }
             @if (Model.Expanding is { } expanding)
             {
                 <div class="j3d-model-detail" data-testid="model-expanding">@ExpandingText(expanding)</div>

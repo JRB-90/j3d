@@ -50,6 +50,11 @@
             }
             else if (target.OnTarget && Scene.Mode == SelectMode.Models)
             {
+                @* Paste into another model's top level (M18, D226). *@
+                @if (Scene.CanPaste)
+                {
+                    <MudMenuItem Icon="@Icons.Material.Outlined.ContentPaste" OnClick="Scene.Paste" data-testid="context-paste"><span class="j3d-menu-command"><span>Paste</span><kbd class="j3d-key">Ctrl+V</kbd></span></MudMenuItem>
+                }
                 <MudMenuItem Icon="@Icons.Material.Outlined.Delete" Disabled="@(!Scene.CanDelete)" OnClick="Scene.DeleteSelection" data-testid="context-delete"><span class="j3d-menu-command"><span>Delete</span><kbd class="j3d-key">Del</kbd></span></MudMenuItem>
                 @if (Scene.ExpandAllTargets.Count > 0)
                 {

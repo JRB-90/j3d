@@ -1,4 +1,5 @@
-import type { ExpandedPiece } from '@j3d/occt/facade';
+import type { ExpandedPiece, SceneNode } from '@j3d/occt/facade';
+import type { Object3D } from 'three';
 import type { TreeNode } from '../import/types';
 
 /**
@@ -16,6 +17,57 @@ export interface ModelEdits {
   names: { node: number; name: string }[];
   /** Added nodes that Expand made (M15); absent from edits kept before M15. */
   pieces?: ExpandedNode[];
+  /** Objects moved or copied in from other models (M18), in the order they came; absent before M18. */
+  arrivals?: KeptArrival[];
+  /** Added nodes that arrived (M18). */
+  arrived?: ArrivedNode[];
+}
+
+/**
+ * Objects moved or copied in from another model (M18, D225, D227, D230): a file of the model's own,
+ * which the facade (or, for a mesh model, the viewer) reads in. Its nodes, its own assembly first, are
+ * numbered after the file's and every earlier arrival's ({@link arrivalBase}).
+ */
+export interface KeptArrival {
+  /** Its file in the model's folder. */
+  file: string;
+  /** How many nodes it has, its own assembly included. */
+  nodes: number;
+}
+
+/**
+ * An added node that arrived (M18): node `index` of arrival `arrival` (an index into
+ * {@link ModelEdits.arrivals}), never 0, the arrival's own assembly, which isn't in the tree. Its added
+ * source is -1, as a new assembly's.
+ */
+export interface ArrivedNode {
+  node: number;
+  arrival: number;
+  index: number;
+  /** Its name when it arrived. */
+  name: string;
+  /** It draws something. */
+  part: boolean;
+  /** A compound part Expand would split (D190). */
+  expandable?: boolean;
+}
+
+/** An arrival as read in (M18): its nodes (each parent an earlier one, or -1) and, for a mesh model, their objects. */
+export interface ArrivalContent {
+  nodes: readonly SceneNode[];
+  objects?: readonly Object3D[];
+}
+
+/** The arrivals a model has read in, by file. */
+export type Arrivals = ReadonlyMap<string, ArrivalContent>;
+
+/** Where arrival `index` of the list starts: after the file's nodes and each earlier arrival's (M18). */
+export function arrivalBase(fileCount: number, arrivals: readonly KeptArrival[] | undefined, index: number): number {
+  let base = fileCount;
+  for (let i = 0; i < index; i++) {
+    base += arrivals![i]!.nodes;
+  }
+  return base;
 }
 
 /**
@@ -42,6 +94,8 @@ export const NoEdits: ModelEdits = { added: [], children: [], names: [] };
 /** The model's top level, as a parent. */
 export const TopLevel = -1;
 
+const Identity: readonly number[] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
 /** Kept edits that don't fit the model's tree (R25): it loads as imported. */
 export class EditsMismatchError extends Error {
   constructor(message: string) {
@@ -51,17 +105,35 @@ export class EditsMismatchError extends Error {
 }
 
 export function hasEdits(edits: ModelEdits | undefined): edits is ModelEdits {
-  return !!edits && (edits.added.length > 0 || edits.children.length > 0 || edits.names.length > 0 || (edits.pieces?.length ?? 0) > 0);
+  return (
+    !!edits &&
+    (edits.added.length > 0 || edits.children.length > 0 || edits.names.length > 0 || (edits.pieces?.length ?? 0) > 0 || (edits.arrived?.length ?? 0) > 0)
+  );
 }
 
-/** The file parts whose expansions these edits need (M15), in the order they're first expanded. */
+/**
+ * The node each node stands for in the facade's numbering (M18): a file node is itself, an arrived node
+ * is its arrival's base plus its index, and a copy is its source's; -1 for anything else.
+ */
+function sourceNodesOf(fileCount: number, edits: ModelEdits | undefined): number[] {
+  const arrived = new Map((edits?.arrived ?? []).map((node) => [node.node, node]));
+  const sources = Array.from({ length: fileCount }, (_, index) => index);
+  edits?.added.forEach((source, offset) => {
+    const node = arrived.get(fileCount + offset);
+    sources.push(node ? arrivalBase(fileCount, edits.arrivals, node.arrival) + node.index : source >= 0 && source < sources.length ? sources[source]! : -1);
+  });
+  return sources;
+}
+
+/**
+ * The parts whose expansions these edits need (M15), in the order they're first expanded, each as the
+ * facade numbers it: a file part, or since M18 an arrived one.
+ */
 export function expandedFileNodes(fileCount: number, edits: ModelEdits | undefined): number[] {
-  // Each added node's file node, followed back through its sources.
-  const fileNodes = new Map<number, number>();
-  edits?.added.forEach((source, offset) => fileNodes.set(fileCount + offset, source < fileCount ? source : (fileNodes.get(source) ?? -1)));
+  const sources = sourceNodesOf(fileCount, edits);
   const needed: number[] = [];
   for (const { expands } of edits?.pieces ?? []) {
-    const file = expands < fileCount ? expands : (fileNodes.get(expands) ?? -1);
+    const file = sources[expands] ?? -1;
     if (file >= 0 && !needed.includes(file)) {
       needed.push(file);
     }
@@ -79,12 +151,17 @@ export class ModelStructure {
   readonly nodes: TreeNode[];
   /** Each added node's source (see {@link ModelEdits.added}); -1 for the file's nodes. */
   readonly sources: number[];
-  /** The file's node ids each added part draws: its source, followed back to the file; -1 for Expand's nodes and their copies. */
+  /** The file's node ids each added part draws: its source, followed back to the file; -1 for Expand's nodes, arrived nodes and their copies. */
   readonly fileNodes: number[];
+  /** The node each node stands for in the facade's numbering: the file's, or an arrived one's (M18); -1 for the rest. */
+  readonly sourceNodes: number[];
   /** Each node's name before any rename. */
   private readonly defaultNames: string[];
   /** Expand's nodes (M15). */
   private readonly expanded = new Map<number, ExpandedNode>();
+  /** Arrived nodes (M18), and each one's arrival parent (or the model's top level) and placement in its frame. */
+  private readonly arrived = new Map<number, ArrivedNode>();
+  private readonly arrivalFrames = new Map<number, { parent: number; matrix: readonly number[]; object: Object3D | undefined }>();
   /** Each piece's piece parent (the assembly, or a piece above it) and its placement in that parent's frame. */
   private readonly pieceFrames = new Map<number, { parent: number; matrix: readonly number[] }>();
   private readonly childLists = new Map<number, number[]>();
@@ -95,9 +172,20 @@ export class ModelStructure {
     readonly fileTree: readonly TreeNode[],
     readonly edits: ModelEdits = NoEdits,
     expansions: Expansions = new Map(),
+    arrivals: Arrivals = new Map(),
   ) {
     const fileCount = fileTree.length;
     const total = fileCount + edits.added.length;
+    for (const node of edits.arrived ?? []) {
+      const kept = Number.isInteger(node.arrival) ? edits.arrivals?.[node.arrival] : undefined;
+      if (!Number.isInteger(node.node) || node.node < fileCount || node.node >= total || edits.added[node.node - fileCount] !== -1 || this.arrived.has(node.node)) {
+        throw new EditsMismatchError(`Node ${node.node} is given as arrived, but it isn't a new node.`);
+      }
+      if (!kept || !Number.isInteger(node.index) || node.index < 1 || node.index >= kept.nodes) {
+        throw new EditsMismatchError(`Node ${node.node} is node ${node.index} of arrival ${node.arrival}, which doesn't have it.`);
+      }
+      this.arrived.set(node.node, node);
+    }
     for (const piece of edits.pieces ?? []) {
       if (!Number.isInteger(piece.node) || piece.node < fileCount || piece.node >= total || edits.added[piece.node - fileCount] !== -1 || this.expanded.has(piece.node)) {
         throw new EditsMismatchError(`Node ${piece.node} is given as Expand's, but it isn't a new node.`);
@@ -119,7 +207,9 @@ export class ModelStructure {
     this.defaultNames = fileTree.map((node) => node.name);
     this.sources = fileTree.map(() => -1);
     this.fileNodes = fileTree.map((_, index) => index);
+    this.sourceNodes = sourceNodesOf(fileCount, edits);
     const pieceNodes = new Map<string, number>();
+    const arrivedNodes = new Map<string, number>();
     edits.added.forEach((source, offset) => {
       const id = fileCount + offset;
       if (!Number.isInteger(source) || source < -1 || source >= id) {
@@ -128,12 +218,24 @@ export class ModelStructure {
       const copied = source >= 0 ? this.nodes[source]! : undefined;
       const fileNode = source >= 0 ? this.fileNodes[source]! : -1;
       const expanded = this.expanded.get(id);
-      // A copy's name before any rename is its source's: the file's, a piece's or a new assembly's.
-      const defaultName = expanded ? expanded.name : fileNode >= 0 ? fileTree[fileNode]!.name : copied ? this.defaultNames[source]! : 'Assembly';
+      const arrived = this.arrived.get(id);
+      // A copy's name before any rename is its source's: the file's, a piece's, an arrived node's or a new assembly's.
+      const defaultName = expanded
+        ? expanded.name
+        : arrived
+          ? arrived.name
+          : fileNode >= 0
+            ? fileTree[fileNode]!.name
+            : copied
+              ? this.defaultNames[source]!
+              : 'Assembly';
       let prototype = copied?.prototype ?? -1;
       if (expanded) {
         prototype = this.expandedPrototype(expanded, expansions, pieceNodes);
         pieceNodes.set(`${expanded.expands}:${expanded.piece}`, id);
+      } else if (arrived) {
+        prototype = this.arrivedPrototype(arrived, arrivals, arrivedNodes);
+        arrivedNodes.set(`${arrived.arrival}:${arrived.index}`, id);
       }
       this.nodes.push({ name: names.get(id) ?? defaultName, parent: TopLevel, prototype });
       this.defaultNames.push(defaultName);
@@ -201,10 +303,29 @@ export class ModelStructure {
     return this.pieceFrames.get(node);
   }
 
-  /** What an added node is, to tell whether an id still holds the same one after an undo: a copy of a node, Expand's, or a new assembly. */
+  /** An arrived node, if this is one (M18). */
+  arrivalOf(node: number): ArrivedNode | undefined {
+    return this.arrived.get(node);
+  }
+
+  /**
+   * Where an arrived node was put (M18): its arrival parent, or {@link TopLevel} for the objects that
+   * arrived (placed in the model's own frame, D228), and its placement in that parent's frame; for a
+   * mesh model, the object it's a copy of.
+   */
+  arrivalFrame(node: number): { parent: number; matrix: readonly number[]; object: Object3D | undefined } | undefined {
+    return this.arrivalFrames.get(node);
+  }
+
+  /** What an added node is, to tell whether an id still holds the same one after an undo: a copy of a node, Expand's, an arrived one or a new assembly. */
   addedKey(node: number): string {
     const expanded = this.expanded.get(node);
-    return expanded ? `p${expanded.expands}:${expanded.piece}` : `c${this.sources[node] ?? -1}`;
+    const arrived = this.arrived.get(node);
+    return expanded
+      ? `p${expanded.expands}:${expanded.piece}`
+      : arrived
+        ? `a${this.edits.arrivals?.[arrived.arrival]?.file ?? ''}:${arrived.index}`
+        : `c${this.sources[node] ?? -1}`;
   }
 
   /** In the model: reachable from its top level. */
@@ -251,10 +372,28 @@ export class ModelStructure {
     return nodes;
   }
 
+  /** Checks an arrived node against its arrival, noting its frame; returns the prototype it draws. */
+  private arrivedPrototype(arrived: ArrivedNode, arrivals: Arrivals, arrivedNodes: ReadonlyMap<string, number>): number {
+    const content = arrivals.get(this.edits.arrivals![arrived.arrival]!.file);
+    const node = content?.nodes[arrived.index];
+    if (!node) {
+      throw new EditsMismatchError(`Node ${arrived.node} arrived in a file that hasn't been read.`);
+    }
+    if (node.prototype >= 0 !== arrived.part) {
+      throw new EditsMismatchError(`Node ${arrived.node} doesn't match node ${arrived.index} of its arrival.`);
+    }
+    const parent = node.parent <= 0 ? TopLevel : arrivedNodes.get(`${arrived.arrival}:${node.parent}`);
+    if (parent === undefined) {
+      throw new EditsMismatchError(`Node ${arrived.node} arrived without its parent.`);
+    }
+    this.arrivalFrames.set(arrived.node, { parent, matrix: node.matrix ?? Identity, object: content.objects?.[arrived.index] });
+    return node.prototype;
+  }
+
   /** Checks an Expand node against its part's expansion, noting a piece's frame; returns the prototype it draws. */
   private expandedPrototype(expanded: ExpandedNode, expansions: Expansions, pieceNodes: ReadonlyMap<string, number>): number {
     const part = this.nodes[expanded.expands];
-    const fileNode = this.fileNodes[expanded.expands] ?? -1;
+    const fileNode = this.sourceNodes[expanded.expands] ?? -1;
     const pieces = fileNode >= 0 ? expansions.get(fileNode) : undefined;
     if (!part || part.prototype < 0 || !pieces) {
       throw new EditsMismatchError(`Node ${expanded.node} expands node ${expanded.expands}, which isn't an expanded part.`);
@@ -284,8 +423,8 @@ export class ModelStructure {
 /** The same edits, compared by value: .NET sends them whole, often unchanged. */
 export function sameEdits(a: ModelEdits | undefined, b: ModelEdits | undefined): boolean {
   const text = (edits: ModelEdits | undefined) => {
-    const { added, children, names, pieces } = edits ?? NoEdits;
-    return JSON.stringify({ added, children, names, pieces: pieces ?? [] });
+    const { added, children, names, pieces, arrivals, arrived } = edits ?? NoEdits;
+    return JSON.stringify({ added, children, names, pieces: pieces ?? [], arrivals: arrivals ?? [], arrived: arrived ?? [] });
   };
   return text(a) === text(b);
 }

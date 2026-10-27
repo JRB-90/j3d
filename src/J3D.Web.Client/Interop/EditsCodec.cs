@@ -9,7 +9,8 @@ namespace J3D.Web.Client.Interop;
 /// reads: the numbers as one buffer of 32-bit integers, which Blazor passes as bytes without JSON, and
 /// the names as one string. .NET sends all of a model's edits with each one (§6.4), and as JSON the large
 /// plant's after Expand all took 160 ms to serialise under the WebAssembly interpreter, every edit.
-/// Child lists, names and pieces go in node order, so the same edits always pack the same.
+/// Child lists, names and pieces go in node order, so the same edits always pack the same. Since M18 the
+/// arrivals and the nodes that arrived follow, when there are any.
 /// </summary>
 internal static class EditsCodec
 {
@@ -48,6 +49,24 @@ internal static class EditsCodec
             var piece = edits.Pieces[node];
             numbers.AddRange([node, piece.Expands, piece.Piece, piece.Part ? 1 : 0]);
             AddText(piece.Name);
+        }
+
+        if (!edits.Arrivals.IsEmpty || !edits.Arrived.IsEmpty)
+        {
+            numbers.Add(edits.Arrivals.Count);
+            foreach (var kept in edits.Arrivals)
+            {
+                numbers.Add(kept.Nodes);
+                AddText(kept.File);
+            }
+
+            numbers.Add(edits.Arrived.Count);
+            foreach (var node in Sorted(edits.Arrived.Keys))
+            {
+                var arrived = edits.Arrived[node];
+                numbers.AddRange([node, arrived.Arrival, arrived.Index, arrived.Part ? 1 : 0, arrived.Expandable ? 1 : 0]);
+                AddText(arrived.Name);
+            }
         }
 
         return (MemoryMarshal.AsBytes(CollectionsMarshal.AsSpan(numbers)).ToArray(), text.ToString());
@@ -106,7 +125,26 @@ internal static class EditsCodec
             pieces![i] = new ExpandedNodeDto(node, expands, piece, NextText(), part != 0);
         }
 
-        return new ModelEditsDto(added, children, names, pieces);
+        if (at >= values.Length)
+        {
+            return new ModelEditsDto(added, children, names, pieces);
+        }
+
+        var arrivals = new KeptArrivalDto[Next()];
+        for (var i = 0; i < arrivals.Length; i++)
+        {
+            var nodes = Next();
+            arrivals[i] = new KeptArrivalDto(NextText(), nodes);
+        }
+
+        var arrived = new ArrivedNodeDto[Next()];
+        for (var i = 0; i < arrived.Length; i++)
+        {
+            var (node, arrival, index, part, expandable) = (Next(), Next(), Next(), Next(), Next());
+            arrived[i] = new ArrivedNodeDto(node, arrival, index, NextText(), part != 0, expandable != 0);
+        }
+
+        return new ModelEditsDto(added, children, names, pieces, arrivals, arrived);
     }
 
     private static int[] Sorted(IEnumerable<int> keys)

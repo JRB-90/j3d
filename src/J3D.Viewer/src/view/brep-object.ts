@@ -266,6 +266,10 @@ class BrepParts implements ModelParts {
     this.structure = new ModelStructure(scene.nodes);
   }
 
+  topWorld(): Matrix4 {
+    return this.frame.clone();
+  }
+
   placement(node: number): Placement {
     if (node === ModelFrame || !this.structure.nodes[node]) {
       return { local: node === ModelFrame ? this.frame.clone() : new Matrix4(), parentWorld: new Matrix4() };
@@ -380,8 +384,9 @@ class BrepParts implements ModelParts {
       let world = after.get(node);
       if (!world) {
         // Expand's assembly takes its part's place, and its pieces go where they are in the part (M15).
+        // An arrived node goes where its arrival put it, in the model's frame or its arrival parent's (M18).
         const expanded = next.expansionOf(node);
-        const frame = next.pieceFrame(node);
+        const frame = next.pieceFrame(node) ?? next.arrivalFrame(node);
         const source = next.sources[node]!;
         world = frame
           ? worldAfter(frame.parent).clone().multiply(new Matrix4().fromArray(frame.matrix))

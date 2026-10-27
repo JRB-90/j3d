@@ -28,8 +28,9 @@ import {
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { editedStats } from '../edit/stats';
 import type { PlanNode } from '@j3d/occt/facade';
+import { arrivalsOf } from '../edit/arrive';
 import { expansionsOf } from '../edit/expand';
-import { exportPlan, writesAsImported, type PlanSource } from '../edit/export-plan';
+import { exportPlan, transferPlan, writesAsImported, type PlanSource } from '../edit/export-plan';
 import { ModelStructure, sameEdits, type ModelEdits } from '../edit/structure';
 import type { BrepMeasurer, KeptPlacement, LoadedModel, ModelId, ModelStats, Vector3Tuple } from '../import/types';
 import type { CameraSnapshot } from '../store/types';
@@ -533,7 +534,7 @@ export class Viewer {
     // A kept model's edits (M14), checked as it loaded (R25), then its moves (M13, D145), which since
     // M14 include the placements its edits worked out.
     if (model.restored?.edits) {
-      entry.structure = new ModelStructure(model.tree, model.restored.edits, expansionsOf(model.content));
+      entry.structure = new ModelStructure(model.tree, model.restored.edits, expansionsOf(model.content), arrivalsOf(model.content));
       entry.parts.setStructure(entry.structure);
     }
     entry.parts.setPlacements((model.restored?.placements ?? []).map(({ node, matrix }) => ({ node, local: new Matrix4().fromArray(matrix) })));
@@ -616,7 +617,7 @@ export class Viewer {
     }
     let structure: ModelStructure;
     try {
-      structure = new ModelStructure(entry.structure.fileTree, edits, expansionsOf(entry.imported));
+      structure = new ModelStructure(entry.structure.fileTree, edits, expansionsOf(entry.imported), arrivalsOf(entry.imported));
     } catch (error) {
       console.error(`J3D: ${entry.name}'s edits don't fit its tree.`, error);
       return undefined;
@@ -802,6 +803,50 @@ export class Viewer {
    * edits, nothing moved or hidden, D188, D194), else the plan of its edited tree, or of its selection
    * (D155). Rejects when there's nothing to write (D195).
    */
+  /**
+   * What objects going from one model to another are written as (M18, D225, D227, D229): each object
+   * placed where it is in the world, in the target model's frame (D228, so it keeps its size and place
+   * across unit scales); hidden parts included. A BREP model gives the plan its worker writes, a mesh
+   * model the GLB itself. `order` is the nodes written, as the arrival numbers them after its own
+   * assembly, and `hidden` which of them are hidden.
+   */
+  async transferOut(
+    sourceId: ModelId,
+    nodes: readonly number[],
+    targetId: ModelId,
+  ): Promise<{ plan?: PlanNode[]; glb?: Uint8Array<ArrayBuffer>; order: number[]; hidden: ReadonlySet<number> }> {
+    const source = this.models.get(sourceId);
+    const target = this.models.get(targetId);
+    if (!source || !target) {
+      throw new Error("The model isn't loaded.");
+    }
+    const live = nodes.filter((node) => source.structure.isLive(node));
+    if (live.length === 0) {
+      throw new Error('Nothing is selected.');
+    }
+    const into = target.parts.topWorld().invert();
+    const objects = live.map((node) => {
+      const { local, parentWorld } = source.parts.placement(node);
+      return { node, matrix: into.clone().multiply(parentWorld.multiply(local)) };
+    });
+    if (source.planSource) {
+      const { plan, order } = transferPlan(
+        source.planSource(new Set()),
+        objects.map(({ node, matrix }) => ({ node, matrix: matrix.toArray() })),
+      );
+      return { plan, order, hidden: source.hidden };
+    }
+    const parts = source.parts as MeshParts;
+    const { writeMeshArrival } = await import('./mesh-arrival');
+    const { bytes, order } = await writeMeshArrival(source.structure, (node) => parts.nodeObjects[node]!, objects);
+    return { glb: bytes, order, hidden: source.hidden };
+  }
+
+  /** A model's edits as the viewer has them (M18): what a transfer's arrival is added after. */
+  editsOf(id: ModelId): ModelEdits | undefined {
+    return this.models.get(id)?.structure.edits;
+  }
+
   exportPlan(id: ModelId, selection: boolean): PlanNode[] | undefined {
     const entry = this.models.get(id);
     if (!entry?.planSource) {

@@ -99,6 +99,11 @@ export interface ModelParts {
    */
   placement(node: number): Placement;
   /**
+   * Where the model's top-level nodes hang in the world (M18): the model's frame, and for a glTF also its
+   * turn to Z-up. Objects arriving from another model are placed in this frame (D228).
+   */
+  topWorld(): Matrix4;
+  /**
    * Gives a node, or the model ({@link ModelFrame}), a new placement in its parent's frame; everything
    * under it moves with it. Returns the part nodes that moved.
    */
@@ -269,8 +274,14 @@ export class MeshParts implements ModelParts {
       }
       let world = worlds.get(node);
       if (!world) {
+        // An arrived node goes where its arrival put it, in the model's frame or its arrival parent's (M18).
         const source = next.sources[node]!;
-        world = source >= 0 ? worldOf(source) : worldOf(next.nodes[node]!.parent);
+        const arrived = next.arrivalFrame(node);
+        world = arrived
+          ? worldOf(arrived.parent).clone().multiply(new Matrix4().fromArray(arrived.matrix))
+          : source >= 0
+            ? worldOf(source)
+            : worldOf(next.nodes[node]!.parent);
         worlds.set(node, world);
       }
       return world;
@@ -280,7 +291,8 @@ export class MeshParts implements ModelParts {
     }
     for (let node = kept; node < next.count; node++) {
       const source = next.sources[node]!;
-      const object = source >= 0 ? cloneNode(this.objects[source]!) : new Group();
+      const arrived = next.arrivalFrame(node)?.object;
+      const object = arrived ? cloneNode(arrived) : source >= 0 ? cloneNode(this.objects[source]!) : new Group();
       object.name = next.nodes[node]!.name;
       this.objects.push(object);
     }
@@ -443,6 +455,11 @@ export class MeshParts implements ModelParts {
   }
 
   /** A node's object's own matrix, in its Three.js parent's frame (D153). */
+  topWorld(): Matrix4 {
+    this.topParent?.updateWorldMatrix(true, false);
+    return this.topParent?.matrixWorld.clone() ?? new Matrix4();
+  }
+
   placement(node: number): Placement {
     if (node === ModelFrame) {
       return { local: this.frame.clone(), parentWorld: new Matrix4() };
@@ -484,7 +501,7 @@ export class MeshParts implements ModelParts {
 }
 
 /** A copy of a node's own object (M14): its geometry, materials and J3D's BREP edges, not its child nodes. */
-function cloneNode(source: Object3D): Object3D {
+export function cloneNode(source: Object3D): Object3D {
   const copy = source.clone(false);
   copy.layers.set(0);
   for (const edges of source.children.filter(isJ3dEdges)) {

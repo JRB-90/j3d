@@ -1,6 +1,6 @@
-import type { EntityMeasure, EntityRef, ExpandedPiece, ImportedScene, PairMeasure, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
+import type { Arrival, EntityMeasure, EntityRef, ExpandedPiece, ImportedScene, PairMeasure, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
 import type { Object3D } from 'three';
-import type { ModelEdits } from '../edit/structure';
+import type { ArrivalContent, ModelEdits } from '../edit/structure';
 import type { ModelFormat, ModelKind } from '../formats';
 import type { BrepExportFormat } from './protocol';
 
@@ -95,6 +95,22 @@ export interface BrepExporter {
   ): Promise<ArrayBuffer>;
 }
 
+/** Reading objects from another model into a BREP model, in its worker (M18, D225). */
+export interface BrepArriver {
+  /** An arrival's nodes (from `base` on), and the prototypes its parts draw, numbered after the model's others. */
+  arrive(file: Blob, base: number): Promise<{ arrival: Arrival; prototypes: PrototypeMesh[] }>;
+}
+
+/**
+ * The arrivals a model has read in (M18), in the order the facade numbers them (a BREP model) or in the
+ * order they came (a mesh model), and every arrival file's bytes this visit, to read one in again when
+ * an undo and a new arrival have replaced it.
+ */
+export interface ArrivalsState {
+  loaded: (ArrivalContent & { file: string; base: number })[];
+  files: Map<string, Blob>;
+}
+
 /** Expanding a BREP model's file parts, in its worker (M15, D154). */
 export interface BrepExpander {
   /** A file part's pieces, and the prototypes they draw that the model didn't have yet, numbered after its others. */
@@ -114,13 +130,22 @@ export type ModelContent =
    * `expansions` are the file parts expanded so far (M15), by file node: their prototypes are appended
    * to the scene's as they arrive.
    */
-  | { kind: 'brep'; scene: ImportedScene; measure?: BrepMeasurer; exporter?: BrepExporter; expander?: BrepExpander; expansions?: Map<number, ExpandedPiece[]> }
+  | {
+      kind: 'brep';
+      scene: ImportedScene;
+      measure?: BrepMeasurer;
+      exporter?: BrepExporter;
+      expander?: BrepExpander;
+      expansions?: Map<number, ExpandedPiece[]>;
+      arriver?: BrepArriver;
+      arrivals?: ArrivalsState;
+    }
   /**
    * `nodes[i]` is the object of tree node i, for picking and hiding parts (D81). `unitScale` takes
    * model units to millimetres (D105): 1000 for glTF, which is in metres, except J3D's own GLB, which
    * says it's in millimetres (D123); 1 when absent.
    */
-  | { kind: 'mesh'; root: Object3D; nodes: Object3D[]; unitScale?: number };
+  | { kind: 'mesh'; root: Object3D; nodes: Object3D[]; unitScale?: number; arrivals?: ArrivalsState };
 
 /** What an import produces, before the manager attaches the model's summary. */
 export interface ImportResult {

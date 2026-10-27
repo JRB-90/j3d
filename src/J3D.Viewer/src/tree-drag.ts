@@ -3,14 +3,15 @@
  * so the browser's drag events are handled here, for every tree, from the document. A node row is
  * `[data-tree-node="<model>:<node>"]`, draggable while edits are on offer; an assembly row is marked
  * `data-tree-assembly`, and a model's name `[data-model-drop="<model>"]`. A drop is offered on an
- * assembly or a model's name in the dragged node's model, outside the dragged node's own subtree
- * (since M16 the rows are flat, D198, so each lists its ancestors in `data-tree-ancestors`); .NET
- * decides the rest, as a drop moves the whole selection when the dragged node is selected. Ctrl
- * copies instead of moving (D183).
+ * assembly or a model's name, outside the dragged node's own subtree (since M16 the rows are flat, D198,
+ * so each lists its ancestors in `data-tree-ancestors`), and since M18 in another model too (D210); .NET
+ * decides the rest, as a drop moves the whole selection when the dragged node is selected, and refuses
+ * one between a CAD model and a mesh model, saying why. Ctrl copies instead of moving (D183).
  */
 export interface TreeDrop {
   /** The dragged node, `<model>:<node>`. */
   source: string;
+  /** The model dropped on. */
   model: string;
   /** The assembly dropped on, or -1 for the model's top level. */
   target: number;
@@ -35,13 +36,14 @@ export function installTreeDrag(root: Document | HTMLElement, dropped: (drop: Tr
   };
 
   /** Where the pointer is, if a drop there is offered: an assembly row, or a model's name. */
-  const targetOf = (event: DragEvent): { element: HTMLElement; target: number } | undefined => {
+  const targetOf = (event: DragEvent): { element: HTMLElement; model: string; target: number } | undefined => {
     if (!dragged || !(event.target instanceof Element)) {
       return undefined;
     }
     const header = event.target.closest<HTMLElement>('[data-model-drop]');
-    if (header) {
-      return header.dataset['modelDrop'] === dragged.model ? { element: header, target: -1 } : undefined;
+    const headerModel = header?.dataset['modelDrop'];
+    if (header && headerModel) {
+      return { element: header, model: headerModel, target: -1 };
     }
     const row = event.target.closest<HTMLElement>('[data-tree-node]');
     const key = row?.dataset['treeNode'];
@@ -50,8 +52,8 @@ export function installTreeDrag(root: Document | HTMLElement, dropped: (drop: Tr
     }
     const [model, node] = splitKey(key);
     const ancestors = (row.dataset['treeAncestors'] ?? '').split(' ').filter(Boolean).map(Number);
-    const inside = node === dragged.node || ancestors.includes(dragged.node);
-    return model === dragged.model && !inside ? { element: row, target: node } : undefined;
+    const inside = model === dragged.model && (node === dragged.node || ancestors.includes(dragged.node));
+    return !inside ? { element: row, model, target: node } : undefined;
   };
 
   const onDragStart = (event: DragEvent) => {
@@ -82,7 +84,7 @@ export function installTreeDrag(root: Document | HTMLElement, dropped: (drop: Tr
     dragged = undefined;
     if (found && source) {
       event.preventDefault();
-      dropped({ source: source.key, model: source.model, target: found.target, copy: event.ctrlKey || event.metaKey });
+      dropped({ source: source.key, model: found.model, target: found.target, copy: event.ctrlKey || event.metaKey });
     }
   };
   const onDragEnd = () => {

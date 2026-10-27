@@ -196,6 +196,26 @@ export class StoreOps {
     return { meta, files };
   }
 
+  /**
+   * Writes an arrival's file into its model's folder (M18, D225, D227), which an import or a restore
+   * has made. The model's edits, written after it, are what name it; the folder goes with the model.
+   */
+  async writeArrival(id: ModelId, name: string, file: Blob): Promise<void> {
+    const folder = await (await this.models()).getDirectoryHandle(id, { create: true });
+    try {
+      await this.writeFile(folder, name, file);
+    } catch (error) {
+      await removeIfPresent(folder, name).catch(() => {});
+      throw isQuotaError(error) ? new StorageFullError() : error;
+    }
+  }
+
+  /** An arrival's file, backed by the store, not copied. */
+  async readArrival(id: ModelId, name: string): Promise<File> {
+    const folder = await (await this.models()).getDirectoryHandle(id);
+    return (await folder.getFileHandle(name)).getFile();
+  }
+
   async delete(id: ModelId): Promise<void> {
     await removeIfPresent(await this.models(), id);
   }
@@ -288,6 +308,10 @@ function run(store: StoreOps, request: StoreRequest): Promise<unknown> {
       return store.writeManifest(request.manifest);
     case 'edits':
       return store.writeEdits(request.id, request.kept);
+    case 'writeArrival':
+      return store.writeArrival(request.id, request.name, request.file);
+    case 'readArrival':
+      return store.readArrival(request.id, request.name);
   }
 }
 

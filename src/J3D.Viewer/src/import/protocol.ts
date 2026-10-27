@@ -1,7 +1,7 @@
 // Messages between the main thread and the import workers. Bulk data always travels in transferred
 // ArrayBuffers; everything else is small.
 
-import type { EntityRef, ExpandedPiece, ImportedScene, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
+import type { Arrival, EntityRef, ExpandedPiece, ImportedScene, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
 import type { SerializedMeshScene } from './mesh/serialize';
 import type { Bounds, ImportError, ImportPhase, ModelStats } from './types';
 
@@ -20,7 +20,7 @@ export interface FailedMessage {
 }
 
 /** Main thread → model worker (one per BREP model; it keeps the model alive until terminated). */
-export type ModelWorkerRequest = ImportRequestMessage | MeasureRequest | ExportRequest | ExpandRequest;
+export type ModelWorkerRequest = ImportRequestMessage | MeasureRequest | ExportRequest | ExpandRequest | ArriveRequest;
 
 /** What a BREP model can be saved as (M9, D83). */
 export type BrepExportFormat = 'step' | 'brep';
@@ -44,6 +44,17 @@ export interface ExpandRequest {
   type: 'expand';
   id: number;
   node: number;
+}
+
+/**
+ * Objects from another model, as the STEP its worker wrote (M18, D225): read in as an arrival whose
+ * nodes start at `base`, and answered with `arrived` (or `measureFailed`) in turn with the queries.
+ */
+export interface ArriveRequest {
+  type: 'arrive';
+  id: number;
+  file: Blob;
+  base: number;
 }
 
 /**
@@ -79,6 +90,8 @@ export type ModelWorkerResponse =
   | { type: 'exportFailed'; id: number; cancelled: boolean; message: string }
   /** The prototypes the pieces draw that weren't drawn before, numbered after the model's (transferred). */
   | { type: 'expanded'; id: number; pieces: ExpandedPiece[]; prototypes: PrototypeMesh[] }
+  /** An arrival's nodes, and the prototypes its parts draw, numbered after the model's (transferred). */
+  | { type: 'arrived'; id: number; arrival: Arrival; prototypes: PrototypeMesh[] }
   | {
       type: 'loaded';
       scene: ImportedScene;

@@ -35,8 +35,15 @@ drawing all happen in the browser tab.
   asking, since **Undo** brings them back; an assembly left empty goes with them. **New assembly** (`Ctrl+G`) groups
   the selection where its parts are, and opens its name for typing; **Ungroup** (`Ctrl+Shift+G`) does the reverse, and
   **Rename** (`F2`) renames any node. Nothing moves in 3D. An edit acts on the selection's objects: select all of a
-  sub-assembly's parts and it's the sub-assembly that's copied or deleted. Edits stay within one model, can be undone,
-  and are kept for your next visit; in Model mode `Delete` deletes the selected models, after asking.
+  sub-assembly's parts and it's the sub-assembly that's copied or deleted. Edits can be undone and are kept for your
+  next visit; in Model mode `Delete` deletes the selected models, after asking.
+- **Move and copy between models**: drag objects in the tree onto an assembly (or the name) of another model, `Ctrl`
+  to copy; or Cut or Copy, select where they should go in the other model (an assembly, a part to go beside, or in
+  Model mode the model itself) and Paste. They keep their place and size on screen, their names and colours, and
+  their hidden parts stay hidden. The model's item says "Bringing n parts…" while they come; a move leaves the
+  other model in the same step, so one Undo puts both back. They're kept with the model they went to, so they come
+  back even after the one they came from is deleted. Objects go between CAD models, or between mesh models, not from
+  one kind to the other.
 - **Expand** a CAD part that holds several solids (a compound, such as a bolt set saved as one part): right-click it
   and choose **Expand**, and it becomes a sub-assembly with one part per solid, keeping the names and colours the
   file gives them (others are numbered after the part: "Bolt set 1", "Bolt set 2"). **Expand all** does the same for
@@ -127,8 +134,8 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Show origin frames | | | **Origin frames** in the toolbar, or `O` |
 | Cut, copy, paste the selected objects | | | Right-click menu, or `Ctrl+X`, `Ctrl+C`, `Ctrl+V` |
 | Delete the selected objects (or, in Model mode, models) | | | Right-click menu, or `Delete` |
-| Move a node to another assembly | Drag it in the tree onto the assembly, or the model's name | | Cut, select the assembly, Paste |
-| Copy a node into another assembly | `Ctrl`+drag it in the tree | | Copy, select the assembly, Paste |
+| Move a node to another assembly, in its model or another | Drag it in the tree onto the assembly, or a model's name | | Cut, select the assembly, Paste |
+| Copy a node into another assembly, in its model or another | `Ctrl`+drag it in the tree | | Copy, select the assembly, Paste |
 | Group the selection, or ungroup an assembly | | | **New assembly** (`Ctrl+G`), **Ungroup** (`Ctrl+Shift+G`) in the right-click menu |
 | Rename a node | | | **Rename** in the right-click menu, or `F2`; `Enter` keeps it, `Esc` doesn't |
 | Split a compound part into its solids | | | **Expand** (one part) or **Expand all** (an assembly's, or a model's) in the right-click menu |
@@ -167,9 +174,11 @@ and so do models coming back from your last visit or an undo.
 - An edited CAD model's STEP is rebuilt from J3D's tree: names, colours, placements and the assembly come through, and
   so does anything the file attaches to the parts J3D keeps whole, but metadata on assemblies you've changed may not.
   BREP holds geometry only, so it has no names or colours. A top-level assembly is written at the origin, with its
-  placement (and the model's, if you moved it) in its children. Objects can't be moved or copied from one model to
-  another, and a model whose kept edits no longer fit it (if a new version of J3D reads its file differently) comes
-  back as imported, with a warning in the list.
+  placement (and the model's, if you moved it) in its children. A model whose kept edits no longer fit it (if a new
+  version of J3D reads its file differently) comes back as imported, with a warning in the list.
+- Objects moved between models are written and read again (a CAD model's as STEP, a mesh model's as J3D's GLB), so
+  moving a large sub-assembly takes a moment, and a CAD part is drawn at the detail of the model it went to. Each
+  move or copy keeps its own file in that model's storage, until the model is deleted, even when it's undone.
 - Expanding a part that the file places many times makes each expanded occurrence a copy of its own in an exported
   STEP, so Expand all on a large assembly makes a much larger file: the generated 10,000-part plant's grows from
   1.8 MB to about 15 MB. On that plant, selecting, moving and editing take 0.05–0.2 seconds on a laptop, Expand all of

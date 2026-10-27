@@ -1,5 +1,6 @@
 import type { PlanNode } from '@j3d/occt/facade';
 import { afterPaint, saveFile } from './download';
+import { addArrival } from './edit/arrive';
 import { decodeEdits } from './edit/edits-codec';
 import { expandFileParts } from './edit/expand';
 import type { ModelEdits } from './edit/structure';
@@ -50,6 +51,21 @@ export interface ExpandOutcome {
   nodes?: number[];
   sets?: number[];
   pieceSets?: { name: string; parent: number; part: boolean }[][];
+  error?: string;
+}
+
+/**
+ * Objects moved or copied to another model (M18, D225, D227): the arrival .NET's edit takes in, or why
+ * there's none. `nodes` are the arrival's nodes after its own assembly, in tree order: each one's
+ * arrival parent (0 for the objects themselves), its name, whether it draws, whether Expand would split
+ * it (D190) and whether it was hidden (D229). Mirrors J3D.Web.Client/Interop/TransferOutcome.cs.
+ */
+export interface TransferOutcome {
+  file?: string;
+  count?: number;
+  nodes?: { parent: number; name: string; part: boolean; expandable: boolean; hidden: boolean }[];
+  /** The target model isn't kept, or its storage was full: it has the objects this visit only. */
+  notKept?: 'full' | 'failed';
   error?: string;
 }
 
@@ -121,6 +137,11 @@ export interface ViewerHandle {
   exportModel(id: string, format: BrepExportFormat, selection?: boolean): Promise<ExportOutcome>;
   /** Stops a model's STEP or BREP export, whose `exportModel` then ends cancelled. */
   cancelExport(id: string): void;
+  /**
+   * Writes objects of one model and reads them into another of the same kind (M18, D210, D225, D227),
+   * keeping the file with it: .NET then makes the edit, which arrives through `setStructure`.
+   */
+  transfer(sourceId: string, nodes: number[], targetId: string): Promise<TransferOutcome>;
   dispose(): void;
 }
 
@@ -184,6 +205,11 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   // A deleted model's files, kept for an undo (D84): the store's copy is preferred, and these serve
   // where there is none (another tab holds the store, or it was full). Dropped when it's forgotten.
   const keptSources = new Map<ModelId, BatchFile[]>();
+  // A restored model's arrivals (M18) are read from its folder; a mesh model's are read into objects.
+  models.arrivalReaders = {
+    read: (id, file) => store.readArrival(id, file),
+    readMesh: async (file) => (await import('./view/mesh-arrival')).readMeshArrival(file),
+  };
   const undoable = new Set<ModelId>();
   const unsubscribeView = view
     ? models.subscribe({ loaded: (model) => view.add(model), removed: (id) => view.remove(id) })
@@ -381,6 +407,55 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
         return { nodes: fileNodes, sets, pieceSets };
       } catch (error) {
         console.error(`J3D: expanding parts of ${model.summary.fileName} failed.`, error);
+        return { error: messageOf(error) };
+      }
+    },
+    async transfer(sourceId, nodes, targetId) {
+      const source = models.models.find(({ summary }) => summary.id === sourceId)?.model;
+      const target = models.models.find(({ summary }) => summary.id === targetId)?.model;
+      if (!view || !source || !target) {
+        return { error: "The model isn't loaded." };
+      }
+      if (source.content.kind !== target.content.kind) {
+        return { error: 'Objects move only between CAD models, or between mesh models.' };
+      }
+      try {
+        const out = await view.transferOut(sourceId, nodes, targetId);
+        let bytes: Blob;
+        if (out.plan) {
+          const exporter = source.content.kind === 'brep' ? source.content.exporter : undefined;
+          if (!exporter) {
+            return { error: "The model can't be written." };
+          }
+          bytes = new Blob([await exporter.export('step', { plan: out.plan })]);
+        } else {
+          bytes = new Blob([out.glb!]);
+        }
+        const file = `arrival-${crypto.randomUUID()}.${out.plan ? 'step' : 'glb'}`;
+        const kept = view.editsOf(targetId)?.arrivals ?? [];
+        const arrival = await addArrival(target.content, target.tree.length, kept, file, bytes, async (blob) =>
+          (await import('./view/mesh-arrival')).readMeshArrival(blob),
+        );
+        if (arrival.nodes.length !== out.order.length + 1) {
+          return { error: "The objects didn't arrive whole." };
+        }
+        const stored = await store.keepArrival(targetId, file, bytes);
+        // .NET makes the edit as this returns: its item's "Bringing…" (D233) is painted first.
+        await afterPaint();
+        return {
+          file,
+          count: arrival.nodes.length,
+          nodes: arrival.nodes.slice(1).map((node, index) => ({
+            parent: node.parent,
+            name: node.name,
+            part: node.prototype >= 0,
+            expandable: (node.pieces ?? 0) >= 2,
+            hidden: out.hidden.has(out.order[index]!),
+          })),
+          ...(stored === 'full' || stored === 'failed' ? { notKept: stored } : {}),
+        };
+      } catch (error) {
+        console.error('J3D: objects couldn’t be moved between models.', error);
         return { error: messageOf(error) };
       }
     },

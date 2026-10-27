@@ -956,6 +956,27 @@ public:
     return measured([&] { return expansionJson(node); });
   }
 
+  // -------------------------------------------------------------------------------------------
+  // Arrivals (M18, decisions D225, D229, D230). Objects moved or copied in from another model come as
+  // a STEP that model's worker wrote. Each is read into a document of its own, so the imported document
+  // and its tree never change (R25); its nodes join the scene's node sources after the file's (and any
+  // earlier arrival's), so plans, Expand and the edited exports name them as they name the file's, and
+  // the parts they draw are new prototypes, meshed as the model was.
+  // -------------------------------------------------------------------------------------------
+
+  /**
+   * Reads the input buffer's STEP as an arrival whose nodes start at node source `base`: the file's node
+   * count or later. Node sources from `base` on are dropped first, so an arrival that an undo left
+   * unused is replaced (its document stays open). JSON: { base, nodes: [{ name, parent, prototype,
+   * matrix, pieces? }] } in tree order, as getSceneJson's nodes: each node's parent an earlier node of
+   * the arrival, or -1; its prototype, or -1 for an assembly or a hidden part. Or {"error": "..."}.
+   */
+  std::string arrive(int base) {
+    std::string json = measured([&] { return arrivalJson(base); });
+    releaseInput();
+    return json;
+  }
+
   /**
    * Writes J3D's tree from `plan` (M15): format 0 STEP, 2 BREP. One line per node, each after its
    * parent: "kind parent ref piece matrix\tname". Kind 0 reuses its origin's definition whole, kind 1 is
@@ -1154,6 +1175,7 @@ private:
     TDF_Label label;      // the occurrence: a component, or a root's own label
     TDF_Label refLabel;   // its definition
     XCAFPrs_Style style;  // as drawn
+    std::string scope;    // which document it's in: "" for the file's, an arrival's own otherwise (M18)
   };
 
   // One piece of an expanded definition, in the working document (M15).
@@ -1446,7 +1468,7 @@ private:
     }
     TCollection_AsciiString entry;
     TDF_Tool::Entry(source.refLabel, entry);
-    const std::string key = entry.ToCString();
+    const std::string key = source.scope + entry.ToCString();
     const auto found = expansions_.find(key);
     if (found != expansions_.end()) {
       return found->second;
@@ -1807,6 +1829,76 @@ private:
     }
 
     sceneJson_ = "{\"nodes\":" + nodes + "],\"instances\":" + instances + "]}";
+    fileNodeCount_ = nodeCount;
+  }
+
+  // --- Arrivals (M18) ---------------------------------------------------------------------------
+
+  std::string arrivalJson(int base) {
+    if (input_ == nullptr) {
+      throw std::runtime_error("No input buffer allocated.");
+    }
+    if (document_.IsNull() || base < fileNodeCount_ || base > static_cast<int>(nodeSources_.size())) {
+      throw std::invalid_argument("The arrival doesn't fit the model.");
+    }
+
+    Handle(TDocStd_Document) document;
+    XCAFApp_Application::GetApplication()->NewDocument(TCollection_ExtendedString("MDTV-XCAF"), document);
+    MemoryStreamBuffer buffer(input_, inputLength_);
+    std::istream stream(&buffer);
+    STEPCAFControl_Reader reader;
+    reader.SetColorMode(true);
+    reader.SetNameMode(true);
+    reader.SetLayerMode(false);
+    reader.SetPropsMode(false);
+    if (reader.ReadStream("arrival.step", stream) != IFSelect_RetDone || !reader.Transfer(document)) {
+      XCAFApp_Application::GetApplication()->Close(document);
+      throw std::runtime_error("The objects couldn't be read.");
+    }
+    const std::string scope = "a" + std::to_string(arrivals_.size()) + ":";
+    arrivals_.push_back(document);
+    nodeSources_.resize(static_cast<std::size_t>(base));
+
+    // Walked as the file is (buildScene), its prototypes made the first time each (part, style) is drawn.
+    const std::size_t firstPrototype = prototypes_.size();
+    std::vector<int> parentAtDepth;
+    std::string nodes = "[";
+    int nodeCount = 0;
+    for (XCAFPrs_DocumentExplorer explorer(document, XCAFPrs_DocumentExplorerFlags_None); explorer.More(); explorer.Next()) {
+      const XCAFPrs_DocumentNode& node = explorer.Current();
+      const int depth = explorer.CurrentDepth();
+      const int parent = depth > 0 && depth - 1 < static_cast<int>(parentAtDepth.size()) ? parentAtDepth[depth - 1] : -1;
+      std::string name = j3d::labelName(node.Label);
+      if (name.empty()) {
+        name = j3d::labelName(node.RefLabel);
+      }
+      const int prototype = !node.IsAssembly && node.Style.IsVisible() ? prototypeOf(node.RefLabel, node.Style, scope.c_str()) : -1;
+
+      if (nodeCount > 0) {
+        nodes += ',';
+      }
+      nodes += "{\"name\":";
+      j3d::appendJsonString(nodes, name);
+      nodes += ",\"parent\":" + std::to_string(parent) + ",\"prototype\":" + std::to_string(prototype) + ",\"matrix\":";
+      j3d::appendMatrix(nodes, node.LocalTrsf.Transformation());
+      const int pieces = prototype >= 0 ? j3d::pieceCount(prototypes_[static_cast<std::size_t>(prototype)].shape) : 1;
+      if (pieces >= 2) {
+        nodes += ",\"pieces\":" + std::to_string(pieces);
+      }
+      nodes += '}';
+      nodeSources_.push_back({node.Label, node.RefLabel, node.Style, scope});
+
+      parentAtDepth.resize(depth + 1);
+      parentAtDepth[depth] = nodeCount;
+      ++nodeCount;
+    }
+    if (nodeCount == 0) {
+      throw std::runtime_error("The objects hold no shapes.");
+    }
+    for (std::size_t i = firstPrototype; i < prototypes_.size(); ++i) {
+      BRepMesh_IncrementalMesh(prototypes_[i].shape, linearDeflection_, false, angularDeflection_, j3d::useParallelMeshing());
+    }
+    return "{\"base\":" + std::to_string(base) + ",\"nodes\":" + nodes + "]}";
   }
 
   void extractFaces(const Prototype& prototype, J3DMeshData& data, Topology& topology) const {
@@ -1992,6 +2084,9 @@ private:
   Handle(TDocStd_Document) workDocument_;
   Handle(XCAFDoc_ShapeTool) workShapeTool_;
   std::unordered_map<std::string, Expansion> expansions_;
+  // Arrivals' documents (M18), kept open while the model is, and how many node sources are the file's.
+  std::vector<Handle(TDocStd_Document)> arrivals_;
+  int fileNodeCount_ = 0;
   mutable std::vector<Topology> topology_;
   std::string sceneJson_ = "{\"nodes\":[],\"instances\":[]}";
   std::string lastError_;

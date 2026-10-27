@@ -222,6 +222,31 @@ export class ModelStore {
     return this.edits.get(id);
   }
 
+  /**
+   * Keeps the file of objects that arrived in a model (M18, D225, D227), in its folder, before the edits
+   * that name it. Nothing is kept for a model this tab doesn't keep.
+   */
+  async keepArrival(id: ModelId, name: string, file: Blob): Promise<SaveOutcome> {
+    if (this.status !== 'kept' || !(this.complete.has(id) || this.saving.has(id))) {
+      return 'notKept';
+    }
+    try {
+      await this.request({ type: 'writeArrival', id, name, file });
+      return 'kept';
+    } catch (error) {
+      if (error instanceof StoreFailure && error.full) {
+        return 'full';
+      }
+      console.warn(`J3D: objects that arrived in model ${id} couldn't be kept.`, error);
+      return 'failed';
+    }
+  }
+
+  /** A kept arrival's file (M18), for a model coming back. */
+  async readArrival(id: ModelId, name: string): Promise<Blob> {
+    return this.request<Blob>({ type: 'readArrival', id, name });
+  }
+
   /** Forgets a model's edits and moves: they no longer fit it (R25), so it's kept as imported. */
   forgetEdits(id: ModelId): void {
     const edited = this.edits.delete(id);

@@ -142,7 +142,7 @@ export async function importGltf(
  * loads as a group of two meshes on the same vertices: each becomes one mesh again, with a group per
  * primitive, so the part is one part, as it was exported.
  */
-function joinRanges(scene: Object3D): void {
+export function joinRanges(scene: Object3D): void {
   const tagged: Object3D[] = [];
   scene.traverse((object) => {
     if ((object.userData as { j3d?: unknown }).j3d === J3dRangesTag && !(object as Partial<Mesh>).isMesh) {
@@ -177,7 +177,9 @@ function joinRanges(scene: Object3D): void {
     mesh.position.copy(group.position);
     mesh.quaternion.copy(group.quaternion);
     mesh.scale.copy(group.scale);
-    mesh.add(...group.children); // the part's edges
+    if (group.children.length > 0) {
+      mesh.add(...group.children); // the part's edges
+    }
     const parent = group.parent;
     parent.children[parent.children.indexOf(group)] = mesh;
     mesh.parent = parent;

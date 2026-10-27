@@ -9,6 +9,7 @@ import { toImportError } from '../errors';
 import { occtOutput } from '../occt-output';
 import { throttleProgress } from '../progress';
 import type {
+  ArriveRequest,
   BrepExportFormat,
   ExpandRequest,
   ExportRequest,
@@ -51,6 +52,8 @@ scope.onmessage = ({ data }) => {
     exportModel(data);
   } else if (data.type === 'expand') {
     expand(data);
+  } else if (data.type === 'arrive') {
+    void arrive(data);
   } else {
     measure(data);
   }
@@ -64,6 +67,23 @@ function expand(request: ExpandRequest): void {
     }
     const { pieces, prototypes } = model.expand(request.node);
     scope.postMessage({ type: 'expanded', id: request.id, pieces, prototypes }, sceneTransferables({ nodes: [], instances: [], prototypes }));
+  } catch (error) {
+    scope.postMessage({ type: 'measureFailed', id: request.id, message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+/**
+ * Objects from another model, read in as an arrival (M18, D225): its nodes, and the prototypes new to
+ * the main thread, transferred. A query sent while the file streams in waits its turn behind it, since
+ * the worker handles messages one at a time once this has awaited.
+ */
+async function arrive(request: ArriveRequest): Promise<void> {
+  try {
+    if (!model) {
+      throw new Error('The model is not loaded.');
+    }
+    const { arrival, prototypes } = await model.arrive(request.file, request.base);
+    scope.postMessage({ type: 'arrived', id: request.id, arrival, prototypes }, sceneTransferables({ nodes: [], instances: [], prototypes }));
   } catch (error) {
     scope.postMessage({ type: 'measureFailed', id: request.id, message: error instanceof Error ? error.message : String(error) });
   }
