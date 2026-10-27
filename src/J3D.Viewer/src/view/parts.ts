@@ -85,6 +85,11 @@ export interface ModelParts {
   highlight(nodes: readonly number[], kind: HighlightKind, materials: HighlightMaterials): Highlight | undefined;
   /** The entity to measure where the pointer is over this hit (M7, D107), if any. */
   entityAt(hit: Intersection, screen: ScreenSpace): PickedEntity | undefined;
+  /**
+   * A face, edge or vertex of a part, where the part is now (M17): how a selected feature comes back
+   * when a selection is undone (D219). Undefined when the part or its entity has gone, and for meshes.
+   */
+  entityOf?(node: number, kind: 'face' | 'edge' | 'vertex', index: number, point: Vector3Tuple): PickedEntity | undefined;
   /** One picked entity drawn in the accent colour. */
   entityHighlight(entity: PickedEntity, kind: HighlightKind, materials: HighlightMaterials): Highlight | undefined;
   /**

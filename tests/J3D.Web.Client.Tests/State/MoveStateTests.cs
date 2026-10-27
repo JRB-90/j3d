@@ -135,7 +135,7 @@ public sealed class MoveStateTests
         _scene.Undo();
         _scene.Undo();
         Assert.Equal(start, Placed(A, 2)); // back where it was imported
-        Assert.False(_scene.CanUndo);
+        Assert.StartsWith("selecting", _scene.UndoLabel ?? "selecting"); // no move left, only selections (D219)
         _scene.Redo();
         AssertTranslation((5, 10, 0), Placed(A, 2));
     }

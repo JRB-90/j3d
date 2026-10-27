@@ -333,13 +333,13 @@
     "breakpoints": [
       {
         "name": "all-labels",
-        "value": "1280px",
+        "value": "1400px",
         "purpose": "At and above it every tool and mode shows its label."
       },
       {
         "name": "tool-labels",
-        "value": "1100px",
-        "purpose": "Between 1,100 and 1,280 px Import, Export and Fit all show only their icons; below 1,100 px every tool does."
+        "value": "1240px",
+        "purpose": "Between 1,240 and 1,400 px Import, Export and Fit all show only their icons; below 1,240 px every tool does (raised from 1,100 and 1,280 when Rotate joined the tools, M17, with room for Linux's wider fallback font)."
       },
       {
         "name": "minimum",

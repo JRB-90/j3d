@@ -86,6 +86,15 @@ public sealed partial class SceneState
     /// <summary>The part picked in the view, or the node picked in the tree, last: what the Move tool moves while it's still the selection (D167).</summary>
     private (ModelId Id, int Node)? _anchor;
 
+    /// <summary>The features the viewer has selected, as its keys (M17, D219): empty for none.</summary>
+    private string _featureKeys = "";
+
+    /// <summary>How deep the user's selection changes are nested, so the outermost records one step (D219).</summary>
+    private int _selecting;
+
+    /// <summary>Features an undone or redone selection puts back, not yet passed to the viewer.</summary>
+    private string? _featuresToRestore;
+
     /// <summary>
     /// Values worked out from the selection, kept until the models, the mode or the anchor change (M16):
     /// each walks the selected parts, and every render asked for them several times, so with all 10,122
@@ -188,6 +197,12 @@ public sealed partial class SceneState
 
     public bool CanRedo => _history.CanRedo;
 
+    /// <summary>What Undo would undo, for its tooltip (D224), or null.</summary>
+    public string? UndoLabel => _history.NextUndo?.Label;
+
+    /// <summary>What Redo would redo, or null.</summary>
+    public string? RedoLabel => _history.NextRedo?.Label;
+
     /// <summary>Clear all has something to clear: a model, or a deleted one an undo could bring back (D110).</summary>
     public bool CanClearAll => !Models.IsEmpty || CanUndo || CanRedo;
 
@@ -264,6 +279,7 @@ public sealed partial class SceneState
         MeasureReference = null;
         MeasureResult = null;
         Features = FeatureSelection.Empty;
+        _featureKeys = "";
         Set([], always: true);
         ClearAllRequested?.Invoke();
     }
@@ -301,6 +317,7 @@ public sealed partial class SceneState
         MeasureReference = null;
         MeasureResult = null;
         Features = FeatureSelection.Empty;
+        _featureKeys = "";
         if (!Models.IsEmpty)
         {
             Set([], always: true);
@@ -310,9 +327,12 @@ public sealed partial class SceneState
     /// <summary>
     /// The toolbar's mode switch or the keys 1, 2 and 3 (D146, D162). The selection is converted: from
     /// Object to Model, every model with a selected part is selected whole; from Model to Object, its
-    /// parts stay selected; switching to or from Feature clears it.
+    /// parts stay selected; switching to or from Feature clears it. A switch is an undo step when it
+    /// changes the selection (D219).
     /// </summary>
-    public void SetSelectionMode(SelectMode mode)
+    public void SetSelectionMode(SelectMode mode) => Selecting(() => SwitchMode(mode));
+
+    private void SwitchMode(SelectMode mode)
     {
         if (mode == Mode)
         {
@@ -331,12 +351,29 @@ public sealed partial class SceneState
 
         Mode = mode;
         Features = FeatureSelection.Empty; // the viewer drops its own as it changes mode
+        _featureKeys = "";
         Set(models, always: true);
     }
 
-    /// <summary>The features the viewer has selected, once their values are known (D146).</summary>
+    /// <summary>
+    /// The features the viewer has selected, once their values are known (D146). A click that changed
+    /// them is an undo step (D219); a change the viewer made itself (a part hidden, an undo) isn't.
+    /// </summary>
     public void SetFeatures(FeatureSelection features)
     {
+        ArgumentNullException.ThrowIfNull(features);
+        var keys = Mode == SelectMode.Features ? features.Keys : "";
+        if (features.ByUser && keys != _featureKeys && _selecting == 0)
+        {
+            var before = Snapshot();
+            _featureKeys = keys;
+            Record(new SelectionStep(before, Snapshot()));
+        }
+        else
+        {
+            _featureKeys = keys;
+        }
+
         Features = Mode == SelectMode.Features ? features : FeatureSelection.Empty;
         Set(Models, always: true);
     }
@@ -424,9 +461,12 @@ public sealed partial class SceneState
     /// <summary>
     /// A click in the viewport (D77): on a part, it becomes the selection, or with Ctrl it's added
     /// or removed; on empty space (no model), the selection is cleared unless Ctrl was held. The
-    /// tree then reveals the part (D96). In Model mode the part's whole model is selected (D146).
+    /// tree then reveals the part (D96). In Model mode the part's whole model is selected (D146). A pick
+    /// that changes the selection is an undo step (D219).
     /// </summary>
-    public void Pick(ModelId? id, int node, bool additive)
+    public void Pick(ModelId? id, int node, bool additive) => Selecting(() => PickPart(id, node, additive));
+
+    private void PickPart(ModelId? id, int node, bool additive)
     {
         var target = id is { } modelId ? Find(modelId) : null;
         if (target?.Tree is not { } tree || !tree.IsPart(node) || target.Hidden.Contains(node))
@@ -471,8 +511,11 @@ public sealed partial class SceneState
     /// A click on a tree node: the visible parts under it become the selection, or with Ctrl are
     /// added, or removed when they're all selected already (D77, D96). In Model mode its whole model
     /// is selected; in Feature mode, which has no parts selected, it switches to Object first (D146).
+    /// One undo step, the switch included (D219).
     /// </summary>
-    public void SelectNode(ModelId id, int node, bool additive)
+    public void SelectNode(ModelId id, int node, bool additive) => Selecting(() => SelectTreeNode(id, node, additive));
+
+    private void SelectTreeNode(ModelId id, int node, bool additive)
     {
         if (Find(id) is not { Tree: { } tree } target || !tree.Contains(node))
         {
@@ -504,18 +547,19 @@ public sealed partial class SceneState
         }
     }
 
-    /// <summary>Clears the selected parts, and in Feature mode the selected features, which the viewer holds.</summary>
-    public void ClearSelection()
+    /// <summary>Clears the selected parts, and in Feature mode the selected features, which the viewer holds. An undo step (D219).</summary>
+    public void ClearSelection() => Selecting(() =>
     {
-        if (Mode == SelectMode.Features && !Features.IsEmpty)
+        if (Mode == SelectMode.Features && (!Features.IsEmpty || _featureKeys.Length > 0))
         {
             Features = FeatureSelection.Empty;
+            _featureKeys = "";
             ClearFeaturesRequested?.Invoke();
             Set(Models, always: true);
         }
 
         Set(Models.ConvertAll(model => model.WithParts(model.Hidden, [])));
-    }
+    });
 
     /// <summary>A model selected whole (Model mode): every visible part of it.</summary>
     public static bool IsModelSelected(ModelEntry model) =>
@@ -568,7 +612,7 @@ public sealed partial class SceneState
     public void RequestExport(MeshExportFormat format, bool selection) => ExportRequested?.Invoke(format, selection);
 
     /// <summary>Hides the selected parts, which leaves the selection empty (D78, D98).</summary>
-    public void HideSelection() => ChangeVisibility(model => model.Hidden.Union(model.Selected));
+    public void HideSelection() => ChangeVisibility("Hide", model => model.Hidden.Union(model.Selected));
 
     /// <summary>
     /// Hides every part outside the selection, in every model (assumption 9), and fits the view to what's
@@ -579,12 +623,12 @@ public sealed partial class SceneState
         if (CanIsolate)
         {
             FitRequested = true;
-            ChangeVisibility(model => [.. model.Tree?.Parts.Where(part => !model.Selected.Contains(part)) ?? []]);
+            ChangeVisibility("Isolate", model => [.. model.Tree?.Parts.Where(part => !model.Selected.Contains(part)) ?? []]);
         }
     }
 
     /// <summary>Shows every part of every model.</summary>
-    public void ShowAll() => ChangeVisibility(static _ => []);
+    public void ShowAll() => ChangeVisibility("Show all", static _ => []);
 
     /// <summary>A tree node's eye: shows its parts when they're all hidden, otherwise hides them all.</summary>
     public void ToggleNodeVisibility(ModelId id, int node)
@@ -596,7 +640,7 @@ public sealed partial class SceneState
 
         var parts = tree.PartsUnder(node);
         var hidden = target.VisibilityOf(node) == PartVisibility.Hidden ? target.Hidden.Except(parts) : target.Hidden.Union(parts);
-        ChangeVisibility(model => model.Id == id ? hidden : model.Hidden);
+        ChangeVisibility(target.VisibilityOf(node) == PartVisibility.Hidden ? "Show" : "Hide", model => model.Id == id ? hidden : model.Hidden);
     }
 
     /// <summary>A list item's eye: the same for the whole model.</summary>
@@ -608,7 +652,7 @@ public sealed partial class SceneState
         }
 
         var hidden = target.Visibility() == PartVisibility.Hidden ? [] : PartSet.From(tree.Parts);
-        ChangeVisibility(model => model.Id == id ? hidden : model.Hidden);
+        ChangeVisibility(target.Visibility() == PartVisibility.Hidden ? "Show" : "Hide", model => model.Id == id ? hidden : model.Hidden);
     }
 
     /// <summary>
@@ -697,6 +741,11 @@ public sealed partial class SceneState
     {
         if (_history.Undo() is { } step)
         {
+            if (step is SelectionStep selection)
+            {
+                RestoreSelection(selection.Before);
+            }
+
             Apply(step.Undo(new SceneContent(Models)));
         }
     }
@@ -705,8 +754,77 @@ public sealed partial class SceneState
     {
         if (_history.Redo() is { } step)
         {
+            if (step is SelectionStep selection)
+            {
+                RestoreSelection(selection.After);
+            }
+
             Apply(step.Redo(new SceneContent(Models)));
         }
+    }
+
+    /// <summary>Features an undone or redone selection puts back, once: the <c>Viewport</c> passes them to the viewer after the mode.</summary>
+    public string? TakeFeaturesToRestore()
+    {
+        var keys = _featuresToRestore;
+        _featuresToRestore = null;
+        return keys;
+    }
+
+    /// <summary>
+    /// Runs a change of the selection the user made, recording it as one undo step if it changed what's
+    /// selected (M17, D219). Nested changes (a tree click that switches mode first) make one step.
+    /// </summary>
+    private void Selecting(Action change)
+    {
+        if (_selecting > 0)
+        {
+            change();
+            return;
+        }
+
+        var before = Snapshot();
+        _selecting++;
+        try
+        {
+            change();
+        }
+        finally
+        {
+            _selecting--;
+        }
+
+        var after = Snapshot();
+        if (!before.SelectsSame(after))
+        {
+            Record(new SelectionStep(before, after));
+            Changed?.Invoke(); // Undo's state and tooltip
+        }
+    }
+
+    private SelectionSnapshot Snapshot() => new(
+        Mode,
+        Models.Where(static model => !model.Selected.IsEmpty).ToImmutableDictionary(static model => model.Id, static model => model.Selected),
+        _featureKeys,
+        _anchor);
+
+    /// <summary>An undone or redone selection's mode, anchor and features; the step itself puts back the parts.</summary>
+    private void RestoreSelection(SelectionSnapshot selection)
+    {
+        var modeChanged = selection.Mode != Mode;
+        if (modeChanged)
+        {
+            Mode = selection.Mode;
+            Features = FeatureSelection.Empty;
+        }
+
+        _anchor = selection.Anchor;
+        if (Mode == SelectMode.Features && (modeChanged || selection.Features != _featureKeys))
+        {
+            _featuresToRestore = selection.Features;
+        }
+
+        _featureKeys = Mode == SelectMode.Features ? selection.Features : "";
     }
 
     /// <summary>
@@ -777,7 +895,7 @@ public sealed partial class SceneState
     }
 
     /// <summary>Applies new hidden parts to loaded models and records the change as one undoable step, if anything changed.</summary>
-    private void ChangeVisibility(Func<ModelEntry, PartSet> hidden)
+    private void ChangeVisibility(string label, Func<ModelEntry, PartSet> hidden)
     {
         var changes = ImmutableDictionary.CreateBuilder<ModelId, (PartSet Before, PartSet After)>();
         var models = Models.ConvertAll(model =>
@@ -798,7 +916,7 @@ public sealed partial class SceneState
 
         if (changes.Count > 0)
         {
-            Record(new VisibilityStep(changes.ToImmutable()));
+            Record(new VisibilityStep(changes.ToImmutable(), label));
         }
 
         Set(models);

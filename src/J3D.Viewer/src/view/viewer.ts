@@ -70,6 +70,7 @@ import {
 } from './parts';
 import { ViewCube } from './view-cube';
 import { HomeRegion, regionView, type ViewRegion } from './view-regions';
+import { sameView, ViewHistory } from './view-history';
 
 CameraControls.install({ THREE: { Vector2, Vector3, Vector4, Quaternion, Matrix4, Spherical, Box3, Sphere, Raycaster } });
 
@@ -187,6 +188,8 @@ export interface ViewerOptions {
   onContextMenu?: (target: ContextTarget) => void;
   /** The camera moved, zoomed or changed projection: drawn with a different view (M8, D82). */
   onCameraChange?: () => void;
+  /** Previous view or Next view changed the projection (M17, D220), so .NET's switch follows. */
+  onProjectionChange?: (projection: Projection) => void;
   /** The Move tool's target and where it is, or null when there's none (M13, D148). */
   onMoveTarget?: (info: MoveTargetInfo | null) => void;
   /** A drag of the triad ended: one undo step (D149), placements in the parent's frame. */
@@ -280,6 +283,10 @@ export class Viewer {
   private readonly originFrames = new OriginFrames();
   private originTargets: MoveTarget[] = [];
   private lastMoveReport = 0;
+  /** The views the camera came to rest at (M17, D220), and the one Previous or Next view is going to, not a step of its own. */
+  private readonly views = new ViewHistory();
+  private goingTo: CameraSnapshot | undefined;
+  private viewButtons: { back: HTMLButtonElement; forward: HTMLButtonElement } | undefined;
 
   constructor(
     private readonly host: HTMLElement,
@@ -359,8 +366,12 @@ export class Viewer {
 
     this.listen(controls, 'controlstart', () => {
       this.interacting = true;
+      this.goingTo = undefined; // a gesture during Previous or Next view's transition is a view of its own
       this.requestFrame();
     });
+    // Each view the camera comes to rest at is a step in the view history (D220): a gesture (a burst of
+    // wheel steps sleeps once), Fit all, Home, the view cube, Isolate's fit.
+    this.listen(controls, 'sleep', () => this.recordView());
     this.listen(controls, 'controlend', () => (this.interacting = false));
     this.listen(controls, 'control', () => this.requestFrame());
     this.listen(controls, 'transitionstart', () => this.requestFrame());
@@ -399,6 +410,8 @@ export class Viewer {
     this.installMoveInput(canvas);
     this.installPartInput(canvas);
     this.installHomeButton();
+    this.installViewHistoryButtons();
+    this.views.reset(this.cameraSnapshot());
     this.requestRender();
   }
 
@@ -654,9 +667,10 @@ export class Viewer {
   }
 
   /** The Move tool and the origin frames, for tests. */
-  moveState(): { active: boolean; dragging: boolean; target: MoveTarget | null; originFrames: number } {
+  moveState(): { active: boolean; mode: MoveMode | null; dragging: boolean; target: MoveTarget | null; originFrames: number } {
     return {
       active: this.moveTool.isActive,
+      mode: this.moveTool.activeMode,
       dragging: this.moveTool.isDragging,
       target: this.moveTool.isActive && this.moveTarget ? this.moveTarget : null,
       originFrames: this.originFrames.count,
@@ -734,16 +748,25 @@ export class Viewer {
   }
 
   /** Puts the camera where a snapshot says, at once: the stored view when the page opens (D111). */
-  restoreCamera({ projection, position, target, focalOffset, zoom }: CameraSnapshot): void {
-    this.setProjection(projection);
-    this.controls.stop();
-    void this.controls.setLookAt(...position, ...target, false);
-    void this.controls.setFocalOffset(...focalOffset, false);
-    if (projection === 'orthographic') {
-      void this.controls.zoomTo(zoom, false);
-    }
-    this.controls.update(0);
-    this.requestRender();
+  restoreCamera(view: CameraSnapshot): void {
+    this.restoreView(view);
+    this.views.reset(this.cameraSnapshot());
+    this.updateViewButtons();
+  }
+
+  /** Previous view (`[`, D221): the view the camera rested at before this one, if there is one. */
+  previousView(): void {
+    this.goToView(this.views.back());
+  }
+
+  /** Next view (`]`, D221): the view Previous view left, if there is one. */
+  nextView(): void {
+    this.goToView(this.views.forward());
+  }
+
+  /** The view history's state, for tests: how many views, and whether Previous and Next view can go. */
+  viewHistoryState(): { count: number; canGoBack: boolean; canGoForward: boolean } {
+    return { count: this.views.count, canGoBack: this.views.canGoBack, canGoForward: this.views.canGoForward };
   }
 
   /**
@@ -873,6 +896,11 @@ export class Viewer {
   /** Drops the selected features (Esc, or a switch of mode). */
   clearFeatures(): void {
     this.features.clear();
+  }
+
+  /** Selects the features a report's keys name, in place of the selection: an undone or redone selection (M17, D219). */
+  restoreFeatures(keys: string): void {
+    this.features.restore(keys);
   }
 
   /** The Measure tool's state, for tests: whether it's on, what it would pick, the reference and the labels drawn. */
@@ -1038,8 +1066,11 @@ export class Viewer {
     this.fitAll();
   }
 
-  /** Switches between orthographic and perspective, keeping the height visible at the target. */
-  setProjection(projection: Projection): void {
+  /**
+   * Switches between orthographic and perspective, keeping the height visible at the target. The switch
+   * is a step in the view history (D220), unless Previous or Next view made it.
+   */
+  setProjection(projection: Projection, record = true): void {
     if (projection === this.projectionMode) {
       return;
     }
@@ -1059,6 +1090,9 @@ export class Viewer {
     }
     this.applyInputMapping();
     this.controls.update(0);
+    if (record) {
+      this.recordView();
+    }
     this.requestRender();
   }
 
@@ -1334,6 +1368,10 @@ export class Viewer {
     }
     if (command === 'fit') {
       this.fitAll();
+    } else if (command === 'previousView') {
+      this.previousView();
+    } else if (command === 'nextView') {
+      this.nextView();
     } else if (command) {
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault(); // not the browser's own undo
@@ -1543,6 +1581,83 @@ export class Viewer {
     this.cleanup.push(() => button.remove());
   }
 
+  /** Previous view and Next view (M17, D221): arrows beside Home, greyed when there's nowhere to go. */
+  private installViewHistoryButtons(): void {
+    const make = (name: string, title: string, label: string, path: string, go: () => void) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `j3d-view-button j3d-${name}`;
+      button.title = title;
+      button.setAttribute('aria-label', label);
+      button.dataset['testid'] = name;
+      button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+      this.listen(button, 'click', go);
+      this.host.append(button);
+      this.cleanup.push(() => button.remove());
+      return button;
+    };
+    this.viewButtons = {
+      back: make('previous-view', 'Previous view ([)', 'Previous view', 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z', () => this.previousView()),
+      forward: make('next-view', 'Next view (])', 'Next view', 'M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z', () => this.nextView()),
+    };
+    this.updateViewButtons();
+  }
+
+  private updateViewButtons(): void {
+    if (this.viewButtons) {
+      this.viewButtons.back.disabled = !this.views.canGoBack;
+      this.viewButtons.forward.disabled = !this.views.canGoForward;
+    }
+  }
+
+  /** The camera came to rest: a step in the view history, unless it's where Previous or Next view sent it. */
+  private recordView(): void {
+    const view = this.cameraSnapshot();
+    const goingTo = this.goingTo;
+    this.goingTo = undefined;
+    if (goingTo && sameView(goingTo, view)) {
+      return;
+    }
+    this.views.record(view);
+    this.updateViewButtons();
+  }
+
+  /** Moves the camera to a view from the history, smoothly unless the projection changes on the way. */
+  private goToView(view: CameraSnapshot | undefined): void {
+    this.updateViewButtons();
+    if (!view) {
+      return;
+    }
+    if (view.projection !== this.projectionMode) {
+      this.restoreView(view);
+      this.options.onProjectionChange?.(view.projection);
+      return;
+    }
+    if (sameView(this.cameraSnapshot(), view)) {
+      return;
+    }
+    this.goingTo = view;
+    void this.controls.setLookAt(...view.position, ...view.target, true);
+    void this.controls.setFocalOffset(...view.focalOffset, true);
+    if (view.projection === 'orthographic') {
+      void this.controls.zoomTo(view.zoom, true);
+    }
+    this.requestFrame();
+  }
+
+  /** Puts the camera at a view at once, without a step of its own. */
+  private restoreView({ projection, position, target, focalOffset, zoom }: CameraSnapshot): void {
+    this.setProjection(projection, false);
+    this.controls.stop();
+    void this.controls.setLookAt(...position, ...target, false);
+    void this.controls.setFocalOffset(...focalOffset, false);
+    if (projection === 'orthographic') {
+      void this.controls.zoomTo(zoom, false);
+    }
+    this.controls.update(0);
+    this.requestRender();
+  }
+
   private listen<K extends keyof HTMLElementEventMap>(
     target: HTMLElement,
     type: K,
@@ -1569,11 +1684,11 @@ export class Viewer {
 }
 
 /**
- * D99's keys: `F` fits; Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z), 1, 2 and 3 (D162),
+ * D99's keys: `F` fits, `[` and `]` go to the previous and next view (M17, D221); Esc, H, I, Shift+H, M, Ctrl+Z, Ctrl+Y (or Ctrl+Shift+Z), 1, 2 and 3 (D162),
  * W, E and O (M13, D166, D171), and Ctrl+X, Ctrl+C, Ctrl+V, Delete, Ctrl+G, Ctrl+Shift+G and F2 (M14,
  * D152, D183) go to .NET.
  */
-export function keyCommand(key: string, shift: boolean, control: boolean): ViewerCommand | 'fit' | undefined {
+export function keyCommand(key: string, shift: boolean, control: boolean): ViewerCommand | 'fit' | 'previousView' | 'nextView' | undefined {
   if (control) {
     switch (key) {
       case 'z':
@@ -1599,6 +1714,10 @@ export function keyCommand(key: string, shift: boolean, control: boolean): Viewe
       return 'rename';
     case 'f':
       return 'fit';
+    case '[':
+      return 'previousView';
+    case ']':
+      return 'nextView';
     case 'escape':
       return 'clearSelection';
     case 'h':

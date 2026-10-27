@@ -190,7 +190,7 @@ public sealed class SelectionStateTests
         _scene.Undo();
         Assert.Empty(ModelA.Hidden);
         Assert.False(_scene.HasSelection);
-        Assert.False(_scene.CanUndo);
+        Assert.StartsWith("selecting", _scene.UndoLabel); // the tree pick before them (D219)
 
         _scene.Redo();
         Assert.Equal([3, 4], ModelA.Hidden.Order());
@@ -208,6 +208,9 @@ public sealed class SelectionStateTests
         _scene.ShowAll();
         _scene.Pick(A, 1, additive: false);
 
+        _scene.Undo(); // the pick (D219)
+        Assert.Empty(ModelA.Hidden);
+        Assert.False(_scene.HasSelection);
         _scene.Undo();
 
         Assert.Equal([1], ModelA.Hidden);

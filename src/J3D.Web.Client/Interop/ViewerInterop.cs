@@ -93,6 +93,9 @@ public sealed class ViewerInterop : IAsyncDisposable
     /// <summary>Drops the features selected in Feature mode, which the viewer holds (D146).</summary>
     public ValueTask ClearFeaturesAsync() => _viewer.InvokeVoidAsync("clearFeatures");
 
+    /// <summary>Selects the features a report's keys name, in place of the selection: an undone or redone selection (M17, D219).</summary>
+    public ValueTask RestoreFeaturesAsync(string keys) => _viewer.InvokeVoidAsync("restoreFeatures", keys);
+
     /// <summary>The Move tool (M13, D149): its mode (null: off), the one object it moves, and the frame its triad and fields use (D148).</summary>
     public ValueTask SetMoveToolAsync(MoveMode? mode, (ModelId Id, int Node)? target, MoveFrame frame) =>
         _viewer.InvokeVoidAsync("setMoveTool", mode, target is { } moved ? new MoveTargetRef(moved.Id, moved.Node) : null, frame);

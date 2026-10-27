@@ -168,7 +168,7 @@ public sealed class EditStateTests
         _scene.BeginRename();
         _scene.EndRename("Plate (bottom)");
 
-        Assert.False(_scene.CanUndo);
+        Assert.Equal("selecting 1 part", _scene.UndoLabel); // only the pick (D219)
         Assert.Equal("Plate (bottom)", Tree.NameOf(1));
     }
 
@@ -243,7 +243,7 @@ public sealed class EditStateTests
         _scene.Undo();
         Assert.True(Tree.Contains(1));
         Assert.True(_scene.Find(B)!.Tree!.Contains(3));
-        Assert.False(_scene.CanUndo);
+        Assert.Equal("selecting 2 parts", _scene.UndoLabel); // only the picks before it (D219)
     }
 
     [Fact]

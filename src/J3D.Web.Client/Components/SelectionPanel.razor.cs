@@ -108,6 +108,15 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
         scene.SetMoveFrame(frame);
     }
 
+    /// <summary>The panel's Move | Rotate switch (M17, D223): the triad's arrows or rings; picking the one that's on keeps it on.</summary>
+    private void SetMoveMode(MoveMode mode)
+    {
+        if (scene.Moving != mode)
+        {
+            scene.SetMoveMode(mode);
+        }
+    }
+
     public void Dispose() => scene.Changed -= OnSceneChanged;
 
     /// <summary>

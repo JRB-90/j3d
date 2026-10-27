@@ -54,7 +54,7 @@ public sealed class ToolbarTests : BunitTestBase
         await StartViewerAsync();
 
         Assert.Equal(["Files and view", "Select", "Tools", "Visibility", "History"], cut.FindAll(".j3d-toolbar-group").Select(static g => g.GetAttribute("aria-label")));
-        Assert.Equal(["Import", "Fit all", "Model", "Object", "Feature", "Measure", "Move", "Origin frames"], cut.FindAll(".j3d-tool-label").Select(static l => l.TextContent));
+        Assert.Equal(["Import", "Fit all", "Model", "Object", "Feature", "Measure", "Move", "Rotate", "Origin frames"], cut.FindAll(".j3d-tool-label").Select(static l => l.TextContent));
         Assert.Empty(cut.FindAll("[data-testid=projection]")); // by the view cube now
     }
 

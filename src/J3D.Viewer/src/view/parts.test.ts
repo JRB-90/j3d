@@ -99,6 +99,16 @@ describe('BREP parts', () => {
     expect(edgeMatrix(1)[12]).toBe(2);
   });
 
+  it('finds a feature again where its part is now, for an undone selection (M17, D219)', () => {
+    const { parts } = buildBrepObject('m', row(3), new MaterialCache());
+    const vertex = parts.entityOf!(2, 'vertex', 1, [0, 0, 0]);
+    expect(vertex).toMatchObject({ kind: 'vertex', node: 2, ref: { kind: 2, prototype: 0, index: 1 } });
+    expect(vertex!.point).toEqual([3, 0, 0]); // the quad's second corner, where part 2 is placed (x 2)
+    expect(parts.entityOf!(1, 'face', 0, [0.5, 0.5, 0])).toMatchObject({ kind: 'face', node: 1, point: [0.5, 0.5, 0] });
+    expect(parts.entityOf!(1, 'edge', 1, [0, 0, 0])).toBeUndefined(); // the quad has one edge
+    expect(parts.entityOf!(9, 'face', 0, [0, 0, 0])).toBeUndefined(); // no such part
+  });
+
   it('bounds only the visible placements', () => {
     const { parts } = buildBrepObject('m', row(3), new MaterialCache());
     expect(parts.addVisibleBounds(new Box3()).max.x).toBe(5);
@@ -287,6 +297,9 @@ describe('keyCommand (D99)', () => {
     expect(keyCommand('g', true, true)).toBe('ungroup');
     expect(keyCommand('f2', false, false)).toBe('rename');
     expect(keyCommand('c', false, false)).toBeUndefined();
+    // Previous view and Next view, which the viewer handles itself (M17, D221).
+    expect(keyCommand('[', false, false)).toBe('previousView');
+    expect(keyCommand(']', false, false)).toBe('nextView');
   });
 
   it('ignores everything else, including the letters with Ctrl', () => {

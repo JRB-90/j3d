@@ -347,15 +347,16 @@ which are drawn on the canvas at 600. Emphasis comes from Text Bright against Te
 - **App bar:** the menu button and "J3D", then the toolbar, 16 px in, in five groups set off by hairlines:
   1. **Files and view:** Import, Export and Fit all.
   2. **Select:** the Model, Object and Feature switch.
-  3. **Tools:** Measure, Move and Origin frames.
+  3. **Tools:** Measure, Move, Rotate (M17) and Origin frames.
   4. **Visibility:** Hide, Isolate and Show all.
   5. **History:** Undo and Redo.
 
   About sits at the far right. Controls within a group are 2 px apart, and each group has 8 px either side of its
   hairline.
-- **Labels by width:** at 1,280 px and above, every tool and mode shows its label. Between 1,100 and 1,280 px Import,
-  Export and Fit all drop theirs. Below 1,100 px every tool is a 32 px icon. Visibility and History are icons at any
-  width. Tooltips always name the action and its key. The bar stays on one line down to 900 px. There's no phone or
+- **Labels by width:** at 1,400 px and above, every tool and mode shows its label. Between 1,240 and 1,400 px Import,
+  Export and Fit all drop theirs. Below 1,240 px every tool is a 32 px icon. (1,280 and 1,100 px until Rotate joined
+  the tools in M17; the room left allows for Linux's fallback font, which is wider than Segoe UI.) Visibility and
+  History are icons at any width. Tooltips always name the action and its key. The bar stays on one line down to 900 px. There's no phone or
   tablet layout.
 - **Viewport corners:**
   - **Top right:** the view cube (110 px, 12 px from the corner), with Home just left of it and the
@@ -524,6 +525,8 @@ Measurement lines and points are drawn in Selection Blue, over the model.
   Selection Blue. A click animates the camera to that view with camera-controls' default smoothing (0.25 s).
 - **Home:** 28 px, just left of the cube, with a Text Muted icon. On hover or focus the icon turns Selection Blue on a
   12% blue tint.
+- **Previous view and Next view** (M17): 28 px arrows left of Home, drawn as Home is; with nowhere to go they're Control
+  Off and don't react. Their tooltips name them and their keys (`[` and `]`).
 - **Projection:** an Orthographic | Perspective segmented switch under the cube, right-aligned with it, on 92% Surface
   Slate, at 12 px.
 

@@ -19,7 +19,7 @@ import {
 } from 'three';
 import type { PlanSource } from '../edit/export-plan';
 import { ModelStructure, TopLevel, type Expansions } from '../edit/structure';
-import type { KeptPlacement } from '../import/types';
+import type { KeptPlacement, Vector3Tuple } from '../import/types';
 import { EdgeVisibilityAttribute, type LinearRgba, type MaterialCache } from './materials';
 import {
   EdgePickRadius,
@@ -747,6 +747,24 @@ class BrepParts implements ModelParts {
       }
     }
     return undefined;
+  }
+
+  entityOf(node: number, kind: 'face' | 'edge' | 'vertex', index: number, point: Vector3Tuple): PickedEntity | undefined {
+    const placement = this.placementsOf.get(node)?.[0];
+    const instance = placement === undefined ? undefined : this.instances[placement];
+    const mesh = instance && this.scene.prototypes[instance.prototype];
+    if (!instance || !mesh) {
+      return undefined;
+    }
+    const counts = { face: mesh.faceRanges.length / 2, edge: mesh.edgeRanges.length / 2, vertex: mesh.vertices.length / 3 };
+    if (!Number.isInteger(index) || index < 0 || index >= counts[kind]) {
+      return undefined;
+    }
+    const entityKind = kind === 'face' ? EntityKind.Face : kind === 'edge' ? EntityKind.Edge : EntityKind.Vertex;
+    const ref = { kind: entityKind, prototype: instance.prototype, index, matrix: instance.matrix };
+    const at =
+      kind === 'vertex' ? new Vector3().fromArray(mesh.vertices, index * 3).applyMatrix4(new Matrix4().fromArray(instance.matrix)).toArray() : point;
+    return { kind, node, ref, point: at };
   }
 
   /** A face's triangles, an edge's segments or a vertex's dot, where the placement puts them. */

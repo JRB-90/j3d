@@ -232,6 +232,10 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     [JSInvokable]
     public void OnMeasureResult(MeasureInfo? info) => scene.SetMeasureResult(info);
 
+    /// <summary>Previous view or Next view changed the projection (M17, D220): the switch under the view cube follows.</summary>
+    [JSInvokable]
+    public void OnProjectionChanged(Projection projection) => session.RestoreProjection(projection);
+
     /// <summary>The features selected in Feature mode (D146).</summary>
     [JSInvokable]
     public void OnFeaturesSelected(FeatureSelection selection) => scene.SetFeatures(selection);
@@ -444,6 +448,7 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         var selectionMode = scene.Mode;
         var selectionModeChanged = selectionMode != _appliedSelectionMode;
         _appliedSelectionMode = selectionMode;
+        var featuresToRestore = scene.TakeFeaturesToRestore();
         var measureMode = scene.MeasureMode;
         var fromContext = scene.TakeMeasureFromContext();
         var fit = scene.TakeFitRequest();
@@ -492,6 +497,12 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             foreach (var model in pending)
             {
                 await viewer.SetPartStateAsync(model.Id, model.Hidden, model.Selected);
+            }
+
+            // An undone or redone selection's features (M17, D219), after the mode that clears them.
+            if (featuresToRestore is not null)
+            {
+                await viewer.RestoreFeaturesAsync(featuresToRestore);
             }
 
             if (fit)

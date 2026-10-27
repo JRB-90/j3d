@@ -91,6 +91,8 @@ export interface ViewerHandle {
   setSelectionMode(mode: SelectionMode): void;
   /** Drops the selected features (Esc, D146). */
   clearFeatures(): void;
+  /** Selects the features a report's keys name (M17, D219): an undone or redone selection. */
+  restoreFeatures(keys: string): void;
   /**
    * The Move tool (M13, D149): its mode (null: off), the one object it moves (node -1: a whole model,
    * D169) and the frame its triad and fields use (D148).
@@ -145,6 +147,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
             store.setCamera(view!.cameraSnapshot());
           }
         },
+        onProjectionChange: (projection) => call(dotnet, 'OnProjectionChanged', projection),
         // Picks and key commands go to .NET, which owns selection, visibility and undo (D95).
         onPick: (part, additive) => call(dotnet, 'OnPartPicked', part?.id ?? null, part?.node ?? -1, additive),
         onCommand: (command) => call(dotnet, 'OnViewerCommand', command),
@@ -318,6 +321,9 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     },
     clearFeatures() {
       view?.clearFeatures();
+    },
+    restoreFeatures(keys) {
+      view?.restoreFeatures(keys);
     },
     setMoveTool(mode, target, frame) {
       view?.setMoveTool(mode, target ?? undefined, frame);

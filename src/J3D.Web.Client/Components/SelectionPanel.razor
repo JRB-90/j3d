@@ -5,6 +5,17 @@
         {
             @* The Move tool's fields (M13, D148, D167): the target's pose in the chosen frame, applied on Enter. *@
             <div class="j3d-move" data-testid="move-panel">
+                @* The triad's arrows or rings (M17, D223): the fields stay all six, since a pose sets both. *@
+                <MudToggleGroup T="MoveMode"
+                                Value="Scene.Moving.Value"
+                                ValueChanged="SetMoveMode"
+                                Size="Size.Small"
+                                Class="j3d-segmented j3d-move-mode"
+                                aria-label="Triad"
+                                data-testid="move-mode">
+                    <MudToggleItem Value="MoveMode.Translate" Text="Move" data-testid="move-mode-translate" />
+                    <MudToggleItem Value="MoveMode.Rotate" Text="Rotate" data-testid="move-mode-rotate" />
+                </MudToggleGroup>
                 @if (Scene.MoveTarget is { } target && Scene.TargetPose is { } pose)
                 {
                     <div class="j3d-selection-title" title="@TargetName(target)" data-testid="move-title">@TargetName(target)</div>

@@ -13,7 +13,8 @@
             {
                 <MudMenuItem Icon="@Icons.Material.Outlined.VisibilityOff" OnClick="Scene.HideSelection" data-testid="context-hide"><span class="j3d-menu-command"><span>Hide</span><kbd class="j3d-key">H</kbd></span></MudMenuItem>
                 <MudMenuItem Icon="@Icons.Material.Outlined.FilterCenterFocus" Disabled="@(!Scene.CanIsolate)" OnClick="Scene.IsolateSelection" data-testid="context-isolate"><span class="j3d-menu-command"><span>Isolate</span><kbd class="j3d-key">I</kbd></span></MudMenuItem>
-                <MudMenuItem Icon="@Icons.Material.Outlined.OpenWith" Disabled="@(Scene.MoveTarget is null)" OnClick="StartMoving" data-testid="context-move"><span class="j3d-menu-command"><span>Move</span><kbd class="j3d-key">W</kbd></span></MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined.OpenWith" Disabled="@(Scene.MoveTarget is null)" OnClick="@(() => StartMoving(MoveMode.Translate))" data-testid="context-move"><span class="j3d-menu-command"><span>Move</span><kbd class="j3d-key">W</kbd></span></MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined._3dRotation" Disabled="@(Scene.MoveTarget is null)" OnClick="@(() => StartMoving(MoveMode.Rotate))" data-testid="context-rotate"><span class="j3d-menu-command"><span>Rotate</span><kbd class="j3d-key">E</kbd></span></MudMenuItem>
             }
 
             @if (target.CanMeasure)
