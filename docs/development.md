@@ -97,6 +97,26 @@ BROWSER=chromium dotnet test --project tests/J3D.E2E.Tests --filter-class "*Mode
   open its dialog every time (decision D140); and pasting into the expanded `plant.step` then reloading, every other
   round at once, perhaps while the store is writing, after which the kept model must come back (D200).
 - Safari isn't supported, so Playwright's WebKit isn't tested (D137, D138).
+- Phones and tablets (M19, D211): `TouchTests` run in Chromium's emulation of a Pixel 7 (a touch screen and a mobile
+  user agent), with long presses sent as touch events through the DevTools protocol; Playwright can't make Firefox a
+  mobile device, so they're skipped there, and `CompactLayoutTests` check the compact layout by size in both browsers.
+
+### On an Android phone
+
+The phone reaches the app on the PC over USB as `localhost`, which is a secure context (D241): OPFS and the Web Locks
+API, which keep the models, aren't available to `http://` the PC's address. With USB debugging on (the phone's
+Developer options) and Android's platform-tools installed (`winget install Google.PlatformTools`):
+
+```bash
+dotnet run --project src/J3D.Web --launch-profile http
+```
+
+```bash
+adb reverse tcp:5274 tcp:5274
+```
+
+Open `http://localhost:5274` in any of the phone's browsers. `chrome://inspect#devices` on the PC opens DevTools on the
+phone's page (Chrome and Edge); Firefox's `about:debugging` does the same for Firefox on Android.
 
 ### Firefox in Docker
 

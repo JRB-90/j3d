@@ -44,9 +44,10 @@ machine, large-assembly scale, and arranging assemblies and writing them back.
 
 ## Operating Context
 
-- **Where it runs:** current desktop Chrome, Edge and Firefox, with WebGL 2 and a cross-origin-isolated page
-  (COOP/COEP headers from the host). Safari isn't supported (D137). It isn't hosted: users run it locally with
-  `dotnet run --project src/J3D.Web`.
+- **Where it runs:** current desktop Chrome, Edge and Firefox, and Chrome, Edge and Firefox on Android phones and
+  tablets (since M19), with WebGL 2 and a cross-origin-isolated page (COOP/COEP headers from the host). Safari, and so
+  iPhones and iPads, aren't supported (D137, D211). It isn't hosted: users run it locally with
+  `dotnet run --project src/J3D.Web`, and reach it from a phone over USB as `localhost` (D241).
 - **The workflow:** import files with the **Import** button, or drop files or whole folders onto the view. Each file
   becomes a **model** in the list, with progress and a cancel button, then its stats and its assembly tree. From there
   the user:
@@ -84,7 +85,9 @@ machine, large-assembly scale, and arranging assemblies and writing them back.
 - A Rotate button beside Move, and a Move | Rotate switch while moving (D208).
 - Selection changes in the undo history, and Previous view and Next view for the camera (D209).
 - Moving and copying objects between models of the same kind (D210).
-- Phone and tablet layouts for Android and Windows touch devices, with every feature (D211, D212).
+- Phone and tablet layouts for Android and Windows touch devices, with every feature (D211, D212): built in M19
+  (D234–D243), the compact layout below 900 px wide or 500 px tall, and a finger's sizes, long press and Add on any
+  touch screen.
 
 **Planned (iteration 5):** the reusable library (D214). Then the owner's round of testing and refinement, after which
 the project is complete (D215).
@@ -100,9 +103,10 @@ the project is complete (D215).
 - Edits change placements and structure, never shapes (D144).
 - Lengths are in millimetres, to 3 decimals, and angles are in degrees, to 2. The scene is Z-up. Mesh values are
   prefixed ≈.
-- The layout is desktop only today; phone and tablet layouts come in iteration 4 (D211, D212), for Android phones and
+- Phones and tablets get their own layout (M19, D234): the model list in a drawer, the panel as a bottom sheet and the
+  toolbar folding into ⋮, with 48 px targets on a touch screen, for Android phones and
   tablets and Windows touch devices. iPhones and iPads stay unsupported, since every browser on them is Safari's
-  engine (D137). Touch input works.
+  engine (D137).
 - **Dropped for good** (D143, D207): users and auth, deployment, sectioning, exploded views, exact measurement of mesh
   models, keeping measurements or selections, and editing geometry.
 - **Licensing:** J3D is MIT. OCCT is LGPL-2.1 with the Open CASCADE exception. The About dialog has to keep its
@@ -164,4 +168,5 @@ Today's level is the floor, with no formal WCAG target (decided 2026-10-25):
 - Every command can be reached by a key, a toolbar button or a menu item.
 - Icon-only buttons have accessible names and tooltips that show their key.
 - Measurement labels are HTML over the canvas (D103), so screen readers and tests can read them.
-- Touch input works in the 3D view.
+- Touch input works in the 3D view, and every command is reachable by touch: a long press opens the context menu, and
+  Add stands in for Ctrl (M19).

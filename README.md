@@ -121,20 +121,20 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 | Previous view, next view | | | The arrows beside **Home**, or `[` and `]` |
 | Select models, objects or features | | | The **Model**, **Object** and **Feature** switch in the toolbar, or `1`, `2`, `3` |
 | Select | Click it (a click that doesn't drag) | Tap it | Click a node in the tree selects every part under it (its model in Model mode) |
-| Add or remove | Ctrl+click | | Ctrl+click in the tree |
+| Add or remove | Ctrl+click | Turn on **Add** (beside the selection modes, or in ⋮ on a phone), then tap | Ctrl+click in the tree |
 | Clear the selection | Click empty space | Tap empty space | `Esc` |
 | Move through the tree | | | Click a node, then `↑` `↓`; `→` opens a node, then goes to its first child; `←` closes it, then goes to its parent; `Home`, `End` |
 | Select from the tree by key | | | `Enter` or `Space` selects the focused node; with `Ctrl`, adds or removes it |
-| Commands for what's under the pointer | Right-click (a click that doesn't drag) | | Right-click a node in the tree |
+| Commands for what's under the pointer | Right-click (a click that doesn't drag) | Hold a finger still for half a second | Right-click a node in the tree, or hold a finger on it |
 | Hide the selection | | | **Hide** in the toolbar, or `H`; or a node's eye in the tree |
 | Show only the selection | | | **Isolate**, or `I` |
 | Show everything | | | **Show all**, or `Shift+H` |
-| Move the selected part, sub-assembly or model | Drag the triad's arrows or planes; `Ctrl` snaps | | **Move** in the toolbar, or `W`; type X, Y, Z in the panel and press Enter |
-| Turn it | Drag the triad's rings; `Ctrl` snaps to 15° | | **Rotate** in the toolbar or the right-click menu, or `E`; **Move \| Rotate** in the panel; type Rx, Ry, Rz and press Enter |
+| Move the selected part, sub-assembly or model | Drag the triad's arrows or planes; `Ctrl` snaps | Drag the triad's arrows or planes | **Move** in the toolbar, or `W`; type X, Y, Z in the panel and press Enter |
+| Turn it | Drag the triad's rings; `Ctrl` snaps to 15° | Drag the triad's rings | **Rotate** in the toolbar or the right-click menu, or `E`; **Move \| Rotate** in the panel; type Rx, Ry, Rz and press Enter |
 | Show origin frames | | | **Origin frames** in the toolbar, or `O` |
 | Cut, copy, paste the selected objects | | | Right-click menu, or `Ctrl+X`, `Ctrl+C`, `Ctrl+V` |
 | Delete the selected objects (or, in Model mode, models) | | | Right-click menu, or `Delete` |
-| Move a node to another assembly, in its model or another | Drag it in the tree onto the assembly, or a model's name | | Cut, select the assembly, Paste |
+| Move a node to another assembly, in its model or another | Drag it in the tree onto the assembly, or a model's name | Cut it, then Paste on the assembly (a finger doesn't drag rows) | Cut, select the assembly, Paste |
 | Copy a node into another assembly, in its model or another | `Ctrl`+drag it in the tree | | Copy, select the assembly, Paste |
 | Group the selection, or ungroup an assembly | | | **New assembly** (`Ctrl+G`), **Ungroup** (`Ctrl+Shift+G`) in the right-click menu |
 | Rename a node | | | **Rename** in the right-click menu, or `F2`; `Enter` keeps it, `Esc` doesn't |
@@ -147,6 +147,12 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 
 The view fits itself to the first model you import into an empty scene; later imports leave the camera where it is,
 and so do models coming back from your last visit or an undo.
+
+On a phone, or a tablet held upright (below 900 px wide or 500 px tall), J3D lays itself out for the screen: the model
+list slides over the view from the ☰ button and closes when you tap a part in it; the panel sits along the bottom,
+showing its first lines until you tap or drag its handle up; and the toolbar keeps what fits, with the rest under ⋮,
+including **Orthographic** and **Perspective**. On a touch screen the controls are 48 px for a finger, and **Add**
+stands in for `Ctrl`.
 
 ## Limits
 
@@ -184,18 +190,20 @@ and so do models coming back from your last visit or an undo.
   1.8 MB to about 15 MB. On that plant, selecting, moving and editing take 0.05–0.2 seconds on a laptop, Expand all of
   its 840 compound parts about 0.7 seconds (with "Expanding" in its item), and coming back after a refresh 2.5
   seconds.
-- Not in this version yet: a phone or tablet layout. Sections and exploded views aren't planned.
+- Sections and exploded views aren't planned.
 
 ## Browsers
 
-J3D runs in current desktop **Chrome, Edge and Firefox**. It needs **WebGL 2** and a **cross-origin-isolated** page
-(the host sends the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers for this).
+J3D runs in current desktop **Chrome, Edge and Firefox**, and in Chrome, Edge and Firefox on **Android** phones and
+tablets. It needs **WebGL 2** and a **cross-origin-isolated** page (the host sends the `Cross-Origin-Opener-Policy`
+and `Cross-Origin-Embedder-Policy` headers for this).
 
 | Browser | Tested |
 |---|---|
 | Chrome, Edge | Every change in CI (Playwright Chromium), and by hand on Windows |
 | Firefox | Every change in CI (Playwright Firefox) |
-| Safari | Not supported, and not tested |
+| Android phones and tablets | Every change in CI (Chromium's phone and tablet emulation), and by hand on an Android phone |
+| Safari, iPhone and iPad | Not supported, and not tested: every browser on an iPhone or iPad is Safari's engine |
 
 Only the current version of each browser is tested.
 
@@ -219,6 +227,24 @@ git lfs install && git clone https://github.com/JRB-90/j3d.git && cd j3d
 ```bash
 dotnet run --project src/J3D.Web --launch-profile https
 ```
+
+### On an Android phone or tablet
+
+The page has to be a secure context for J3D to keep your models, and `http://` your PC's address isn't one, so the
+phone reaches J3D over USB as `localhost`. Turn on USB debugging on the phone (Developer options), install Android's
+platform-tools on the PC (`winget install Google.PlatformTools` on Windows), connect the phone, run J3D with the
+`http` profile, and forward its port:
+
+```bash
+dotnet run --project src/J3D.Web --launch-profile http
+```
+
+```bash
+adb reverse tcp:5274 tcp:5274
+```
+
+Then open `http://localhost:5274` in Chrome, Edge or Firefox on the phone. `chrome://inspect` on the PC shows the
+phone's page for debugging.
 
 Building, testing, rebuilding the OCCT WebAssembly and the CI are covered in [docs/development.md](docs/development.md).
 The design, decisions and milestones are in [docs/plan.md](docs/plan.md).
