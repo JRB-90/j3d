@@ -77,6 +77,9 @@ public sealed partial class SceneState
     /// <summary>The origin frames are drawn at the selected objects (D150, D171).</summary>
     public bool OriginFrames { get; private set; }
 
+    /// <summary>The Add toggle (M19, D237): taps in the view and the tree add or remove, as Ctrl+click does.</summary>
+    public bool AddMode { get; private set; }
+
     /// <summary>Where the viewer says the Move tool's target is, or null (D148).</summary>
     public MoveTargetInfo? TargetPlacement { get; private set; }
 
@@ -692,6 +695,13 @@ public sealed partial class SceneState
             Frame = frame;
             Set(Models, always: true);
         }
+    }
+
+    /// <summary>The Add toggle, on a touch screen (M19, D237). It isn't a selection change, so it isn't an undo step.</summary>
+    public void ToggleAddMode()
+    {
+        AddMode = !AddMode;
+        Set(Models, always: true);
     }
 
     /// <summary>The Origin frames button or O (D171).</summary>

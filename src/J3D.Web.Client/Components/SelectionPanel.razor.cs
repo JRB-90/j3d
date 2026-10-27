@@ -12,10 +12,18 @@ namespace J3D.Web.Client.Components;
 /// reference against the last click, with a copy button per value (D147); the reference's values fold
 /// away once there's a result. In Feature mode it lists
 /// each selected feature, newest first and open, and the totals that add up (D163). Hidden when there
-/// is nothing to show.
+/// is nothing to show. In the compact layout (M19, D236) it's a sheet along the view's bottom edge that
+/// peeks at its first lines until its handle is tapped or dragged up, and it names the tool that's on,
+/// or Add, with a Stop button, since the bar may have folded them into ⋮ (D235).
 /// </summary>
-public sealed partial class SelectionPanel(SceneState scene, ViewerSession session) : IDisposable
+public sealed partial class SelectionPanel(SceneState scene, ViewerSession session, ShellState shell) : IDisposable
 {
+    /// <summary>How far a drag on the sheet's handle goes before it opens or closes the sheet, in px.</summary>
+    private const double SheetDrag = 24;
+
+    /// <summary>The sheet is pulled up to half the view, rather than peeking (D236).</summary>
+    private bool _sheetOpen;
+    private double? _handleDown;
     internal const string PathSeparator = " › ";
 
     /// <summary>Features whose rows are open. A new feature opens and closes the others, so the panel stays small.</summary>
@@ -37,9 +45,54 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
 
     private (string Title, string Detail)? Summary => scene.Mode == SelectMode.Models ? DescribeModels(scene) : Describe(scene);
 
-    private bool IsVisible => scene.Moving is not null || scene.MeasureMode || (scene.Mode == SelectMode.Features ? !scene.Features.IsEmpty : Summary is not null);
+    private bool IsVisible =>
+        scene.Moving is not null || scene.MeasureMode || (shell.IsCompact && scene.AddMode) ||
+        (scene.Mode == SelectMode.Features ? !scene.Features.IsEmpty : Summary is not null);
 
-    protected override void OnInitialized() => scene.Changed += OnSceneChanged;
+    /// <summary>The tool that's on, named in the compact layout's sheet with a Stop button (D235), or null.</summary>
+    private string? ToolOn =>
+        !shell.IsCompact ? null
+        : scene.Moving == MoveMode.Translate ? "Moving"
+        : scene.Moving == MoveMode.Rotate ? "Rotating"
+        : scene.MeasureMode ? "Measuring"
+        : null;
+
+    private string PanelClass => _sheetOpen ? "j3d-selection-panel j3d-sheet--open" : "j3d-selection-panel";
+
+    protected override void OnInitialized()
+    {
+        scene.Changed += OnSceneChanged;
+        shell.Changed += OnShellChanged;
+    }
+
+    private void StopTool()
+    {
+        if (scene.Moving is not null)
+        {
+            scene.StopMoving();
+        }
+        else
+        {
+            scene.SetMeasureMode(false);
+        }
+    }
+
+    /// <summary>The handle: a tap opens or closes the sheet, a drag up opens it and a drag down closes it (D236).</summary>
+    private void OnHandleDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs args) => _handleDown = args.ClientY;
+
+    private void OnHandleUp(Microsoft.AspNetCore.Components.Web.PointerEventArgs args)
+    {
+        if (_handleDown is not { } down)
+        {
+            return;
+        }
+
+        _handleDown = null;
+        var moved = args.ClientY - down;
+        _sheetOpen = moved < -SheetDrag || (moved <= SheetDrag && !_sheetOpen);
+    }
+
+    private void OnShellChanged() => _ = InvokeAsync(StateHasChanged);
 
     /// <summary>The Move tool's target: a node's name, or a whole model's file name.</summary>
     private string TargetName((ModelId Id, int Node) target) =>
@@ -117,7 +170,11 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
         }
     }
 
-    public void Dispose() => scene.Changed -= OnSceneChanged;
+    public void Dispose()
+    {
+        scene.Changed -= OnSceneChanged;
+        shell.Changed -= OnShellChanged;
+    }
 
     /// <summary>
     /// One part: its name and path. Several: how many, and in how many models, counted by model, since
@@ -183,6 +240,11 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
         {
             _reference = scene.MeasureReference?.Title;
             _referenceOpen = false;
+        }
+
+        if (!IsVisible)
+        {
+            _sheetOpen = false; // the sheet comes back peeking
         }
 
         _ = InvokeAsync(StateHasChanged);

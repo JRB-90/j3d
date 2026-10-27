@@ -3,8 +3,18 @@
 {
     <div class="j3d-viewport-hint" data-testid="viewport-hint">
         <MudIcon Icon="@Icons.Material.Outlined.FileOpen" Class="j3d-viewport-hint__icon" />
-        <p class="j3d-viewport-hint__title">Drop CAD or mesh files here, or use Import</p>
-        <p class="j3d-viewport-hint__formats">STEP, IGES and BREP, with exact geometry · STL, OBJ and glTF meshes</p>
-        <p class="j3d-viewport-hint__keys">Right-drag turns the view · left-drag pans · the wheel zooms</p>
+        @if (Shell.IsTouch)
+        {
+            @* A finger (M19, D243): no files to drop on a phone, and Import may be in ⋮ (D235). *@
+            <p class="j3d-viewport-hint__title">Use Import<span class="j3d-more-hint"> in ⋮</span> to open CAD or mesh files</p>
+            <p class="j3d-viewport-hint__formats">STEP, IGES and BREP, with exact geometry · STL, OBJ and glTF meshes</p>
+            <p class="j3d-viewport-hint__keys">One finger turns the view · two pinch to zoom and drag to pan</p>
+        }
+        else
+        {
+            <p class="j3d-viewport-hint__title">Drop CAD or mesh files here, or use Import</p>
+            <p class="j3d-viewport-hint__formats">STEP, IGES and BREP, with exact geometry · STL, OBJ and glTF meshes</p>
+            <p class="j3d-viewport-hint__keys">Right-drag turns the view · left-drag pans · the wheel zooms</p>
+        }
     </div>
 }

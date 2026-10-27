@@ -4,7 +4,7 @@
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
-@* Opened at the pointer by right clicks in the viewport and the tree (M12, D164). *@
+@* Opened at the pointer by right clicks in the viewport and the tree (M12, D164), and by a finger's long press (M19, D242). *@
 <ContextMenu />
 
 <MudLayout Class="j3d-layout">
@@ -13,11 +13,14 @@
                        Color="Color.Inherit"
                        Edge="Edge.Start"
                        aria-label="Toggle model list"
-                       OnClick="ToggleDrawer" />
+                       aria-expanded="@(DrawerShown ? "true" : "false")"
+                       OnClick="Shell.ToggleDrawer"
+                       Class="j3d-drawer-button"
+                       data-testid="drawer-button" />
         <MudText Typo="Typo.h6" Class="ml-2 j3d-wordmark">J3D</MudText>
-        <Toolbar />
+        <Toolbar OnAbout="OpenAboutAsync" />
         <MudSpacer />
-        <MudTooltip Text="About J3D">
+        <MudTooltip Text="About J3D" RootClass="j3d-about">
             <MudIconButton Icon="@Icons.Material.Outlined.Info"
                            Color="Color.Inherit"
                            Edge="Edge.End"
@@ -27,16 +30,22 @@
         </MudTooltip>
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen"
+    @* Beside the view on a desktop; over it in the compact layout (M19, D234, D238), where app.css shows it
+       only while it's open there, so a phone never shows the desktop's drawer while the page starts. *@
+    <MudDrawer Open="Shell.DesktopDrawerOpen"
                ClipMode="DrawerClipMode.Always"
                Variant="DrawerVariant.Persistent"
                Elevation="0"
-               Class="j3d-drawer">
+               Class="@DrawerClass"
+               data-testid="drawer">
         <ModelList />
     </MudDrawer>
 
     <MudMainContent Class="j3d-main">
         @Body
+        <div class="@(Shell.CompactDrawerOpen ? "j3d-drawer-backdrop j3d-drawer-backdrop--open" : "j3d-drawer-backdrop")"
+             @onclick="Shell.CloseDrawer"
+             data-testid="drawer-backdrop"></div>
     </MudMainContent>
 </MudLayout>
 

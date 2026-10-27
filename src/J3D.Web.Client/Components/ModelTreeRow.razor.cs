@@ -96,7 +96,7 @@ public sealed partial class ModelTreeRow
         }
     }
 
-    private void OnClick(MouseEventArgs args) => Owner.Select(State.Node, args.CtrlKey || args.MetaKey);
+    private void OnClick(MouseEventArgs args) => Owner.Click(State.Node, args.CtrlKey || args.MetaKey);
 
     private void OnToggle() => Owner.Toggle(State.Node);
 

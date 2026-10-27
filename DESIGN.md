@@ -194,6 +194,20 @@ components:
     textColor: "{colors.text-bright}"
     typography: "{typography.body}"
     rounded: "{rounded.md}"
+  app-bar-touch:
+    backgroundColor: "{colors.chrome-graphite}"
+    height: "56px"
+  touch-target:
+    size: "48px"
+  bottom-sheet:
+    backgroundColor: "{colors.surface-slate}"
+    textColor: "{colors.text-bright}"
+    rounded: "6px 6px 0 0"
+    padding: "0 16px 8px"
+    height: "104px peeking, up to half the view"
+  drawer-compact:
+    backgroundColor: "{colors.chrome-graphite}"
+    width: "min(320px, 85vw)"
 ---
 
 
@@ -219,7 +233,9 @@ Controls say what they do. Tools carry a label beside their icon wherever the wi
 written in sentence case. Controls are square-cornered and stay grey until they're used. A tool that's on takes a blue
 tint; a setting, such as the selection mode or the projection, is shown by a quietly raised segment, never in blue. The
 density is a desktop tool's: a 48 px bar, a 320 px model list and 13 px detail text. It never gets crowded, though:
-there's one row of tools in labelled groups, one floating panel and one view cube.
+there's one row of tools in labelled groups, one floating panel and one view cube. On a touch screen the same system
+takes a finger's sizes (48 px targets, a 56 px bar), and on a phone it folds into one bar, a drawer and a sheet
+(Layout, "Phones and tablets").
 
 J3D is dark only (PRODUCT.md). The chrome is built from MudBlazor 9 components, restyled in `J3DTheme.cs` and
 `app.css`. Material's UPPERCASE labels, round icon buttons and filled-blue toggles were replaced on purpose (2026-10-25),
@@ -352,12 +368,13 @@ which are drawn on the canvas at 600. Emphasis comes from Text Bright against Te
   5. **History:** Undo and Redo.
 
   About sits at the far right. Controls within a group are 2 px apart, and each group has 8 px either side of its
-  hairline.
+  hairline. On a touch screen **Add** joins the Select group, and **⋮** (More) ends the bar whenever a group has
+  folded into it (see "Phones and tablets").
 - **Labels by width:** at 1,400 px and above, every tool and mode shows its label. Between 1,240 and 1,400 px Import,
   Export and Fit all drop theirs. Below 1,240 px every tool is a 32 px icon. (1,280 and 1,100 px until Rotate joined
   the tools in M17; the room left allows for Linux's fallback font, which is wider than Segoe UI.) Visibility and
-  History are icons at any width. Tooltips always name the action and its key. The bar stays on one line down to 900 px. There's no phone or
-  tablet layout.
+  History are icons at any width. Tooltips always name the action and its key. The bar stays on one line down to 900 px;
+  below that its groups fold into ⋮ (see "Phones and tablets").
 - **Viewport corners:**
   - **Top right:** the view cube (110 px, 12 px from the corner), with Home just left of it and the
     Orthographic | Perspective switch under it.
@@ -370,13 +387,48 @@ which are drawn on the canvas at 600. Emphasis comes from Text Bright against Te
   toggle. A hairline runs above each row.
 - **Spacing:** steps of 2, 4, 6, 8, 12, 16 and 24 px. Most gaps are 4–8 px, insets 12 px, and row padding 16 px.
 
+### Phones and tablets (M19)
+
+Two things change the layout, separately: the window's size and the pointer.
+
+- **The compact layout**, below 900 px wide or 500 px tall (a phone either way up, or a tablet held upright):
+  - The **drawer** slides over the view, min(320 px, 85% of the width), over a backdrop of Edge Black at 60%. It's
+    closed at start; ☰ opens it, and the backdrop, a swipe to the left, or a tap on a tree row (unless Add is on)
+    closes it.
+  - The **panel** becomes a **bottom sheet** across the view's bottom edge (see Components).
+  - The **view cube** is 80 px, with Home and the view arrows moved in beside it; the projection switch goes into ⋮.
+  - Snackbars span the bottom, 8 px in, above the sheet.
+- **A touch screen** (the main pointer is a finger, CSS `pointer: coarse`), at any width: every target is 48 px
+  (tools, segments, menu items, tree rows, the model rows' buttons, Home and the arrows), icons stay 20 px, the bar is
+  56 px, and tools are icons below 1,600 px. **Add** shows; menus leave out key hints; copy buttons in the panel stay
+  shown; and the chrome's text isn't selectable, so a long press opens the context menu instead. In the model list a
+  model's name takes a line of its own, above its tag, kind and buttons.
+- **Folding into ⋮**, one group at a time as the bar runs out of room, in this order: Files and view, Visibility,
+  Tools, then About and the wordmark. A folded tool that's on is ticked in ⋮ where a key would be, and in the compact
+  layout the sheet names it ("Measuring") with a Stop button.
+
+  | Fold | With a finger (48 px) | With a mouse (32 px) |
+  |---|---|---|
+  | Labels go (icons only) | below 1,600 px | Files and view's below 1,400 px, the rest below 1,240 |
+  | Files and view | below 1,100 px | below 840 px |
+  | Visibility | below 960 px | below 730 px |
+  | Tools | below 800 px | below 620 px |
+  | About and the wordmark; the bar's gaps close to 4 px without hairlines | below 600 px | below 480 px |
+  | Add (to the top of ⋮) | below 410 px | — |
+  | Model, Object and Feature | below 352 px | below 352 px |
+
+  A 412 px phone keeps ☰, Model, Object and Feature, Add, Undo, Redo and ⋮; a 360 px one the same without Add. The
+  widths were measured in Chromium, with room for Linux's wider fallback font; the E2E tests check each edge.
+
 ### Named Rules
 
-**The One Bar Rule.** Every global tool lives in the app bar's single row, in its group, and the row stays on one line
-from 900 px up. A new tool joins a group. It doesn't get a second row or a floating toolbar.
+**The One Bar Rule.** Every global tool lives in the app bar's single row, in its group, or, when the row is out of
+room, in its ⋮ menu, folded a group at a time (M19). The row stays on one line at every width. A new tool joins a
+group. It doesn't get a second row or a floating toolbar.
 
 **The Fixed Corners Rule.** Each viewport corner has one owner: the view and its settings top right, the panel bottom
-left, and snackbars bottom right. Nothing else goes in those corners.
+left, and snackbars bottom right. Nothing else goes in those corners. In the compact layout the panel owns the whole
+bottom edge as a sheet, and snackbars sit above it.
 
 **The Say It Rule.** A tool that's a verb of the product (Measure, Move, Origin frames, the selection modes) shows its
 name whenever the window has room. An icon alone is for actions whose icon everyone already reads (hide, show, undo,
@@ -490,6 +542,25 @@ a 6 px radius and 8 × 12 px padding, up to 420 px wide.
 
 It's a polite `role="status"` region, so changes are announced.
 
+### Bottom sheet (compact layout)
+
+The same panel, docked: across the view's bottom edge in Surface Slate (opaque, since it's docked rather than
+floating), with a Hairline along its top, 6 px corners at the top only, and 0 × 16 × 8 px padding. It appears when
+there's something to show and **peeks** at 104 px: a 24 px handle with a 36 × 4 px grip in the scrollbar's grey, and
+the first lines. A tap on the handle, or a drag up, opens it to at most half the view, scrolling inside; a drag down
+takes it back to the peek, and it peeks again each time it reappears. When a tool is on, or Add, its first row names it
+("Measuring", "Moving", "Rotating", "Adding to the selection") with a small outlined **Stop**.
+
+### Add and ⋮
+
+- **Add** (touch screens only): a tool in the Select group, with Material's library-add icon and "Add" where labels
+  show, tinted blue while it's on (it's what the user is acting with, as Measure is). While it's on, taps add to the
+  selection or take from it.
+- **⋮ (More)**: an icon button ending the bar, opening a menu of sections set off by hairlines: Add, the selection
+  modes, Files and view (Import, Export ▸, Fit all), Tools, Visibility, the projection and About. Each section shows
+  only while it's folded (the projection only in the compact layout). Modes and tools that are chosen or on carry an
+  18 px check in Text Muted at the right.
+
 ### Inputs / Fields
 
 - **Move fields** (X, Y, Z, then Rx, Ry, Rz): three to a row, with the label on the left and the unit on the right. Each
@@ -524,7 +595,8 @@ Measurement lines and points are drawn in Selection Blue, over the model.
   labels (TOP, FRONT, RIGHT…) drawn on the canvas in Text Bright at weight 600. The region under the pointer turns
   Selection Blue. A click animates the camera to that view with camera-controls' default smoothing (0.25 s).
 - **Home:** 28 px, just left of the cube, with a Text Muted icon. On hover or focus the icon turns Selection Blue on a
-  12% blue tint.
+  12% blue tint. On a touch screen it and the arrows are 48 px; in the compact layout they move in beside the 80 px
+  cube.
 - **Previous view and Next view** (M17): 28 px arrows left of Home, drawn as Home is; with nowhere to go they're Control
   Off and don't react. Their tooltips name them and their keys (`[` and `]`).
 - **Projection:** an Orthographic | Perspective segmented switch under the cube, right-aligned with it, on 92% Surface
@@ -534,7 +606,9 @@ Measurement lines and points are drawn in Selection Blue, over the model.
 
 A centred prompt in the empty viewport: a 32 px outlined file icon in Text Muted, "Drop CAD or mesh files here, or use
 Import" in Heading, the formats in Body Dense and Text Muted, and, after a gap, how the mouse moves the view
-("Right-drag turns the view · left-drag pans · the wheel zooms"). It doesn't take pointer events.
+("Right-drag turns the view · left-drag pans · the wheel zooms"). On a touch screen it says "Use Import to open CAD or
+mesh files" (with "in ⋮" while Import is folded) and "One finger turns the view · two pinch to zoom and drag to pan". It
+doesn't take pointer events.
 
 ## Do's and Don'ts
 
@@ -565,4 +639,5 @@ Import" in Heading, the formats in Body Dense and Text Muted, and, after a gap, 
 - **Don't** put shadows on bars, the drawer, rows or the floating panel. Shadows are for menus, dialogs and snackbars.
 - **Don't** use Warning Amber or Error Coral for anything but warnings, failures and the destructive confirmation.
 - **Don't** use Text Faint (#5C636E, 2.9:1) for text the user needs to read.
-- **Don't** add a second toolbar row. The app bar stays on one line from 900 px up.
+- **Don't** add a second toolbar row. The app bar stays on one line at every width; what doesn't fit folds into ⋮.
+- **Don't** shrink a touch target below 48 px on a touch screen, or show key hints there.

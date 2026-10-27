@@ -241,3 +241,104 @@
     border-color: var(--mud-palette-divider);
     border-radius: 6px;
 }
+
+/* The compact layout's sheet (M19, D236): its handle, and the tool that's on or Add with Stop (D235). */
+.j3d-sheet-handle,
+.j3d-sheet-tool {
+    display: none;
+}
+
+@media (max-width: 899.98px), (max-height: 499.98px) {
+    /* Along the view's bottom edge, peeking at its first lines; its handle pulls it up to half the view. */
+    .j3d-selection-panel {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        max-width: none;
+        max-height: 104px;
+        overflow: hidden;
+        padding: 0 16px 8px;
+        border-width: 1px 0 0;
+        border-radius: 6px 6px 0 0;
+        background: var(--mud-palette-surface);
+    }
+
+    .j3d-selection-panel.j3d-sheet--open {
+        max-height: 50%;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    /* A 24 px bar to tap or drag, with a short grip in its middle. */
+    .j3d-sheet-handle {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: block;
+        width: calc(100% + 32px);
+        height: 24px;
+        margin: 0 -16px;
+        padding: 0;
+        border: 0;
+        background: inherit;
+        cursor: pointer;
+        touch-action: none;
+    }
+
+    .j3d-sheet-handle::after {
+        content: "";
+        display: block;
+        width: 36px;
+        height: 4px;
+        margin: 10px auto;
+        border-radius: 2px;
+        background: var(--j3d-scrollbar);
+    }
+
+    .j3d-sheet-handle:focus-visible {
+        outline: 2px solid var(--mud-palette-primary);
+        outline-offset: -2px;
+    }
+
+    .j3d-sheet-tool {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 6px;
+        font-weight: 500;
+    }
+
+    .j3d-sheet-tool ::deep .j3d-sheet-stop {
+        min-width: 0;
+        padding: 2px 12px;
+        border-color: var(--mud-palette-divider);
+        border-radius: 6px;
+        text-transform: none;
+    }
+}
+
+/* A touch screen (M19, D239, D243): copy buttons show without a pointer over them, and controls take a finger. */
+@media (pointer: coarse) {
+    .j3d-measure ::deep .j3d-measure-copy {
+        opacity: 0.7;
+    }
+
+    .j3d-measure ::deep .j3d-measure-copy,
+    .j3d-measure-card-header ::deep .mud-icon-button {
+        padding: 12px;
+    }
+
+    .j3d-measure-row {
+        min-height: 40px;
+    }
+
+    .j3d-move-field input {
+        min-height: 40px;
+    }
+
+    .j3d-sheet-tool ::deep .j3d-sheet-stop,
+    .j3d-move-actions ::deep .j3d-move-apply {
+        min-height: 48px;
+    }
+}

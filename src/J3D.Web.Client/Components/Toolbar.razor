@@ -9,8 +9,9 @@
            disabled="@(!Session.IsReady)"
            data-testid="import-input" />
 
-    @* Files in and out, and framing them (D48, D119). Below 1,100 px they keep only their icons (D135). *@
-    <div class="j3d-toolbar-group j3d-toolbar-group--first" role="group" aria-label="Files and view">
+    @* Files in and out, and framing them (D48, D119). Below 1,400 px they keep only their icons (D135, D222).
+       Each group but History folds into ⋮ when the bar runs out of room (M19, D235): this one first. *@
+    <div class="j3d-toolbar-group j3d-toolbar-group--first j3d-fold-files" role="group" aria-label="Files and view">
         <MudTooltip Text="Import STEP, IGES, BREP, STL, OBJ or glTF files, or drop them on the view">
             <MudButton HtmlTag="label"
                        for="@InputId"
@@ -67,7 +68,7 @@
     </div>
 
     @* What a click selects (M12, D146): models, objects or features, with the keys 1, 2 and 3 (D162). *@
-    <div class="j3d-toolbar-group" role="group" aria-label="Select">
+    <div class="j3d-toolbar-group j3d-fold-select" role="group" aria-label="Select">
         <MudToggleGroup T="SelectMode"
                         Value="Scene.Mode"
                         ValueChanged="Scene.SetSelectionMode"
@@ -88,10 +89,24 @@
                 </MudToggleItem>
             }
         </MudToggleGroup>
+
+        @* Add (M19, D237): on a touch screen, where there's no Ctrl to hold, taps add or remove while it's on. *@
+        <MudTooltip Text="@(Scene.AddMode ? "Stop adding to the selection" : "Taps add to the selection or take from it (or hold Ctrl)")" RootClass="j3d-add">
+            <MudButton StartIcon="@Icons.Material.Outlined.LibraryAdd"
+                       Color="Color.Inherit"
+                       Disabled="@(!Session.IsReady)"
+                       OnClick="Scene.ToggleAddMode"
+                       Class="@ToolClass(Scene.AddMode)"
+                       aria-label="Add"
+                       aria-pressed="@(Scene.AddMode ? "true" : "false")"
+                       data-testid="add-button">
+                <span class="j3d-tool-label">Add</span>
+            </MudButton>
+        </MudTooltip>
     </div>
 
     @* The tools, each on until it's turned off (M7, D79; M13, D149, D150). *@
-    <div class="j3d-toolbar-group" role="group" aria-label="Tools">
+    <div class="j3d-toolbar-group j3d-fold-tools" role="group" aria-label="Tools">
         <MudTooltip Text="@(Scene.MeasureMode ? "Stop measuring (M or Esc)" : "Measure faces, edges and vertices (M)")">
             <MudButton StartIcon="@Icons.Material.Outlined.Straighten"
                        Color="Color.Inherit"
@@ -148,7 +163,7 @@
     </div>
 
     @* Visibility of the selection (D97). *@
-    <div class="j3d-toolbar-group" role="group" aria-label="Visibility" data-testid="visibility-tools">
+    <div class="j3d-toolbar-group j3d-fold-visibility" role="group" aria-label="Visibility" data-testid="visibility-tools">
         <MudTooltip Text="Hide the selection (H)">
             <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff"
                            Color="Color.Inherit"
@@ -198,5 +213,84 @@
                            aria-label="Redo"
                            data-testid="redo-button" />
         </MudTooltip>
+    </div>
+
+    @* ⋮ (M19, D235): what the bar has no room for, group by group, by the same widths in app.css that fold the
+       groups (each section shows only while its group is folded); the projection in the compact layout (D240),
+       and About on a phone. *@
+    <div class="j3d-toolbar-group j3d-more" role="group" aria-label="More">
+        <MudMenu Icon="@Icons.Material.Filled.MoreVert"
+                 Color="Color.Inherit"
+                 AnchorOrigin="Origin.BottomRight"
+                 TransformOrigin="Origin.TopRight"
+                 Dense="true"
+                 AriaLabel="More"
+                 Class="j3d-more-menu"
+                 PopoverClass="j3d-more-list"
+                 data-testid="more-menu">
+            <div class="j3d-more-section j3d-more-add">
+                <MudMenuItem Icon="@Icons.Material.Outlined.LibraryAdd" Disabled="@(!Session.IsReady)" OnClick="Scene.ToggleAddMode" role="menuitemcheckbox" aria-checked="@Checked(Scene.AddMode)" data-testid="more-add">
+                    <span class="j3d-menu-command"><span>Add to the selection</span>@Tick(Scene.AddMode)</span>
+                </MudMenuItem>
+            </div>
+            <div class="j3d-more-section j3d-more-select">
+                @foreach (var mode in SelectModes)
+                {
+                    <MudMenuItem Icon="@ModeIcon(mode)" Disabled="@(!Session.IsReady)" OnClick="@(() => Scene.SetSelectionMode(mode))" role="menuitemradio" aria-checked="@Checked(Scene.Mode == mode)" data-testid="@($"more-mode-{ModeKey(mode)}")">
+                        <span class="j3d-menu-command"><span>@ModeName(mode)</span>@Tick(Scene.Mode == mode)</span>
+                    </MudMenuItem>
+                }
+            </div>
+            <div class="j3d-more-section j3d-more-files">
+                <MudMenuItem Icon="@Icons.Material.Outlined.FileOpen" Disabled="@(!Session.IsReady)" Class="j3d-menu-item-label" data-testid="more-import">
+                    <label for="@InputId" class="j3d-menu-label">Import</label>
+                </MudMenuItem>
+                <MudMenu Label="@ExportLabel" StartIcon="@Icons.Material.Outlined.FileDownload" Dense="true" Disabled="@(!Session.IsReady || !Scene.CanExport || _exporting)" data-testid="more-export">
+                    @foreach (var format in MeshFormats)
+                    {
+                        <MudMenuItem Label="@format.DisplayName" OnClick="@(() => StartExport(format, Scene.HasSelection))" data-testid="@($"more-export-{FormatKey(format)}")" />
+                    }
+                    @if (Scene.SelectionBrepModel is not null)
+                    {
+                        <MudDivider Class="my-1" />
+                        @foreach (var format in BrepFormats)
+                        {
+                            <MudMenuItem Label="@format.DisplayName" OnClick="@(() => Scene.RequestModelExport(format))" data-testid="@($"more-export-{format.ToString().ToLowerInvariant()}")" />
+                        }
+                    }
+                </MudMenu>
+                <MudMenuItem Icon="@Icons.Material.Outlined.FitScreen" Disabled="@(!Session.IsReady)" OnClick="FitAllAsync" data-testid="more-fit-all">Fit all</MudMenuItem>
+            </div>
+            <div class="j3d-more-section j3d-more-tools">
+                <MudMenuItem Icon="@Icons.Material.Outlined.Straighten" Disabled="@(!Session.IsReady)" OnClick="Scene.ToggleMeasureMode" role="menuitemcheckbox" aria-checked="@Checked(Scene.MeasureMode)" data-testid="more-measure">
+                    <span class="j3d-menu-command"><span>Measure</span>@Tick(Scene.MeasureMode)</span>
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined.OpenWith" Disabled="@(!Session.IsReady)" OnClick="@(() => Scene.SetMoveMode(MoveMode.Translate))" role="menuitemcheckbox" aria-checked="@Checked(Scene.Moving == MoveMode.Translate)" data-testid="more-move">
+                    <span class="j3d-menu-command"><span>Move</span>@Tick(Scene.Moving == MoveMode.Translate)</span>
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined._3dRotation" Disabled="@(!Session.IsReady)" OnClick="@(() => Scene.SetMoveMode(MoveMode.Rotate))" role="menuitemcheckbox" aria-checked="@Checked(Scene.Moving == MoveMode.Rotate)" data-testid="more-rotate">
+                    <span class="j3d-menu-command"><span>Rotate</span>@Tick(Scene.Moving == MoveMode.Rotate)</span>
+                </MudMenuItem>
+                <MudMenuItem Icon="@OriginFramesIcon" Disabled="@(!Session.IsReady)" OnClick="Scene.ToggleOriginFrames" role="menuitemcheckbox" aria-checked="@Checked(Scene.OriginFrames)" data-testid="more-origin-frames">
+                    <span class="j3d-menu-command"><span>Origin frames</span>@Tick(Scene.OriginFrames)</span>
+                </MudMenuItem>
+            </div>
+            <div class="j3d-more-section j3d-more-visibility">
+                <MudMenuItem Icon="@Icons.Material.Outlined.VisibilityOff" Disabled="@(!Session.IsReady || !Scene.HasSelection)" OnClick="Scene.HideSelection" data-testid="more-hide">Hide</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined.FilterCenterFocus" Disabled="@(!Session.IsReady || !Scene.CanIsolate)" OnClick="Scene.IsolateSelection" data-testid="more-isolate">Isolate</MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined.Visibility" Disabled="@(!Session.IsReady || !Scene.HasHidden)" OnClick="Scene.ShowAll" data-testid="more-show-all">Show all</MudMenuItem>
+            </div>
+            <div class="j3d-more-section j3d-more-projection">
+                <MudMenuItem Icon="@Icons.Material.Outlined.CropFree" Disabled="@(!Session.IsReady)" OnClick="@(() => SetProjectionAsync(Projection.Orthographic))" role="menuitemradio" aria-checked="@Checked(Session.Projection == Projection.Orthographic)" data-testid="more-orthographic">
+                    <span class="j3d-menu-command"><span>Orthographic</span>@Tick(Session.Projection == Projection.Orthographic)</span>
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined.Landscape" Disabled="@(!Session.IsReady)" OnClick="@(() => SetProjectionAsync(Projection.Perspective))" role="menuitemradio" aria-checked="@Checked(Session.Projection == Projection.Perspective)" data-testid="more-perspective">
+                    <span class="j3d-menu-command"><span>Perspective</span>@Tick(Session.Projection == Projection.Perspective)</span>
+                </MudMenuItem>
+            </div>
+            <div class="j3d-more-section j3d-more-about">
+                <MudMenuItem Icon="@Icons.Material.Outlined.Info" OnClick="OnAbout" data-testid="more-about">About J3D</MudMenuItem>
+            </div>
+        </MudMenu>
     </div>
 </div>

@@ -69,7 +69,8 @@ import {
   type Placement,
   type ScreenSpace,
 } from './parts';
-import { ViewCube } from './view-cube';
+import { CompactQuery, LongPressMilliseconds, swallowClickAfter, TapTolerance, TouchQuery } from '../shell';
+import { CompactViewCubeSize, ViewCube, ViewCubeSize } from './view-cube';
 import { HomeRegion, regionView, type ViewRegion } from './view-regions';
 import { sameView, ViewHistory } from './view-history';
 
@@ -118,6 +119,9 @@ export interface CameraState {
 
 /** A pointer moving less than this between press and release is a click, not a drag (pixels). */
 const ClickTolerance = 4;
+
+/** How many times the pick radii a finger reaches for edges and vertices (M19, D242). */
+const TouchReach = 2;
 
 /** One part of one model: a tree node that draws something (D77). */
 export interface PartRef {
@@ -265,6 +269,10 @@ export class Viewer {
   private readonly measureTool: MeasureTool;
   private readonly features: FeatureSelection;
   private selectionMode: SelectionMode = 'object';
+  /** Taps and clicks add to the selection or take from it, as Ctrl+click does (M19, D237). */
+  private addMode = false;
+  /** The last press was a finger's (M19, D242): picks reach further. */
+  private touchInput = false;
   /** The entity under the last right click, for "Measure from here" (D164). */
   private contextEntity: Picked | undefined;
   /** The object the Move tool moves (M13). */
@@ -412,8 +420,21 @@ export class Viewer {
     this.installPartInput(canvas);
     this.installHomeButton();
     this.installViewHistoryButtons();
+    // Phones and tablets (M19): a finger gets a larger triad (D242), and the compact layout a smaller view cube (D240).
+    this.watchMedia(TouchQuery, (touch) => this.moveTool.setTouch(touch));
+    this.watchMedia(CompactQuery, (compact) => {
+      this.viewCube.size = compact ? CompactViewCubeSize : ViewCubeSize;
+      this.requestRender();
+    });
     this.views.reset(this.cameraSnapshot());
     this.requestRender();
+  }
+
+  /** Calls back with whether a media query matches, now and whenever that changes. */
+  private watchMedia(query: string, apply: (matches: boolean) => void): void {
+    const media = window.matchMedia(query);
+    apply(media.matches);
+    this.listen(media, 'change', () => apply(media.matches));
   }
 
   get projection(): Projection {
@@ -925,6 +946,11 @@ export class Viewer {
     this.measureTool.setActive(active, reference);
   }
 
+  /** Whether taps and clicks add to the selection or take from it, as Ctrl+click does (M19, D237); .NET's Add toggle. */
+  setAddMode(on: boolean): void {
+    this.addMode = on;
+  }
+
   /** What a click selects (D146): .NET decides, from the toolbar or the keys 1, 2 and 3 (D162). */
   setSelectionMode(mode: SelectionMode): void {
     if (mode === this.selectionMode) {
@@ -1016,6 +1042,7 @@ export class Viewer {
     return {
       x,
       y,
+      reach: this.touchInput ? TouchReach : 1,
       hitDepth: depthOf(hitPoint),
       project: (world) => {
         const ndc = world.clone().project(camera);
@@ -1478,13 +1505,54 @@ export class Viewer {
    * never gets here (see {@link installViewCubeInput}).
    */
   private installPartInput(canvas: HTMLCanvasElement): void {
-    let press: { id: number; button: number; x: number; y: number } | undefined;
+    let press: { id: number; button: number; x: number; y: number; touch: boolean } | undefined;
+    // Fingers down on the canvas, which a touch's implicit capture keeps until they lift: a second finger
+    // makes a pinch, not a tap (M19).
+    const fingers = new Set<number>();
+    // A finger held still opens the context menu, as a right click does (M19, D242).
+    let longPress = 0;
+    const cancelLongPress = () => {
+      window.clearTimeout(longPress);
+      longPress = 0;
+    };
     this.listen(canvas, 'pointerdown', (event) => {
-      press = event.button === 0 || event.button === 2 ? { id: event.pointerId, button: event.button, x: event.clientX, y: event.clientY } : undefined;
+      cancelLongPress();
+      const touch = event.pointerType === 'touch';
+      if (touch) {
+        fingers.add(event.pointerId);
+      }
+      this.touchInput = event.pointerType !== 'mouse';
+      press =
+        fingers.size <= 1 && (event.button === 0 || event.button === 2)
+          ? { id: event.pointerId, button: event.button, x: event.clientX, y: event.clientY, touch }
+          : undefined;
       this.hoverPoint = undefined;
       this.setHovered(undefined);
+      const start = press;
+      if (start?.touch && !this.handlePress && this.viewCubeRegionAt(start.x, start.y) === undefined) {
+        longPress = window.setTimeout(() => {
+          longPress = 0;
+          if (press === start) {
+            press = undefined;
+            swallowClickAfter(start.id);
+            this.openContextMenu(start.x, start.y);
+          }
+        }, LongPressMilliseconds);
+      }
+    });
+    this.listen(canvas, 'pointermove', (event) => {
+      if (longPress && press?.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > TapTolerance) {
+        cancelLongPress();
+      }
+    });
+    this.listen(canvas, 'pointercancel', (event) => {
+      fingers.delete(event.pointerId);
+      cancelLongPress();
+      press = undefined;
     });
     this.listen(canvas, 'pointerup', (event) => {
+      fingers.delete(event.pointerId);
+      cancelLongPress();
       const start = press;
       press = undefined;
       if (
@@ -1492,12 +1560,12 @@ export class Viewer {
         this.handlePress ||
         start.id !== event.pointerId ||
         start.button !== event.button ||
-        Math.hypot(event.clientX - start.x, event.clientY - start.y) > ClickTolerance ||
+        Math.hypot(event.clientX - start.x, event.clientY - start.y) > (start.touch ? TapTolerance : ClickTolerance) ||
         this.viewCubeRegionAt(event.clientX, event.clientY) !== undefined
       ) {
         return;
       }
-      const additive = event.ctrlKey || event.metaKey;
+      const additive = event.ctrlKey || event.metaKey || this.addMode;
       if (start.button === 2) {
         this.openContextMenu(event.clientX, event.clientY);
       } else if (this.measureTool.isActive) {
@@ -1710,9 +1778,10 @@ export class Viewer {
     options?: AddEventListenerOptions,
   ): void;
   private listen<K extends keyof WindowEventMap>(target: Window, type: K, listener: (event: WindowEventMap[K]) => void): void;
+  private listen(target: MediaQueryList, type: 'change', listener: () => void): void;
   private listen(target: CameraControls, type: string, listener: () => void): void;
   private listen(
-    target: HTMLElement | Window | CameraControls,
+    target: HTMLElement | Window | MediaQueryList | CameraControls,
     type: string,
     listener: (event: never) => void,
     options?: AddEventListenerOptions,

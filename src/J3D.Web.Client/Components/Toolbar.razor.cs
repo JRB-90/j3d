@@ -12,7 +12,8 @@ namespace J3D.Web.Client.Components;
 /// selection mode (D146); Measure, Move and Origin frames; Hide, Isolate and Show all; Undo and Redo
 /// (D97). Each is enabled when it would do something, once the viewer is running with WebGL2. The
 /// toolbar also runs the exports the context menu asks for (D164). The projection toggle lives by the
-/// view cube (<see cref="ViewControls"/>).
+/// view cube (<see cref="ViewControls"/>). Since M19 a touch screen has the Add toggle (D237), and ⋮
+/// holds the groups the bar has no room for (D235), the projection in the compact layout (D240) and About.
 /// </summary>
 public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISnackbar snackbar) : IDisposable
 {
@@ -24,6 +25,10 @@ public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISn
     internal static readonly BrepExportFormat[] BrepFormats = [BrepExportFormat.Step, BrepExportFormat.Brep];
 
     private static readonly SelectMode[] SelectModes = [SelectMode.Models, SelectMode.Objects, SelectMode.Features];
+
+    /// <summary>⋮'s About, for when the app bar has no room for its button (M19, D235).</summary>
+    [Parameter]
+    public EventCallback OnAbout { get; set; }
 
     private ElementReference _input;
     private bool _inputAttached;
@@ -157,4 +162,21 @@ public sealed partial class Toolbar(ViewerSession session, SceneState scene, ISn
     }
 
     private Task FitAllAsync() => session.FitAllAsync();
+
+    private Task SetProjectionAsync(Projection projection) => session.SetProjectionAsync(projection);
+
+    private static string Checked(bool on) => on ? "true" : "false";
+
+    /// <summary>A tick at the right of a ⋮ item that's on or chosen (M19, D235), where a key would be.</summary>
+    private static RenderFragment Tick(bool on) => builder =>
+    {
+        if (on)
+        {
+            builder.OpenComponent<MudIcon>(0);
+            builder.AddComponentParameter(1, nameof(MudIcon.Icon), Icons.Material.Outlined.Check);
+            builder.AddComponentParameter(2, nameof(MudIcon.Size), Size.Small);
+            builder.AddComponentParameter(3, nameof(MudIcon.Class), "j3d-tick");
+            builder.CloseComponent();
+        }
+    };
 }

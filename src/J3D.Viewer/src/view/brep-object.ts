@@ -708,7 +708,7 @@ class BrepParts implements ModelParts {
       point.fromArray(mesh.vertices, i * 3).applyMatrix4(matrix);
       const onScreen = screen.project(point);
       const distance = Math.hypot(onScreen.x - screen.x, onScreen.y - screen.y);
-      if (distance <= VertexPickRadius && visible(onScreen.depth) && (!vertex || distance < vertex.distance)) {
+      if (distance <= VertexPickRadius * (screen.reach ?? 1) && visible(onScreen.depth) && (!vertex || distance < vertex.distance)) {
         vertex = { index: i, distance, point: point.clone() };
       }
     }
@@ -732,7 +732,7 @@ class BrepParts implements ModelParts {
         const length2 = dx * dx + dy * dy;
         const t = length2 > 0 ? Math.min(1, Math.max(0, ((screen.x - sa.x) * dx + (screen.y - sa.y) * dy) / length2)) : 0;
         const distance = Math.hypot(sa.x + dx * t - screen.x, sa.y + dy * t - screen.y);
-        if (distance <= EdgePickRadius && visible(sa.depth + (sb.depth - sa.depth) * t) && (!edge || distance < edge.distance)) {
+        if (distance <= EdgePickRadius * (screen.reach ?? 1) && visible(sa.depth + (sb.depth - sa.depth) * t) && (!edge || distance < edge.distance)) {
           edge = { index: e, distance, point: a.clone().lerp(b, t) };
         }
       }

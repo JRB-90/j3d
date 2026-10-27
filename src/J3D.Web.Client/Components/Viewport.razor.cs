@@ -30,6 +30,7 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     /// <summary>What the viewer was last told of the Measure tool and the selection mode, so only changes are sent.</summary>
     private bool _appliedMeasureMode;
     private SelectMode _appliedSelectionMode = SelectMode.Objects;
+    private bool _appliedAddMode;
 
     /// <summary>The model order the viewer was last given.</summary>
     private string _appliedOrder = "";
@@ -456,6 +457,9 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         var selectionMode = scene.Mode;
         var selectionModeChanged = selectionMode != _appliedSelectionMode;
         _appliedSelectionMode = selectionMode;
+        var addMode = scene.AddMode;
+        var addModeChanged = addMode != _appliedAddMode;
+        _appliedAddMode = addMode;
         var featuresToRestore = scene.TakeFeaturesToRestore();
         var measureMode = scene.MeasureMode;
         var fromContext = scene.TakeMeasureFromContext();
@@ -478,6 +482,11 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
             if (selectionModeChanged)
             {
                 await viewer.SetSelectionModeAsync(selectionMode);
+            }
+
+            if (addModeChanged)
+            {
+                await viewer.SetAddModeAsync(addMode);
             }
 
             // The viewer's share of an edit goes in a task after .NET's (D199): for Expand all of the

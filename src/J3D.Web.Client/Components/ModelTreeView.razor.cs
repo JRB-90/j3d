@@ -17,12 +17,19 @@ public readonly record struct TreeRowRef(int Node, int Level, int Parent, string
 /// It's an ARIA tree with one tab stop: Up and Down move between rows, Right and Left open, close or go
 /// to the parent, Home and End go to the ends, and Enter or Space select (Ctrl adds or removes).
 /// A click selects as before (D77, D96), a pick in 3D opens the tree down to its part and scrolls to it,
-/// nodes drag onto assemblies (tree-drag.ts, D182) and are renamed in place (D183).
+/// nodes drag onto assemblies (tree-drag.ts, D182) and are renamed in place (D183). On a touch screen
+/// (M19) rows are 48 px (D239), a tap adds while Add is on (D237) and else closes the compact layout's
+/// drawer (D238), and rows don't drag: a long press's Cut, Copy and Paste move them (D242).
 /// </summary>
-public sealed partial class ModelTreeView(SceneState scene, ViewerSession session) : IDisposable
+public sealed partial class ModelTreeView(SceneState scene, ViewerSession session, ShellState shell) : IDisposable
 {
     /// <summary>Every row's height, in px: DESIGN.md's 26 px nodes, which <c>Virtualize</c> counts on.</summary>
-    internal const int RowHeight = 26;
+    internal const int MouseRowHeight = 26;
+
+    /// <summary>A row's height on a touch screen (M19, D239): a finger's 48 px.</summary>
+    internal const int TouchRowHeight = 48;
+
+    private int RowHeight => shell.IsTouch ? TouchRowHeight : MouseRowHeight;
 
     private readonly HashSet<int> _expanded = [];
     private ModelTree? _tree;
@@ -62,6 +69,7 @@ public sealed partial class ModelTreeView(SceneState scene, ViewerSession sessio
     protected override void OnInitialized()
     {
         scene.RevealRequested += OnRevealRequested;
+        shell.Changed += OnShellChanged;
         _tree = Model.Tree;
         if (Reveal is { } node)
         {
@@ -101,13 +109,31 @@ public sealed partial class ModelTreeView(SceneState scene, ViewerSession sessio
         }
     }
 
-    public void Dispose() => scene.RevealRequested -= OnRevealRequested;
+    public void Dispose()
+    {
+        scene.RevealRequested -= OnRevealRequested;
+        shell.Changed -= OnShellChanged;
+    }
 
-    /// <summary>A click on a row: its parts become the selection, or with Ctrl are added or removed (D77, D96).</summary>
+    /// <summary>Touch or a mouse changes the rows' height and whether they drag (M19).</summary>
+    private void OnShellChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>Enter or Space on a row: its parts become the selection, or with Ctrl are added or removed (D77, D96).</summary>
     internal void Select(int node, bool additive)
     {
         _focus = node;
         scene.SelectNode(Model.Id, node, additive);
+    }
+
+    /// <summary>
+    /// A click or a tap on a row, as <see cref="Select"/>, adding while Add is on (M19, D237); in the
+    /// compact layout the drawer then closes so the part can be seen, unless more are being added (D238).
+    /// </summary>
+    internal void Click(int node, bool additive)
+    {
+        var adding = additive || scene.AddMode;
+        Select(node, adding);
+        shell.Picked(adding);
     }
 
     /// <summary>The row's arrow: opens or closes it. Rows inside stay open or closed as they were.</summary>
@@ -296,7 +322,8 @@ public sealed partial class ModelTreeView(SceneState scene, ViewerSession sessio
             Cut: scene.IsCut(Model.Id, node),
             Renaming: renaming,
             // Nodes drag in Object mode, where edits act on objects (D182, D187).
-            Draggable: scene.Mode == SelectMode.Objects && !renaming,
+            // Not by touch (M19, D242): a long press opens the menu instead.
+            Draggable: scene.Mode == SelectMode.Objects && !renaming && !shell.IsTouch,
             TabStop: node == (_focus ?? (_rows.Count > 0 ? _rows[0].Node : -1)));
     }
 

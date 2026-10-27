@@ -214,3 +214,40 @@
 .j3d-model ::deep .j3d-tree-node-eye .mud-icon-button {
     border-radius: 4px;
 }
+
+/* A touch screen (M19, D239): 48 px rows and buttons for a finger; the tree's rows are 48 px, which
+   ModelTreeView tells the virtualised list. */
+@media (pointer: coarse) {
+    /* The name gets a line of its own, so three 48 px buttons don't leave it a few letters. */
+    .j3d-model-header {
+        flex-wrap: wrap;
+        min-height: 48px;
+    }
+
+    .j3d-model-name {
+        flex-basis: 100%;
+        padding-top: 6px;
+    }
+
+    .j3d-model-header ::deep > button:first-of-type {
+        margin-left: auto;
+    }
+
+    .j3d-model-header ::deep .mud-icon-button,
+    .j3d-model ::deep .j3d-tree-node-eye .mud-icon-button {
+        padding: 14px;
+    }
+
+    .j3d-model ::deep .j3d-model-tree-toggle {
+        min-height: 48px;
+    }
+
+    .j3d-model ::deep .j3d-tree-node {
+        height: 48px;
+    }
+
+    .j3d-model ::deep .j3d-tree-node-toggle {
+        width: 36px;
+        height: 48px;
+    }
+}

@@ -1,6 +1,28 @@
 @if (IsVisible)
 {
-    <div class="j3d-selection-panel" role="status" aria-live="polite" data-testid="selection-panel">
+    <div class="@PanelClass" role="status" aria-live="polite" data-testid="selection-panel">
+        @* The compact layout's sheet (M19, D236): its handle, and the tool that's on or Add, with Stop (D235). *@
+        <button type="button"
+                class="j3d-sheet-handle"
+                aria-label="@(_sheetOpen ? "Show less" : "Show more")"
+                aria-expanded="@(_sheetOpen ? "true" : "false")"
+                @onpointerdown="OnHandleDown"
+                @onpointerup="OnHandleUp"
+                data-testid="sheet-handle"></button>
+        @if (ToolOn is { } tool)
+        {
+            <div class="j3d-sheet-tool" data-testid="sheet-tool">
+                <span>@tool</span>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Inherit" OnClick="StopTool" Class="j3d-sheet-stop" data-testid="sheet-stop">Stop</MudButton>
+            </div>
+        }
+        @if (shell.IsCompact && Scene.AddMode)
+        {
+            <div class="j3d-sheet-tool" data-testid="sheet-add">
+                <span>Adding to the selection</span>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Inherit" OnClick="Scene.ToggleAddMode" Class="j3d-sheet-stop" data-testid="sheet-add-stop">Stop</MudButton>
+            </div>
+        }
         @if (Scene.Moving is not null)
         {
             @* The Move tool's fields (M13, D148, D167): the target's pose in the chosen frame, applied on Enter. *@
@@ -51,7 +73,9 @@
                     </div>
                     <div class="j3d-move-actions">
                         <div class="j3d-measure-hint" data-testid="move-hint">
-                            @(Scene.Frame == MoveFrame.Local
+                            @(shell.IsTouch
+                                ? (Scene.Frame == MoveFrame.Local ? "Type how far to move or turn it about its own axes, then Apply. Or drag the arrows or rings." : "Type where to put it, then Apply. Or drag the arrows or rings.")
+                                : Scene.Frame == MoveFrame.Local
                                 ? "Type how far to move or turn it about its own axes, then Apply or press Enter. Or drag the arrows (W) or rings (E); Ctrl snaps."
                                 : "Type where to put it, then Apply or press Enter. Or drag the arrows (W) or rings (E); Ctrl snaps.")
                         </div>
@@ -108,7 +132,7 @@
                 <div class="j3d-measure-hint" data-testid="measure-hint">
                     @(Scene.MeasureReference is null
                         ? "Pick a face, edge or vertex to measure from."
-                        : "Pick another to measure against it. Esc stops measuring.")
+                        : shell.IsTouch ? "Pick another to measure against it." : "Pick another to measure against it. Esc stops measuring.")
                 </div>
             </div>
         }

@@ -360,3 +360,321 @@ h1:focus {
     .blazor-error-boundary::after {
         content: "An error has occurred.";
     }
+
+/* ---- Phones and tablets (M19) ----
+   A touch screen (D239) is one whose main pointer is a finger, at any width: 48 px targets and a 56 px bar.
+   The compact layout (D234) is below 900 px wide or 500 px tall: the drawer over the view (D238), the panel
+   as a bottom sheet (SelectionPanel.razor.css), an 80 px view cube with the projection in ⋮ (D240). The
+   groups fold into ⋮ one at a time as the bar runs out of room (D235), sooner for 48 px tools. shell.ts
+   reports the same queries to .NET (ShellState); the page is laid out here first, so it never waits. */
+
+/* The bar, the drawer under it and the view below it all take the bar's height, which MudBlazor would
+   otherwise shrink on narrow and landscape screens. */
+.j3d-appbar .mud-toolbar-appbar {
+    height: var(--mud-appbar-height);
+    min-height: 0;
+}
+
+.j3d-layout .mud-main-content.j3d-main {
+    padding-top: var(--mud-appbar-height);
+}
+
+.j3d-layout .mud-drawer-fixed.mud-drawer-persistent.j3d-drawer {
+    top: var(--mud-appbar-height);
+    height: calc(100% - var(--mud-appbar-height));
+}
+
+/* A phone's browser bars come and go: the page fits the visible viewport. */
+.j3d-main {
+    height: 100dvh;
+}
+
+/* Add (D237) is for a finger, and ⋮ only for what's folded; each ⋮ section shows while its group is folded. */
+.mud-tooltip-root.j3d-add,
+.j3d-more,
+.j3d-more-section,
+.j3d-more-hint,
+.j3d-drawer-backdrop {
+    display: none;
+}
+
+.j3d-more-section {
+    padding: 4px 0;
+}
+
+.j3d-more-section + .j3d-more-section {
+    border-top: 1px solid var(--j3d-hairline);
+}
+
+.j3d-toolbar-group.j3d-more {
+    margin-left: auto;
+}
+
+.j3d-more-menu .mud-icon-button {
+    padding: 6px;
+    border-radius: 6px;
+}
+
+/* A ⋮ item that's on or chosen is ticked where a key would be (D235). */
+.j3d-tick.mud-icon-root {
+    font-size: 1.125rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Import in ⋮: the item is the file input's label, so a tap opens the picker as the toolbar's does. */
+.j3d-menu-label {
+    cursor: inherit;
+}
+
+.j3d-menu-label::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+}
+
+/* The compact layout (D234, D238, D240). */
+@media (max-width: 899.98px), (max-height: 499.98px) {
+    .j3d-layout.mud-layout .mud-main-content.j3d-main {
+        margin-left: 0;
+    }
+
+    /* The drawer slides over the view, and shows only while it's open there (the desktop's open drawer
+       doesn't carry over, and a phone never shows it while the page starts). Only the page's own
+       up-and-down panning is left to the browser, so a finger's swipe to the left closes it (shell.ts). */
+    .j3d-layout .mud-drawer.mud-drawer-persistent.mud-drawer-pos-left.j3d-drawer {
+        --mud-drawer-width: min(320px, 85vw);
+        left: 0;
+        transform: translateX(-100%);
+        visibility: hidden;
+        transition: transform 225ms cubic-bezier(0, 0, 0.2, 1), visibility 0s linear 225ms;
+        touch-action: pan-y;
+    }
+
+    .j3d-layout .mud-drawer.mud-drawer-persistent.mud-drawer-pos-left.j3d-drawer.j3d-drawer--compact-open {
+        transform: none;
+        visibility: visible;
+        transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    .j3d-drawer-backdrop.j3d-drawer-backdrop--open {
+        display: block;
+        position: fixed;
+        inset: var(--mud-appbar-height) 0 0 0;
+        z-index: calc(var(--mud-zindex-drawer) - 1);
+        background: rgba(12, 13, 15, 0.6);
+    }
+
+    .j3d-more,
+    .j3d-more-projection {
+        display: flex;
+    }
+
+    .j3d-more-projection {
+        flex-direction: column;
+    }
+}
+
+/* A touch screen (D239, D243): 48 px targets, a 56 px bar, the Add toggle, and no key hints in menus. */
+@media (pointer: coarse) {
+    html:root {
+        --mud-appbar-height: 56px;
+    }
+
+    .mud-tooltip-root.j3d-add {
+        display: inline-block;
+    }
+
+    .j3d-toolbar .j3d-tool.mud-button-root,
+    .j3d-toolbar .mud-menu.j3d-tool .mud-button-root {
+        height: 48px;
+        min-width: 48px;
+    }
+
+    .j3d-toolbar .j3d-icon-tool.mud-icon-button,
+    .j3d-more-menu .mud-icon-button {
+        width: 48px;
+        height: 48px;
+        padding: 14px;
+    }
+
+    .mud-toggle-group.j3d-segmented .mud-toggle-item {
+        min-width: 46px;
+        height: 46px;
+    }
+
+    .mud-popover .mud-menu-item {
+        min-height: 48px;
+    }
+
+    .j3d-key {
+        display: none;
+    }
+
+    /* A long press opens a menu (D242): it doesn't select the chrome's text or call up the browser's own. */
+    .j3d-appbar,
+    .j3d-drawer {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+}
+
+
+/* On a touch screen the tools are icons below 1,600 px: a finger's 48 px tools with labels need that much. */
+@media (pointer: coarse) and (max-width: 1599.98px) {
+    .j3d-toolbar .j3d-tool-label {
+        display: none;
+    }
+
+    .j3d-toolbar .j3d-tool.mud-button-root,
+    .j3d-toolbar .mud-menu.j3d-tool .mud-button-root {
+        width: 48px;
+        padding: 14px;
+    }
+
+    .j3d-toolbar .j3d-tool .mud-button-icon-start,
+    .j3d-toolbar .mud-menu.j3d-tool .mud-button-icon-start {
+        margin: 0;
+    }
+
+    .j3d-toolbar .mud-menu.j3d-tool .mud-button-label {
+        font-size: 0;
+    }
+
+    .mud-toggle-group.j3d-segmented .mud-toggle-item {
+        padding: 0 13px;
+    }
+}
+
+/* ⋮ and its sections (D235). In the compact layout the bar spans the width, ⋮ at its end. */
+.j3d-more-section {
+    flex-direction: column;
+}
+
+.j3d-more-section > .mud-menu {
+    align-self: stretch;
+}
+
+@media (max-width: 899.98px), (max-height: 499.98px) {
+    .j3d-appbar .j3d-toolbar {
+        flex: 1 1 auto;
+    }
+
+    .j3d-appbar .j3d-toolbar + .flex-grow-1 {
+        display: none;
+    }
+}
+
+/* The groups fold one at a time, from the widths at which the bar no longer fits them (D235): Files and view
+   first, then Visibility, then Tools. With a mouse's 32 px tools that's only in the compact layout; with a
+   finger's 48 px a tablet on its side folds a group or two. Measured in Chromium with Segoe UI: the bar's
+   groups take 156, 205 (with Add), 215, 165 and 115 px for a finger, and 108, 149, 151, 117 and 83 for a mouse. */
+@media (pointer: coarse) and (max-width: 1099.98px), (pointer: fine) and (max-width: 839.98px), (pointer: none) and (max-width: 839.98px) {
+    .j3d-toolbar .j3d-fold-files {
+        display: none;
+    }
+
+    .j3d-toolbar .j3d-fold-files + .j3d-toolbar-group {
+        padding-left: 0;
+        border-left: 0;
+    }
+
+    .j3d-more,
+    .j3d-more-files {
+        display: flex;
+    }
+
+    .j3d-more-hint {
+        display: inline;
+    }
+}
+
+@media (pointer: coarse) and (max-width: 959.98px), (pointer: fine) and (max-width: 729.98px), (pointer: none) and (max-width: 729.98px) {
+    .j3d-toolbar .j3d-fold-visibility {
+        display: none;
+    }
+
+    .j3d-more-visibility {
+        display: flex;
+    }
+}
+
+@media (pointer: coarse) and (max-width: 799.98px), (pointer: fine) and (max-width: 619.98px), (pointer: none) and (max-width: 619.98px) {
+    .j3d-toolbar .j3d-fold-tools {
+        display: none;
+    }
+
+    .j3d-more-tools {
+        display: flex;
+    }
+}
+
+/* A phone: the bar keeps the drawer button, Model, Object and Feature, Add while it fits, Undo, Redo and ⋮,
+   4 px apart without hairlines; About goes into ⋮, and the wordmark gives way. */
+@media (pointer: coarse) and (max-width: 599.98px), (pointer: fine) and (max-width: 479.98px), (pointer: none) and (max-width: 479.98px) {
+    .j3d-appbar .mud-toolbar-gutters {
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+
+    .j3d-appbar .j3d-drawer-button {
+        margin-left: 0;
+    }
+
+    .j3d-wordmark,
+    .mud-tooltip-root.j3d-about {
+        display: none;
+    }
+
+    .j3d-appbar .j3d-toolbar {
+        gap: 4px;
+        margin-left: 4px;
+    }
+
+    .j3d-toolbar .j3d-toolbar-group {
+        padding: 0;
+        border-left: 0;
+    }
+
+    .j3d-more-about {
+        display: flex;
+    }
+}
+
+@media (pointer: coarse) and (max-width: 409.98px) {
+    .mud-tooltip-root.j3d-add {
+        display: none;
+    }
+
+    .j3d-more-add {
+        display: flex;
+    }
+}
+
+/* Narrower than any phone J3D is checked on (360 px): the modes go into ⋮ too. */
+@media (max-width: 351.98px) {
+    .j3d-toolbar .j3d-fold-select {
+        display: none;
+    }
+
+    .j3d-more-select {
+        display: flex;
+    }
+}
+
+/* In the compact layout snackbars span the bottom, above the sheet's peek or its open half (D236). */
+@media (max-width: 899.98px), (max-height: 499.98px) {
+    .mud-snackbar-provider.mud-snackbar-location-bottom-right {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+    }
+
+    body:has(.j3d-selection-panel) .mud-snackbar-provider.mud-snackbar-location-bottom-right {
+        bottom: 112px;
+    }
+
+    body:has(.j3d-sheet--open) .mud-snackbar-provider.mud-snackbar-location-bottom-right {
+        bottom: calc(50dvh + 8px);
+    }
+}
