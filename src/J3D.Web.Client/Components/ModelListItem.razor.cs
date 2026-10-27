@@ -72,6 +72,9 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     /// <summary>Expand or Expand all at work (M16, D199): "Expanding 840 parts…".</summary>
     private static string ExpandingText(int parts) => $"Expanding {DisplayFormat.Counted(parts, "part")}…";
 
+    /// <summary>Objects arriving from another model (M18, D233): "Bringing 241 parts…".</summary>
+    private static string BringingText(int parts) => $"Bringing {DisplayFormat.Counted(parts, "part")}…";
+
     /// <summary>The memory the model takes in the browser (its worker's heap for a CAD model), then its counts, as edited (M14).</summary>
     private static string StatsText(ModelLoadedInfo info, ModelStats stats) => string.Join(
         " · ",

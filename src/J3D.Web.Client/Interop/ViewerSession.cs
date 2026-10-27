@@ -81,6 +81,10 @@ public sealed class ViewerSession
     public async Task<ExpandOutcome?> ExpandPartsAsync(ModelId id, IReadOnlyList<int> fileNodes) =>
         IsReady ? await _viewer!.ExpandPartsAsync(id, fileNodes) : null;
 
+    /// <summary>Moves or copies objects to another model (M18): the arrival. Null without a viewer.</summary>
+    public async Task<TransferOutcome?> TransferAsync(ModelId source, IReadOnlyList<int> nodes, ModelId target) =>
+        IsReady ? await _viewer!.TransferAsync(source, nodes, target) : null;
+
     /// <summary>Stops a model's STEP or BREP export (D125).</summary>
     public async Task CancelExportAsync(ModelId id)
     {

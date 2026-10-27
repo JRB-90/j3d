@@ -78,6 +78,7 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         scene.ForgetRequested += OnForgetRequested;
         scene.ClearAllRequested += OnClearAllRequested;
         scene.ClearFeaturesRequested += OnClearFeaturesRequested;
+        scene.TransferRequested += OnTransferRequested;
         AttachToSession();
     }
 
@@ -195,14 +196,17 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         }
     }
 
-    /// <summary>A tree node (<c>model:node</c>) dropped on an assembly or its model's name (M14, D182): moved there, or copied with Ctrl.</summary>
+    /// <summary>
+    /// A tree node (<c>model:node</c>) dropped on an assembly or a model's name (M14, D182): moved there, or
+    /// copied with Ctrl; since M18 into another model too (D210).
+    /// </summary>
     [JSInvokable]
     public void OnTreeDrop(string source, string modelId, int target, bool copy)
     {
         var colon = source.LastIndexOf(':');
         if (colon > 0 && int.TryParse(source.AsSpan(colon + 1), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var node))
         {
-            scene.Drop(new ModelId(modelId), node, target, copy);
+            scene.Drop(new ModelId(source[..colon]), node, new ModelId(modelId), target, copy);
         }
     }
 
@@ -275,6 +279,7 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
         scene.ForgetRequested -= OnForgetRequested;
         scene.ClearAllRequested -= OnClearAllRequested;
         scene.ClearFeaturesRequested -= OnClearFeaturesRequested;
+        scene.TransferRequested -= OnTransferRequested;
         if (_viewer is not null)
         {
             session.Detach(_viewer);
@@ -298,6 +303,9 @@ public sealed partial class Viewport(IJSRuntime js, ViewerSession session, Scene
     private void OnClearAllRequested() => _ = CallViewerAsync(static viewer => viewer.ClearAllAsync());
 
     private void OnClearFeaturesRequested() => _ = CallViewerAsync(static viewer => viewer.ClearFeaturesAsync());
+
+    /// <summary>Objects going to another model (M18): the viewer brings them, then the scene makes the edit.</summary>
+    private void OnTransferRequested(TransferRequest request) => _ = InvokeAsync(() => TransferCommand.RunAsync(scene, session, snackbar, request));
 
     private async Task CallViewerAsync(Func<ViewerInterop, ValueTask> call)
     {

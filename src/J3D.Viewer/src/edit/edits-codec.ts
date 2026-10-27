@@ -1,4 +1,4 @@
-import type { ExpandedNode, ModelEdits } from './structure';
+import type { ArrivedNode, ExpandedNode, KeptArrival, ModelEdits } from './structure';
 
 /**
  * A model's edits packed for interop (M16, D199): .NET sends all of a model's edits with each one
@@ -9,6 +9,9 @@ import type { ExpandedNode, ModelEdits } from './structure';
  * `version, added.length, ...added, children.length, (parent, nodes.length, ...nodes)*, names.length,
  * (node, name length)*, pieces.length or -1 when absent, (node, expands, piece, part 0/1, name length)*`,
  * with the names, then the pieces' names, one after another in `text` (lengths in UTF-16 code units).
+ * Since M18 an arrivals section may follow: `arrivals.length, (nodes, file length)*, arrived.length,
+ * (node, arrival, index, part 0/1, expandable 0/1, name length)*`, the files and the arrived nodes'
+ * names after the pieces' in `text`. Edits without it end after the pieces.
  */
 export const EditsCodecVersion = 1;
 
@@ -45,7 +48,18 @@ export function decodeEdits(numbers: Uint8Array, text: string): ModelEdits {
           const [node, expands, piece, part] = [next(), next(), next(), next()];
           return { node, expands, piece, name: nextText(), part: part !== 0 };
         });
-  return { added, children, names, ...(pieces ? { pieces } : {}) };
+  if (at >= values.length) {
+    return { added, children, names, ...(pieces ? { pieces } : {}) };
+  }
+  const arrivals = list((): KeptArrival => {
+    const nodes = next();
+    return { file: nextText(), nodes };
+  });
+  const arrived = list((): ArrivedNode => {
+    const [node, arrival, index, part, expandable] = [next(), next(), next(), next(), next()];
+    return { node, arrival, index, name: nextText(), part: part !== 0, ...(expandable !== 0 ? { expandable: true } : {}) };
+  });
+  return { added, children, names, ...(pieces ? { pieces } : {}), arrivals, arrived };
 }
 
 /** The same packing from the viewer's side, for tests and to check a round trip. */
@@ -70,6 +84,18 @@ export function encodeEdits(edits: ModelEdits): { numbers: Uint8Array; text: str
   for (const { node, expands, piece, part, name } of edits.pieces ?? []) {
     values.push(node, expands, piece, part ? 1 : 0);
     addText(name);
+  }
+  if (edits.arrivals || edits.arrived) {
+    values.push(edits.arrivals?.length ?? 0);
+    for (const { file, nodes } of edits.arrivals ?? []) {
+      values.push(nodes);
+      addText(file);
+    }
+    values.push(edits.arrived?.length ?? 0);
+    for (const { node, arrival, index, part, expandable, name } of edits.arrived ?? []) {
+      values.push(node, arrival, index, part ? 1 : 0, expandable ? 1 : 0);
+      addText(name);
+    }
   }
   return { numbers: new Uint8Array(Int32Array.from(values).buffer), text };
 }

@@ -137,6 +137,10 @@ public sealed class ViewerInterop : IAsyncDisposable
     public ValueTask<ExpandOutcome> ExpandPartsAsync(ModelId id, IReadOnlyList<int> fileNodes) =>
         _viewer.InvokeAsync<ExpandOutcome>("expandParts", id.Value, fileNodes);
 
+    /// <summary>Writes objects of one model and reads them into another of the same kind (M18, D225, D227): the arrival, for the edit.</summary>
+    public ValueTask<TransferOutcome> TransferAsync(ModelId source, IReadOnlyList<int> nodes, ModelId target) =>
+        _viewer.InvokeAsync<TransferOutcome>("transfer", source.Value, nodes, target.Value);
+
     /// <summary>Stops a model's STEP or BREP export, which then ends cancelled.</summary>
     public ValueTask CancelExportAsync(ModelId id) => _viewer.InvokeVoidAsync("cancelExport", id.Value);
 

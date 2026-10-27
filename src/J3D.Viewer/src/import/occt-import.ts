@@ -1,7 +1,7 @@
 import { ModelImportError, toImportError } from './errors';
 import { compileOcctModule } from './occt-module';
-import { ExportCancelledError, type BrepExpander, type BrepExporter, type BrepMeasurer } from './types';
-import type { ExpandRequest, ExportRequest, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, OcctFormat } from './protocol';
+import { ExportCancelledError, type BrepArriver, type BrepExpander, type BrepExporter, type BrepMeasurer } from './types';
+import type { ArriveRequest, ExpandRequest, ExportRequest, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, OcctFormat } from './protocol';
 import { liveWorkers, type ImportRunner } from './runner';
 import type { ImportResult } from './types';
 
@@ -43,7 +43,14 @@ export function createOcctRunner(options: OcctRunnerOptions = {}): ImportRunner 
               break;
             case 'loaded':
               resolve({
-                content: { kind: 'brep', scene: data.scene, measure: channel.measure, exporter: channel.exporter, expander: channel.expander },
+                content: {
+                  kind: 'brep',
+                  scene: data.scene,
+                  measure: channel.measure,
+                  exporter: channel.exporter,
+                  expander: channel.expander,
+                  arriver: channel.arriver,
+                },
                 tree: data.scene.nodes,
                 bounds: data.bounds,
                 stats: data.stats,
@@ -96,6 +103,7 @@ interface ModelChannel {
   measure: BrepMeasurer;
   exporter: BrepExporter;
   expander: BrepExpander;
+  arriver: BrepArriver;
   /** Hands the channel a worker answer. */
   receive(data: ModelWorkerResponse): void;
   /** The worker is gone: exports in progress fail with `error`. */
@@ -130,6 +138,15 @@ function modelChannel(worker: Worker): ModelChannel {
           const id = ++next;
           pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
           const message: ExpandRequest = { type: 'expand', id, node };
+          worker.postMessage(message);
+        }),
+    },
+    arriver: {
+      arrive: (file, base) =>
+        new Promise((resolve, reject) => {
+          const id = ++next;
+          pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+          const message: ArriveRequest = { type: 'arrive', id, file, base };
           worker.postMessage(message);
         }),
     },
@@ -188,6 +205,12 @@ function modelChannel(worker: Worker): ModelChannel {
           const waiting = pending.get(data.id);
           pending.delete(data.id);
           waiting?.resolve({ pieces: data.pieces, prototypes: data.prototypes });
+          break;
+        }
+        case 'arrived': {
+          const waiting = pending.get(data.id);
+          pending.delete(data.id);
+          waiting?.resolve({ arrival: data.arrival, prototypes: data.prototypes });
           break;
         }
         case 'exportProgress':

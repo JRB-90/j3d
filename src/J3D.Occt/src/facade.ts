@@ -66,6 +66,7 @@ export interface J3DModelHandle {
   exportEntity(kind: number, prototype: number, index: number): string;
   exportFile(format: number): number;
   expandNode(node: number): string;
+  arrive(base: number): string;
   exportTree(format: number, plan: string): number;
   getOutputLength(): number;
   getOutputChunkCount(): number;
@@ -282,6 +283,16 @@ export interface ExpandedPiece {
 }
 
 /**
+ * Objects moved or copied in from another model (M18, D225): their nodes as the facade numbers them
+ * from `base` on (after the file's, and any earlier arrival's), in tree order, each parent an earlier
+ * node of the arrival or -1.
+ */
+export interface Arrival {
+  base: number;
+  nodes: SceneNode[];
+}
+
+/**
  * How {@link OcctModel.exportTree} writes each node of an edited tree (M15): reusing its origin's
  * definition whole, or as a new assembly whose children follow.
  */
@@ -426,6 +437,25 @@ export class OcctModel implements Disposable {
     );
     this.scene.prototypes.push(...prototypes);
     return { pieces, prototypes };
+  }
+
+  /**
+   * Reads a STEP another model's worker wrote ({@link exportTree}) as an arrival whose nodes start at
+   * node `base` (M18, D225): the file's node count, or after an earlier arrival's; one there already is
+   * replaced. The prototypes its parts draw are extracted and appended to {@link scene}'s. Plans,
+   * {@link expand} and the queries then name its nodes and prototypes as the file's. Throws
+   * {@link OcctMeasureError} when the STEP can't be read.
+   */
+  async arrive(source: Blob | Uint8Array, base: number): Promise<{ arrival: Arrival; prototypes: PrototypeMesh[] }> {
+    const handle = this.live();
+    await writeInput(this.module, handle, source, undefined);
+    const arrival = parseMeasure<Arrival>(handle.arrive(base));
+    const first = this.scene.prototypes.length;
+    const prototypes = Array.from({ length: handle.getPrototypeCount() - first }, (_, offset) =>
+      extractPrototype(this.module, handle, first + offset),
+    );
+    this.scene.prototypes.push(...prototypes);
+    return { arrival, prototypes };
   }
 
   /**

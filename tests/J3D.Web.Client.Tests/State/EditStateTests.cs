@@ -216,7 +216,7 @@ public sealed class EditStateTests
     }
 
     [Fact]
-    public void Cut_copy_and_new_assembly_take_one_models_objects_and_paste_stays_in_that_model()
+    public void Cut_copy_and_new_assembly_take_one_models_objects_and_paste_reaches_another_model()
     {
         _scene.Pick(A, 1, additive: false);
         _scene.Pick(B, 1, additive: true);
@@ -227,7 +227,13 @@ public sealed class EditStateTests
         _scene.Pick(A, 1, additive: false);
         _scene.Copy();
         _scene.SelectNode(B, 2, additive: false);
-        Assert.False(_scene.CanPaste); // the target is in another model (D180)
+        Assert.True(_scene.CanPaste); // into another model since M18 (D226)
+        TransferRequest? requested = null;
+        _scene.TransferRequested += request => requested = request;
+        _scene.Paste();
+        Assert.NotNull(requested);
+        Assert.Equal((A, B, 2, (int?)null, true), (requested.Source, requested.Target, requested.Parent, requested.After, requested.Copy));
+        Assert.Equal([1], requested.Nodes);
     }
 
     [Fact]

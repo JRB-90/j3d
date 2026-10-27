@@ -31,6 +31,21 @@ describe('edits codec', () => {
     expect(decodeEdits(numbers, text)).toEqual(edits);
   });
 
+  it('carries arrivals and the nodes that arrived after the pieces (M18), as .NET packs them', () => {
+    const edits: ModelEdits = {
+      ...example,
+      arrivals: [{ file: 'arrival-1.step', nodes: 4 }],
+      arrived: [
+        { node: 7, arrival: 0, index: 1, name: 'Top', part: false },
+        { node: 8, arrival: 0, index: 3, name: '', part: true, expandable: true },
+      ],
+    };
+    const { numbers, text } = encodeEdits(edits);
+    expect([...new Int32Array(numbers.buffer)].slice(exampleNumbers.length)).toEqual([1, 4, 14, 2, 7, 0, 1, 0, 0, 3, 8, 0, 3, 1, 1, 0]);
+    expect(text).toBe(`${exampleText}arrival-1.stepTop`);
+    expect(decodeEdits(numbers, text)).toEqual(edits);
+  });
+
   it('reads bytes that start part-way into their buffer', () => {
     const { numbers, text } = encodeEdits(example);
     const padded = new Uint8Array(numbers.length + 1);

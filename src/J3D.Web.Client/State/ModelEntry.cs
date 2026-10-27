@@ -93,6 +93,9 @@ public sealed record ModelEntry(ModelSummary Summary)
     /// <summary>How many parts Expand or Expand all is splitting, while it runs (M16, D199), or null.</summary>
     public int? Expanding { get; private init; }
 
+    /// <summary>How many parts are being brought in from another model, while that runs (M18, D233), or null.</summary>
+    public int? Bringing { get; private init; }
+
     public ModelId Id => Summary.Id;
 
     /// <summary>Queued or importing: removing it cancels the import.</summary>
@@ -174,6 +177,10 @@ public sealed record ModelEntry(ModelSummary Summary)
     /// <summary>Expand started on so many parts, or ended (null). Only a loaded model expands.</summary>
     public ModelEntry WithExpanding(int? parts) =>
         parts == Expanding || (parts is not null && Status != ModelStatus.Loaded) ? this : this with { Expanding = parts };
+
+    /// <summary>Objects from another model started arriving, so many parts of them (M18, D233), or ended (null). Only a loaded model takes them.</summary>
+    public ModelEntry WithBringing(int? parts) =>
+        parts == Bringing || (parts is not null && Status != ModelStatus.Loaded) ? this : this with { Bringing = parts };
 
     /// <summary>The model's files couldn't be kept: <paramref name="reason"/> says why (D115).</summary>
     public ModelEntry AsNotKept(string reason) => NotKept == reason ? this : this with { NotKept = reason };

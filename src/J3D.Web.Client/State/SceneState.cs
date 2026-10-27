@@ -291,6 +291,9 @@ public sealed partial class SceneState
     /// <summary>Expand or Expand all started on so many of a model's parts, or ended (null) (M16, D199).</summary>
     public void SetExpanding(ModelId id, int? parts) => Update(id, model => model.WithExpanding(parts));
 
+    /// <summary>Objects from another model started arriving, so many parts, or ended (null) (M18, D233).</summary>
+    public void SetBringing(ModelId id, int? parts) => Update(id, model => model.WithBringing(parts));
+
     /// <summary>How far a model's export is: a fraction, or null while OCCT can't tell.</summary>
     public void ReportExportProgress(ModelId id, double? fraction) =>
         Update(id, model => model.Export is { } export ? model.WithExport(export with { Fraction = fraction }) : model);

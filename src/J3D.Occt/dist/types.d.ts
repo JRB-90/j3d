@@ -43,6 +43,7 @@ declare class J3DModel {
   exportEntity(kind: number, prototype: number, index: number): string;
   exportFile(format: number): number;
   expandNode(node: number): string;
+  arrive(base: number): string;
   exportTree(format: number, plan: string): number;
   getOutputLength(): number;
   getOutputChunkCount(): number;

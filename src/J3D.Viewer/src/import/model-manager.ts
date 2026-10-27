@@ -4,6 +4,7 @@ import { throttleProgress, type ProgressListener } from './progress';
 import type { ImportRunner, ImportTask } from './runner';
 import { planBatch, SidecarSet, UnusedSidecarReason, type BatchFile } from './sidecars';
 import { editedStats } from '../edit/stats';
+import { arrivalsOf, readArrivals, type MeshArrivalReader } from '../edit/arrive';
 import { expandFileParts, expansionsOf } from '../edit/expand';
 import { EditsMismatchError, expandedFileNodes, hasEdits, ModelStructure, type ModelEdits } from '../edit/structure';
 import type { ImportError, ImportPhase, ImportResult, KeptPlacement, KeptState, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types';
@@ -58,6 +59,11 @@ export class ModelManager {
   private readonly entries = new Map<ModelId, Entry>();
   private readonly queue: Entry[] = [];
   private readonly listeners = new Set<ModelManagerListener>();
+  /**
+   * How a restored model's arrivals are read (M18): its kept files from the store, and a mesh model's
+   * read into objects. Without them a model with arrivals loads as imported (R25).
+   */
+  arrivalReaders: { read(id: ModelId, file: string): Promise<Blob>; readMesh?: MeshArrivalReader } | undefined;
   private running = 0;
 
   constructor(
@@ -250,6 +256,15 @@ export class ModelManager {
             entry.report('applying', fraction);
           }
         };
+        // Objects that arrived from other models (M18) are read in first: Expand may have split them.
+        const arrivals = entry.restored?.edits?.arrivals;
+        const readers = this.arrivalReaders;
+        if (arrivals?.length && readers) {
+          report(null);
+          await readArrivals(result.content, result.tree.length, arrivals, (file) => readers.read(summary.id, file), readers.readMesh).catch(
+            (error: unknown) => console.warn(`J3D: objects that arrived in ${summary.fileName} couldn't be read.`, error),
+          );
+        }
         if (expanded.length > 0) {
           await expandFileParts(result.content, expanded, (done, total) => report(done / total)).catch(() => undefined);
         } else if (entry.restored?.edits) {
@@ -334,7 +349,7 @@ function keptStateFor(summary: ModelSummary, result: ImportResult, kept: KeptSta
     return kept;
   }
   try {
-    const structure = new ModelStructure(result.tree, kept.edits, expansionsOf(result.content));
+    const structure = new ModelStructure(result.tree, kept.edits, expansionsOf(result.content), arrivalsOf(result.content));
     result.stats = editedStats(result.content, structure, result.stats);
     return kept;
   } catch (error) {

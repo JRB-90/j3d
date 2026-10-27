@@ -18,7 +18,7 @@ public sealed partial class ModelTree
     /// <summary>The model's top level, as a parent.</summary>
     public const int TopLevel = -1;
 
-    /// <summary>The prototype of a piece Expand made that draws something (M15): the viewer knows its real one.</summary>
+    /// <summary>The prototype of a piece Expand made, or a node that arrived, that draws something (M15, M18): the viewer knows its real one.</summary>
     internal const int ExpandedPart = int.MaxValue;
 
     private readonly TreeColumns _file;
@@ -72,6 +72,18 @@ public sealed partial class ModelTree
                 _fileNodes[node] = -1;
                 _prototypes[node] = piece.Part ? ExpandedPart : -1;
                 _addedNames[offset] = piece.Name;
+            }
+            else if (Edits.Arrived.TryGetValue(node, out var arrived))
+            {
+                // A node that arrived (M18) is numbered after the file's nodes and earlier arrivals', as the
+                // viewer's facade numbers it, so Expand can name it as it names a file part.
+                _fileNodes[node] = Edits.ArrivalBase(fileCount, arrived.Arrival) + arrived.Index;
+                _prototypes[node] = arrived.Part ? ExpandedPart : -1;
+                _addedNames[offset] = arrived.Name;
+                if (arrived.Expandable)
+                {
+                    _expandable.Add(_fileNodes[node]);
+                }
             }
             else
             {
@@ -282,12 +294,15 @@ public sealed partial class ModelTree
     public TreeEdit Edit() => new(this);
 
     /// <summary>
-    /// A compound part Expand can split (M15, D189, D190): one of the file's, or a copy of one, in the model.
-    /// Expand's own pieces aren't, since it splits down to solids.
+    /// A compound part Expand can split (M15, D189, D190): one of the file's, or since M18 one that arrived,
+    /// or a copy of either, in the model. Expand's own pieces aren't, since it splits down to solids.
     /// </summary>
     public bool IsExpandable(int index) => IsPart(index) && _fileNodes[index] is var file and >= 0 && _expandable.Contains(file);
 
-    /// <summary>The file node a node draws as: itself, or the one it copies; -1 for new assemblies and Expand's nodes.</summary>
+    /// <summary>
+    /// The file node a node draws as: itself, or the one it copies; for a node that arrived, its number
+    /// after the file's (M18); -1 for new assemblies and Expand's nodes.
+    /// </summary>
     public int FileNodeOf(int index) => _fileNodes[index];
 
     /// <summary>The name a node has without a rename: its file node's, a piece's as Expand named it, or "Assembly" for a new assembly.</summary>

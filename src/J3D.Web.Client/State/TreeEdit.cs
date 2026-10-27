@@ -5,9 +5,9 @@ namespace J3D.Web.Client.State;
 
 /// <summary>
 /// One edit of a <see cref="ModelTree"/> (M14): nodes moved, copied, grouped, ungrouped, removed,
-/// renamed and since M15 expanded, building the model's next <see cref="ModelEdits"/>. Only the child lists it touches are
-/// copied. An assembly a move or removal leaves with nothing in it goes too (D181); empty assemblies
-/// the file has stay.
+/// renamed, since M15 expanded and since M18 brought in from another model, building the model's next
+/// <see cref="ModelEdits"/>. Only the child lists it touches are copied. An assembly a move or removal
+/// leaves with nothing in it goes too (D181); empty assemblies the file has stay.
 /// </summary>
 public sealed class TreeEdit
 {
@@ -18,6 +18,8 @@ public sealed class TreeEdit
     private readonly HashSet<int> _emptied = [];
     private ImmutableDictionary<int, string> _names;
     private ImmutableDictionary<int, ExpandedNode> _pieces;
+    private ImmutableList<KeptArrival> _arrivals;
+    private ImmutableDictionary<int, ArrivedNode> _arrived;
 
     internal TreeEdit(ModelTree tree)
     {
@@ -25,6 +27,8 @@ public sealed class TreeEdit
         _added = [.. tree.Edits.Added];
         _names = tree.Edits.Names;
         _pieces = tree.Edits.Pieces;
+        _arrivals = tree.Edits.Arrivals;
+        _arrived = tree.Edits.Arrived;
     }
 
     private int Count => _tree.FileCount + _added.Count;
@@ -171,6 +175,46 @@ public sealed class TreeEdit
         return assembly;
     }
 
+    /// <summary>
+    /// Objects arriving from another model (M18, D225, D227): a new arrival, after the model's others, whose
+    /// nodes (each after its arrival parent, 0 being the arrival's own assembly, which isn't added) come in
+    /// as added nodes: the objects themselves into <paramref name="parent"/>, after its children or just
+    /// after <paramref name="after"/>, in order, and the rest under them. Returns each node's id, the
+    /// arrival's node <c>i</c> at <c>i - 1</c>.
+    /// </summary>
+    public IReadOnlyList<int> Arrive(string file, IReadOnlyList<Interop.TransferNode> nodes, int parent, int? after = null)
+    {
+        var arrival = _arrivals.Count;
+        _arrivals = _arrivals.Add(new KeptArrival(file, nodes.Count + 1));
+        var ids = new int[nodes.Count];
+        var previous = after;
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var node = nodes[i];
+            var id = ids[i] = Count;
+            _added.Add(-1);
+            _arrived = _arrived.SetItem(id, new ArrivedNode(arrival, i + 1, node.Name, node.Part, node.Expandable));
+            if (!node.Part)
+            {
+                _lists[id] = [];
+            }
+
+            if (node.Parent >= 1 && node.Parent <= i)
+            {
+                var owner = ids[node.Parent - 1];
+                _lists[owner].Add(id);
+                _parents[id] = owner;
+            }
+            else
+            {
+                Insert(parent, id, previous);
+                previous = id;
+            }
+        }
+
+        return ids;
+    }
+
     public TreeEdit Rename(int node, string name)
     {
         _names = node < _tree.Count && name == _tree.DefaultNameOf(node) ? _names.Remove(node) : _names.SetItem(node, name);
@@ -196,7 +240,7 @@ public sealed class TreeEdit
             }
         }
 
-        return new ModelTree(_tree.File, new ModelEdits([.. _added], children, _names, _pieces));
+        return new ModelTree(_tree.File, new ModelEdits([.. _added], children, _names, _pieces) { Arrivals = _arrivals, Arrived = _arrived });
     }
 
     private const int Removed = -2;

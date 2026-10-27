@@ -23,7 +23,7 @@ function samePlacement(a: readonly number[], b: readonly number[]): boolean {
 }
 
 /** Column-major 4x4 product a × b. */
-function multiply(a: readonly number[], b: readonly number[]): number[] {
+export function multiply(a: readonly number[], b: readonly number[]): number[] {
   const out = new Array<number>(16);
   for (let column = 0; column < 4; column++) {
     for (let row = 0; row < 4; row++) {
@@ -60,6 +60,50 @@ export function writesAsImported(source: PlanSource): boolean {
  * assembly; a part takes it itself. Empty when there's nothing to write.
  */
 export function exportPlan(source: PlanSource, selection?: ReadonlySet<number>): PlanNode[] {
+  const { structure } = source;
+  const writer = planWriter(source, (part) => !source.hidden.has(part) && (selection?.has(part) ?? true));
+  for (const node of structure.childrenOf(TopLevel)) {
+    if (writer.included(node)) {
+      writer.emit(node, -1, multiply(source.frame, source.local(node)));
+    }
+  }
+  return writer.plan;
+}
+
+/**
+ * The plan of objects going to another model (M18, D225, D229): an assembly of J3D's holding each
+ * object with everything under it, hidden parts included, at the placement given (the object's place in
+ * the target model's frame, D228). Written as {@link exportPlan} writes, so a subtree as the file has it
+ * stays one definition. The other model reads it in as an arrival (the facade's arrive), whose node 0
+ * is this assembly and whose other nodes are `order`'s: the nodes written, the objects' subtrees in tree
+ * order (an assembly with nothing under it isn't written, D195).
+ */
+export function transferPlan(
+  source: PlanSource,
+  objects: readonly { node: number; matrix: readonly number[] }[],
+): { plan: PlanNode[]; order: number[] } {
+  const { structure } = source;
+  const under = new Set(objects.flatMap(({ node }) => structure.subtree(node).filter((child) => structure.isLive(child))));
+  const writer = planWriter(source, (part) => under.has(part));
+  writer.plan.push({ kind: PlanKind.Assembly, parent: -1, ref: -1, piece: FileOrigin, matrix: Identity, name: '' });
+  const order: number[] = [];
+  const visit = (node: number) => {
+    if (writer.included(node)) {
+      order.push(node);
+      structure.childrenOf(node).forEach(visit);
+    }
+  };
+  for (const { node, matrix } of objects) {
+    if (writer.included(node)) {
+      writer.emit(node, 0, matrix);
+      visit(node);
+    }
+  }
+  return { plan: writer.plan, order };
+}
+
+/** Writes plan lines for nodes of a model's tree: the parts `write` takes, and the assemblies holding any of them. */
+function planWriter(source: PlanSource, write: (part: number) => boolean) {
   const { structure, fileTree, expansions } = source;
   const fileCount = fileTree.length;
   const renamed = new Set(structure.edits.names.map(({ node }) => node));
@@ -70,13 +114,14 @@ export function exportPlan(source: PlanSource, selection?: ReadonlySet<number>):
   for (let i = order.length - 1; i >= 0; i--) {
     const node = order[i]!;
     if (structure.nodes[node]!.prototype >= 0) {
-      included[node] = !source.hidden.has(node) && (selection?.has(node) ?? true) ? 1 : 0;
+      included[node] = write(node) ? 1 : 0;
     } else {
       included[node] = structure.childrenOf(node).some((child) => included[child] === 1) ? 1 : 0;
     }
   }
 
-  // Each node's origin: a file node, a piece of an expansion, or (-1) none; copies take their source's.
+  // Each node's origin: a file node (or since M18 an arrived one, which the facade numbers after the
+  // file's), a piece of an expansion, or (-1) none; copies take their source's.
   const origins = new Map<number, { ref: number; piece: number }>();
   const originOf = (node: number): { ref: number; piece: number } => {
     let origin = origins.get(node);
@@ -84,10 +129,10 @@ export function exportPlan(source: PlanSource, selection?: ReadonlySet<number>):
       const expanded = structure.expansionOf(node);
       const copied = structure.sources[node] ?? -1;
       origin =
-        node < fileCount
-          ? { ref: node, piece: FileOrigin }
+        node < fileCount || structure.arrivalOf(node)
+          ? { ref: structure.sourceNodes[node]!, piece: FileOrigin }
           : expanded
-            ? { ref: structure.fileNodes[expanded.expands]!, piece: expanded.piece }
+            ? { ref: structure.sourceNodes[expanded.expands]!, piece: expanded.piece }
             : copied >= 0
               ? originOf(copied)
               : { ref: -1, piece: FileOrigin };
@@ -120,7 +165,7 @@ export function exportPlan(source: PlanSource, selection?: ReadonlySet<number>):
       return { nodes, matrices: nodes.map((child) => fileTree[child]!.matrix ?? Identity), named: true };
     }
     const expanded = structure.expansionOf(node);
-    const pieces = expanded ? expansions.get(structure.fileNodes[expanded.expands]!) : undefined;
+    const pieces = expanded ? expansions.get(structure.sourceNodes[expanded.expands]!) : undefined;
     if (!expanded || !pieces) {
       return undefined;
     }
@@ -161,7 +206,7 @@ export function exportPlan(source: PlanSource, selection?: ReadonlySet<number>):
   };
 
   const plan: PlanNode[] = [];
-  const emit = (node: number, parent: number, placement: readonly number[]) => {
+  const emit = (node: number, parent: number, placement: readonly number[]): void => {
     const isPart = structure.nodes[node]!.prototype >= 0;
     const { ref, piece } = originOf(node);
     const top = parent < 0;
@@ -185,10 +230,5 @@ export function exportPlan(source: PlanSource, selection?: ReadonlySet<number>):
       }
     }
   };
-  for (const node of structure.childrenOf(TopLevel)) {
-    if (included[node] === 1) {
-      emit(node, -1, multiply(source.frame, source.local(node)));
-    }
-  }
-  return plan;
+  return { plan, emit, included: (node: number) => included[node] === 1 };
 }

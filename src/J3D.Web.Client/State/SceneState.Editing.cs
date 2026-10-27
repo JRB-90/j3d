@@ -13,6 +13,18 @@ public sealed record Clipboard(ModelId Id, ImmutableArray<(int Node, int Parent)
 /// <summary>A tree node whose name is being edited in place (D183, D186); <paramref name="IsNew"/> for a new assembly's.</summary>
 public sealed record Renaming(ModelId Id, int Node, bool IsNew);
 
+/// <summary>
+/// Objects going to another model (M18, D210, D226): <paramref name="Nodes"/> of <paramref name="Source"/>
+/// into <paramref name="Parent"/> of <paramref name="Target"/> (or its top level), just after
+/// <paramref name="After"/> or after its children; copied, or moved, which takes them out of the source in
+/// the same step. The viewer writes and reads them; <see cref="SceneState.CompleteTransfer"/> makes the edit.
+/// </summary>
+public sealed record TransferRequest(ModelId Source, IReadOnlyList<int> Nodes, ModelId Target, int Parent, int? After, bool Copy)
+{
+    /// <summary>A cut pasted, which empties the clipboard once it's done (assumption 20).</summary>
+    public bool FromCut { get; init; }
+}
+
 /// <summary>An Expand worked out on a model's tree as it was (<paramref name="Before"/>), not yet made (M16, D199).</summary>
 public sealed record ExpandPlan(ModelId Id, ModelTree Before, TreeEdit Edit, IReadOnlyList<int> Assemblies)
 {
@@ -32,6 +44,9 @@ public sealed partial class SceneState
 {
     /// <summary>Raised when Delete should remove whole models (Model mode, D187): the list asks first (D29).</summary>
     public event Action<IReadOnlyList<ModelId>>? DeleteModelsRequested;
+
+    /// <summary>Raised when objects should go to another model (M18): the viewer writes and reads them, then <see cref="CompleteTransfer"/>.</summary>
+    public event Action<TransferRequest>? TransferRequested;
 
     /// <summary>
     /// Raised for a STEP or BREP export from the Export menu (M15, D192): the model's list item runs it,
@@ -140,12 +155,25 @@ public sealed partial class SceneState
 
     /// <summary>
     /// Paste (D152, D180): a cut's objects move to the target, keeping where they are in 3D (D151); a
-    /// copy's are added there as new instances in the same place. Either way they're then selected.
+    /// copy's are added there as new instances in the same place. Either way they're then selected. Since
+    /// M18 the target may be in another model (D226), where the viewer brings them first.
     /// </summary>
     public void Paste()
     {
         if (PasteTarget() is not { } target || Clipboard is not { } clipboard)
         {
+            return;
+        }
+
+        if (target.Model.Id != clipboard.Id)
+        {
+            var source = Find(clipboard.Id)!.Tree!;
+            List<int> nodes = [.. clipboard.Items.Select(static item => item.Node).Where(source.Contains)];
+            if (nodes.Count > 0)
+            {
+                TransferRequested?.Invoke(new TransferRequest(clipboard.Id, nodes, target.Model.Id, target.Parent ?? ModelTree.TopLevel, target.After, Copy: !clipboard.Cut) { FromCut = clipboard.Cut });
+            }
+
             return;
         }
 
@@ -292,16 +320,29 @@ public sealed partial class SceneState
     /// there, or with Ctrl are copied there (D183). Refused into the dragged objects' own subtrees, onto
     /// a part, or outside Object mode.
     /// </summary>
-    public void Drop(ModelId id, int node, int target, bool copy)
+    public void Drop(ModelId id, int node, int target, bool copy) => Drop(id, node, id, target, copy);
+
+    /// <summary>
+    /// A tree node of model <paramref name="id"/> dropped on an assembly or the name of model
+    /// <paramref name="targetId"/>: within the model as above, or since M18 into another model, where the
+    /// viewer brings the objects first (D210).
+    /// </summary>
+    public void Drop(ModelId id, int node, ModelId targetId, int target, bool copy)
     {
         if (Mode != SelectMode.Objects || Find(id) is not { Tree: { } tree } model || !tree.Contains(node) ||
-            (target != ModelTree.TopLevel && !tree.IsAssembly(target)))
+            Find(targetId) is not { Tree: { } targetTree } || (target != ModelTree.TopLevel && !targetTree.IsAssembly(target)))
         {
             return;
         }
 
         var selected = EditObjects.Where(item => item.Model.Id == id).Select(static item => item.Node).ToList();
         List<int> nodes = selected.Any(item => tree.IsWithin(node, item)) ? selected : [node];
+        if (targetId != id)
+        {
+            TransferRequested?.Invoke(new TransferRequest(id, nodes, targetId, target, null, copy));
+            return;
+        }
+
         if (nodes.Any(item => tree.IsWithin(target, item)))
         {
             return;
@@ -436,11 +477,13 @@ public sealed partial class SceneState
     /// <summary>
     /// Where Paste puts the clipboard's objects (D180): into the one selected object if it's an assembly,
     /// beside it if it's a part, or beside the originals (a null parent) with nothing else selected or the
-    /// copied objects themselves. Null when there's nothing to paste, or the selection is in another model.
+    /// copied objects themselves. Since M18 (D226) the one selected object may be in another loaded model,
+    /// or in Model mode the one selected model, whose top level it is. Null when there's nothing to paste,
+    /// or the selection is in several models.
     /// </summary>
     private (ModelEntry Model, int? Parent, int? After)? PasteTarget()
     {
-        if (Mode != SelectMode.Objects || Clipboard is not { } clipboard || Find(clipboard.Id) is not { Tree: { } tree } model)
+        if (Clipboard is not { } clipboard || Find(clipboard.Id) is not { Tree: { } tree } model)
         {
             return null;
         }
@@ -450,7 +493,28 @@ public sealed partial class SceneState
             return null;
         }
 
+        if (Mode == SelectMode.Models)
+        {
+            return Models.Where(IsModelSelected).ToList() is [{ Tree: not null } other] && other.Id != clipboard.Id
+                ? (other, ModelTree.TopLevel, null)
+                : null;
+        }
+
+        if (Mode != SelectMode.Objects)
+        {
+            return null;
+        }
+
         var objects = EditObjects;
+        if (objects.Count > 0 && objects.All(item => item.Model.Id != clipboard.Id))
+        {
+            return objects is [var elsewhere]
+                ? elsewhere.Model.Tree!.IsAssembly(elsewhere.Node)
+                    ? (elsewhere.Model, elsewhere.Node, null)
+                    : (elsewhere.Model, elsewhere.Model.Tree.ParentOf(elsewhere.Node), elsewhere.Node)
+                : null;
+        }
+
         if (objects.Any(item => item.Model.Id != clipboard.Id))
         {
             return null;
@@ -465,6 +529,57 @@ public sealed partial class SceneState
     }
 
     /// <summary>
+    /// The objects a transfer brought (M18, D225, D229, D233): the target gains them as an arrival, placed
+    /// where they were (the viewer placed them in its frame) and hidden where they were hidden, and selects
+    /// them; a move takes them out of the source in the same step (an emptied model stays, D231). False
+    /// when the models or the target's parent have gone, or the outcome is empty, so nothing changes.
+    /// </summary>
+    public bool CompleteTransfer(TransferRequest request, Interop.TransferOutcome outcome)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(outcome);
+        if (outcome is not { File: { } file, Nodes: { Count: > 0 } nodes } || Find(request.Target) is not { Tree: { } targetTree } target ||
+            (request.Parent != ModelTree.TopLevel && !targetTree.IsAssembly(request.Parent)))
+        {
+            return false;
+        }
+
+        var edit = targetTree.Edit();
+        var ids = edit.Arrive(file, nodes, request.Parent, request.After is { } after && targetTree.Contains(after) ? after : null);
+        var next = edit.Build();
+        var hidden = target.Hidden.Union(ids.Where((_, index) => nodes[index].Hidden && nodes[index].Part));
+        List<int> tops = [.. ids.Where((_, index) => nodes[index].Parent == 0)];
+        var arrived = EditedEntry(target, next, hidden, tops);
+        var steps = new List<ISceneStep> { new EditStep(target.Id, target.EditState, arrived.EditState) };
+        var models = Models.ConvertAll(model => model.Id == target.Id ? arrived : model.WithParts(model.Hidden, []));
+
+        if (!request.Copy && Find(request.Source) is { Tree: { } sourceTree } source)
+        {
+            var left = sourceTree.Edit().Remove(request.Nodes.Where(sourceTree.Contains)).Build();
+            var before = source.EditState;
+            var emptied = source.WithEdit(before with { Edits = left.Edits, Tree = left, Selected = PartSet.Empty });
+            steps.Add(new EditStep(source.Id, before, emptied.EditState));
+            models = models.ConvertAll(model => model.Id == source.Id ? emptied : model);
+        }
+
+        var label = $"{(request.Copy ? "Copy" : "Move")} to {target.Summary.FileName}";
+        Record(new StepGroup([.. steps.Select(step => step is EditStep one ? one with { Label = label } : step)]));
+        if (request.FromCut)
+        {
+            Clipboard = null;
+        }
+
+        _anchor = tops is [var only] ? (target.Id, only) : null;
+        Set(models);
+        if (tops.Count > 0)
+        {
+            RevealRequested?.Invoke(target.Id, tops[0]);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Records and applies an edit of one model as one step: its new tree and hidden parts, with what it
     /// selects (the visible parts under <paramref name="selectNodes"/>, or the selection as it was); a
     /// node's moves are dropped once its parent changes, since they're in the old parent's frame and the
@@ -472,17 +587,8 @@ public sealed partial class SceneState
     /// </summary>
     private void ApplyEdit(string label, ModelEntry model, ModelTree next, PartSet hidden, IReadOnlyList<int>? selectNodes)
     {
-        var tree = model.Tree!;
         var before = model.EditState;
-        List<int> reparented = [.. before.Placements.Keys.Where(node => node >= 0 && (!next.Contains(node) || next.ParentOf(node) != tree.ParentOf(node)))];
-        var placements = before.Placements.RemoveRange(reparented);
-        var selected = selectNodes is not null
-            ? PartSet.From(selectNodes.Where(next.Contains).SelectMany(next.PartsUnder).Where(part => !hidden.Contains(part)))
-            // A model selected in Model mode stays selected whole, Expand all's pieces included (M16).
-            : Mode == SelectMode.Models && !model.Selected.IsEmpty
-                ? PartSet.From(next.Parts.Where(part => !hidden.Contains(part)))
-                : model.Selected;
-        var edited = model.WithEdit(new ModelEdit(next.Edits, hidden, selected, placements) { Tree = next });
+        var edited = EditedEntry(model, next, hidden, selectNodes);
         Record(new EditStep(model.Id, before, edited.EditState, label));
         if (selectNodes is not null)
         {
@@ -494,5 +600,21 @@ public sealed partial class SceneState
         {
             Update(model.Id, _ => edited);
         }
+    }
+
+    /// <summary>A model with a new tree and hidden parts, what it selects, and its moves kept where their parents didn't change (see <see cref="ApplyEdit"/>).</summary>
+    private ModelEntry EditedEntry(ModelEntry model, ModelTree next, PartSet hidden, IReadOnlyList<int>? selectNodes)
+    {
+        var tree = model.Tree!;
+        var before = model.EditState;
+        List<int> reparented = [.. before.Placements.Keys.Where(node => node >= 0 && (!next.Contains(node) || next.ParentOf(node) != tree.ParentOf(node)))];
+        var placements = before.Placements.RemoveRange(reparented);
+        var selected = selectNodes is not null
+            ? PartSet.From(selectNodes.Where(next.Contains).SelectMany(next.PartsUnder).Where(part => !hidden.Contains(part)))
+            // A model selected in Model mode stays selected whole, Expand all's pieces included (M16).
+            : Mode == SelectMode.Models && !model.Selected.IsEmpty
+                ? PartSet.From(next.Parts.Where(part => !hidden.Contains(part)))
+                : model.Selected;
+        return model.WithEdit(new ModelEdit(next.Edits, hidden, selected, placements) { Tree = next });
     }
 }
