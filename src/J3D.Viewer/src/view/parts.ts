@@ -57,6 +57,8 @@ export interface ScreenSpace {
   project(world: Vector3): { x: number; y: number; depth: number };
   /** How far in front of the camera the surface under the pointer is. */
   hitDepth: number;
+  /** How many times the pick radii to reach: more for a finger than for a mouse (M19, D242). */
+  reach?: number;
 }
 
 /** Highlighted parts drawn again on top of themselves, in the accent colour. */
@@ -443,7 +445,7 @@ export class MeshParts implements ModelParts {
       const world = new Vector3().fromBufferAttribute(positions, corner).applyMatrix4(toWorld);
       const onScreen = screen.project(world);
       const distance = Math.hypot(onScreen.x - screen.x, onScreen.y - screen.y);
-      if (distance <= VertexPickRadius && (!best || distance < best.distance)) {
+      if (distance <= VertexPickRadius * (screen.reach ?? 1) && (!best || distance < best.distance)) {
         best = { point: world, distance };
       }
     }

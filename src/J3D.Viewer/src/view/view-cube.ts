@@ -21,6 +21,9 @@ import { ViewRegions, type ViewRegion } from './view-regions';
 export const ViewCubeSize = 110;
 export const ViewCubeMargin = 12;
 
+/** The cube's size in the compact layout, on a phone or a tablet held upright (M19, D240). */
+export const CompactViewCubeSize = 80;
+
 /** Width of the edge and corner bands, on a cube 2 units across. */
 const Band = 0.32;
 /** Gap left between neighbouring regions, so the cube reads as 26 clickable parts. */
@@ -58,6 +61,8 @@ export class ViewCube {
   private readonly labels: Mesh<PlaneGeometry, MeshBasicMaterial>[] = [];
   private readonly raycaster = new Raycaster();
   private hovered: Mesh<BoxGeometry, MeshBasicMaterial> | undefined;
+  /** The square's size in CSS pixels: smaller in the compact layout (M19, D240). */
+  size = ViewCubeSize;
 
   constructor() {
     for (const region of ViewRegions) {
@@ -80,7 +85,7 @@ export class ViewCube {
 
   /** The cube's square in canvas CSS pixels, measured from the canvas's top-left corner. */
   bounds(canvasWidth: number): { left: number; top: number; size: number } {
-    return { left: canvasWidth - ViewCubeMargin - ViewCubeSize, top: ViewCubeMargin, size: ViewCubeSize };
+    return { left: canvasWidth - ViewCubeMargin - this.size, top: ViewCubeMargin, size: this.size };
   }
 
   /** The region under a pointer, if any. */

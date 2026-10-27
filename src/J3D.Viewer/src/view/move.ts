@@ -34,6 +34,9 @@ export const RotationSnapDegrees = 15;
 /** How long the origin frames' axes are on screen (D150), in CSS pixels. */
 export const OriginFrameLength = 60;
 
+/** The triad's size for a finger, against 1 for a mouse (M19, D242): its handles grow with it. */
+export const TouchTriadSize = 1.5;
+
 /** What the Move tool needs of the viewer. */
 export interface MoveHost {
   camera(): Camera;
@@ -77,6 +80,11 @@ export class MoveTool {
     this.controls.addEventListener('change', () => host.requestRender());
     this.controls.addEventListener('dragging-changed', (event) => this.onDragging(event.value as boolean));
     this.controls.addEventListener('objectChange', () => this.onObjectChange());
+  }
+
+  /** A finger gets a larger triad, its handles easier to grab (M19, D242). */
+  setTouch(touch: boolean): void {
+    this.controls.size = touch ? TouchTriadSize : 1;
   }
 
   get isActive(): boolean {

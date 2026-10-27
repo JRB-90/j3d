@@ -21,6 +21,7 @@ public static class ClientServices
                 options.SnackbarConfiguration.VisibleStateDuration = 6000;
             })
             .AddScoped<ViewerSession>()
-            .AddScoped<SceneState>();
+            .AddScoped<SceneState>()
+            .AddScoped<ShellState>();
     }
 }

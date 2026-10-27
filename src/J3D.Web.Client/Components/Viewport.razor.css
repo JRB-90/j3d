@@ -63,6 +63,55 @@
             fill: currentColor;
         }
 
+    /* The compact layout's 80 px cube (M19, D240): Home and the arrows move in with it. */
+    @media (max-width: 899.98px), (max-height: 499.98px) {
+        .j3d-viewport ::deep .j3d-home-button {
+            right: 72px;
+        }
+
+        .j3d-viewport ::deep .j3d-next-view {
+            right: 104px;
+        }
+
+        .j3d-viewport ::deep .j3d-previous-view {
+            right: 134px;
+        }
+    }
+
+    /* A finger's 48 px (D239, D240), a 20 px icon in each. */
+    @media (pointer: coarse) {
+        .j3d-viewport ::deep .j3d-home-button,
+        .j3d-viewport ::deep .j3d-view-button {
+            top: 4px;
+            right: 102px;
+            width: 48px;
+            height: 48px;
+            padding: 14px;
+        }
+
+        .j3d-viewport ::deep .j3d-next-view {
+            right: 150px;
+        }
+
+        .j3d-viewport ::deep .j3d-previous-view {
+            right: 198px;
+        }
+    }
+
+    @media (pointer: coarse) and (max-width: 899.98px), (pointer: coarse) and (max-height: 499.98px) {
+        .j3d-viewport ::deep .j3d-home-button {
+            right: 76px;
+        }
+
+        .j3d-viewport ::deep .j3d-next-view {
+            right: 124px;
+        }
+
+        .j3d-viewport ::deep .j3d-previous-view {
+            right: 172px;
+        }
+    }
+
     /* Drag-and-drop overlay, shown while files are dragged over the viewport. */
     .j3d-viewport ::deep .j3d-drop-overlay {
         position: absolute;

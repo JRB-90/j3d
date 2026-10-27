@@ -16,3 +16,10 @@
     padding: 0 8px;
     font-size: 0.75rem;
 }
+
+/* In the compact layout the projection is in ⋮ (M19, D240), leaving the corner to the 80 px cube. */
+@media (max-width: 899.98px), (max-height: 499.98px) {
+    .j3d-view-controls {
+        display: none;
+    }
+}

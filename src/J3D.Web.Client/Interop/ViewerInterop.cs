@@ -90,6 +90,9 @@ public sealed class ViewerInterop : IAsyncDisposable
     /// <summary>What a click selects: models, objects or features (M12, D146).</summary>
     public ValueTask SetSelectionModeAsync(SelectMode mode) => _viewer.InvokeVoidAsync("setSelectionMode", mode);
 
+    /// <summary>Whether taps and clicks add to the selection or take from it, as Ctrl+click does: the Add toggle (M19, D237).</summary>
+    public ValueTask SetAddModeAsync(bool on) => _viewer.InvokeVoidAsync("setAddMode", on);
+
     /// <summary>Drops the features selected in Feature mode, which the viewer holds (D146).</summary>
     public ValueTask ClearFeaturesAsync() => _viewer.InvokeVoidAsync("clearFeatures");
 

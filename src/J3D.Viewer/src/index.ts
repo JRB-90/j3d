@@ -105,6 +105,8 @@ export interface ViewerHandle {
   setMeasureMode(active: boolean, fromContext?: boolean): void;
   /** What a click selects: models, objects or features (M12, D146). */
   setSelectionMode(mode: SelectionMode): void;
+  /** Whether taps and clicks add to the selection or take from it, as Ctrl+click does: the Add toggle (M19, D237). */
+  setAddMode(on: boolean): void;
   /** Drops the selected features (Esc, D146). */
   clearFeatures(): void;
   /** Selects the features a report's keys name (M17, D219): an undone or redone selection. */
@@ -345,6 +347,9 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
     setSelectionMode(mode) {
       view?.setSelectionMode(mode);
     },
+    setAddMode(on) {
+      view?.setAddMode(on);
+    },
     clearFeatures() {
       view?.clearFeatures();
     },
@@ -534,6 +539,7 @@ export async function copyText(text: string): Promise<void> {
 }
 
 export { revealTreeRow } from './tree-rows';
+export { watchLayout } from './shell';
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
