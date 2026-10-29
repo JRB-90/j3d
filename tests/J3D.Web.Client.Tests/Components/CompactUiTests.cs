@@ -71,6 +71,20 @@ public sealed class CompactUiTests : BunitTestBase
     }
 
     [Fact]
+    public async Task With_Add_on_a_pick_in_the_view_adds_even_before_the_viewer_hears_of_it()
+    {
+        await StartViewerAsync();
+        await Renderer.Dispatcher.InvokeAsync(() =>
+        {
+            Scene.ToggleAddMode();
+            Scene.Pick(Id, 1, additive: false);
+            Scene.Pick(Id, 3, additive: false);
+        });
+
+        Assert.Equal([1, 3], Scene.Find(Id)!.Selected);
+    }
+
+    [Fact]
     public async Task Rows_drag_with_a_mouse_but_not_by_touch()
     {
         await StartViewerAsync();
