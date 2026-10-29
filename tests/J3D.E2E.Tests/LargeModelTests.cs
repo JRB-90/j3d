@@ -18,7 +18,9 @@ namespace J3D.E2E.Tests;
 /// also the generated plant (<c>plant-10000</c>, D161) and the real SO-101 arm (<c>so101</c>, D160).
 /// Since M16 (D201) those two assemblies are edited as well: selecting in each mode, typed moves,
 /// pasting, deleting and undoing, Expand all, the edited STEP and BREP, and a restore after a reload,
-/// each timed but only its outcome asserted.
+/// each timed but only its outcome asserted. Since M20 (D244) iteration 4 too: a click's undo and redo as
+/// selection steps, Previous and Next view, copying between the model and a small one each way, and the
+/// drawer and the tree at a phone's size.
 /// </summary>
 public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 {
@@ -278,10 +280,81 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
         var found = await Page.EvaluateAsync<int[]>(SubAssembly, id);
         var (root, node, count) = (found[0], found[1], found[2]);
         var (editing, moved) = await EditSubAssemblyAsync(id, root, node, count, parts);
+        var iteration4 = await Iteration4Async(id, fileName, root, node, count, parts);
         var (expanding, expanded) = await ExpandAllAsync(id, root, parts);
         var exporting = await ExportEditedAsync(expanded);
         var restoring = await RestoreAsync(id, node, moved, expanded);
-        return string.Join("; ", selecting, editing, expanding, exporting, restoring);
+        return string.Join("; ", selecting, editing, iteration4, expanding, exporting, restoring);
+    }
+
+    /// <summary>
+    /// Iteration 4 (M20, D244): a click in the view and its undo and redo, as selection steps (D209); the
+    /// top view then Previous and Next view (D221); the sub-assembly copied into a small CAD model
+    /// (<c>assembly.step</c>) and that model's pin into this one, each undone and redone where it leaves
+    /// the large model as it was (D210); and, at a phone's size, the drawer opened and a tap on the
+    /// sub-assembly's row, which closes it (D238). The small model is removed and the window's size put back.
+    /// </summary>
+    private async Task<string> Iteration4Async(string id, string fileName, int root, int node, int count, int parts)
+    {
+        await Page.Keyboard.PressAsync("Escape");
+        await Page.Keyboard.PressAsync("Escape");
+        var part = (await Page.EvaluateAsync<JsonElement>(PartInView, id)).Deserialize<PartPoint>(Json)!;
+        object[] one = [id, 1];
+        object[] none = [id, 0];
+        var click = await TimedAsync(() => Page.Mouse.ClickAsync((float)part.X, (float)part.Y), AllSelected, one);
+        var undoClick = await TimedAsync(() => Page.Keyboard.PressAsync("Control+z"), AllSelected, none);
+        var redoClick = await TimedAsync(() => Page.Keyboard.PressAsync("Control+y"), AllSelected, one);
+
+        var top = (await ViewCubePointAsync("top"))!;
+        await Page.Mouse.ClickAsync((float)top.X, (float)top.Y);
+        await WaitForCameraRestAsync();
+        const string Back = "() => { const h = window.__j3dTest.viewHistory(); return !window.__j3dTest.camera().moving && h.canGoForward; }";
+        const string Forward = "() => { const h = window.__j3dTest.viewHistory(); return !window.__j3dTest.camera().moving && !h.canGoForward; }";
+        var previous = await TimedAsync(() => Page.Keyboard.PressAsync("["), Back);
+        var next = await TimedAsync(() => Page.Keyboard.PressAsync("]"), Forward);
+
+        // A small CAD model to copy into and out of.
+        await ImportAsync("assembly.step");
+        await Page.WaitForFunctionAsync("() => window.__j3dTest.models().length === 2 && window.__j3dTest.models().every(m => m.status === 'loaded')", null, new() { Timeout = Slow });
+        var small = (await ModelsAsync()).Single(model => model.Id != id).Id;
+        var smallItem = Page.Locator("[data-testid=model-item]").Filter(new() { HasText = "assembly.step" });
+        await smallItem.GetByTestId("model-tree-toggle").ClickAsync();
+        var smallRoot = Page.Locator($"[data-tree-node=\"{small}:0\"]");
+        await smallRoot.GetByTestId("tree-node-toggle").ClickAsync();
+
+        var row = await TreeRowAsync(id, root, node, fileName);
+        await row.ClickAsync();
+        await Page.Keyboard.PressAsync("Control+c");
+        await smallRoot.Locator(".j3d-tree-node-name").ClickAsync();
+        object[] into = [small, 3 + count];
+        object[] back = [small, 3];
+        var copyOut = await TimedAsync(() => Page.Keyboard.PressAsync("Control+v"), PartsAre, into);
+        var undoOut = await TimedAsync(() => Page.Keyboard.PressAsync("Control+z"), PartsAre, back);
+        var redoOut = await TimedAsync(() => Page.Keyboard.PressAsync("Control+y"), PartsAre, into);
+
+        await Page.Locator($"[data-tree-node=\"{small}:3\"] .j3d-tree-node-name").ClickAsync(); // the pin
+        await Page.Keyboard.PressAsync("Control+c");
+        await (await TreeRowAsync(id, root, root, fileName)).ClickAsync();
+        var copyIn = await TimedAsync(() => Page.Keyboard.PressAsync("Control+v"), PartsAre, new object[] { id, parts + 1 });
+        var undoIn = await TimedAsync(() => Page.Keyboard.PressAsync("Control+z"), PartsAre, new object[] { id, parts });
+        await RemoveAsync(small);
+        await Page.WaitForFunctionAsync("() => window.__j3dTest.models().length === 1");
+
+        // The compact layout at a phone's size (D234, D238), with the tree as it was left open.
+        var size = Page.ViewportSize!;
+        await Page.SetViewportSizeAsync(412, 915);
+        var drawer = Page.GetByTestId("drawer");
+        await Expect(drawer).ToBeHiddenAsync(new() { Timeout = Slow });
+        const string Shown = "() => getComputedStyle(document.querySelector('[data-testid=drawer]')).visibility === 'visible'";
+        var open = await TimedAsync(() => Page.GetByTestId("drawer-button").ClickAsync(), Shown);
+        row = await TreeRowAsync(id, root, node, fileName);
+        var tap = await TimedAsync(() => row.ClickAsync(), "([id, parts]) => window.__j3dTest.partState(id).selected.length === parts && getComputedStyle(document.querySelector('[data-testid=drawer]')).visibility === 'hidden'", new object[] { id, count });
+        await Page.SetViewportSizeAsync(size.Width, size.Height);
+        await Page.Keyboard.PressAsync("Escape");
+
+        return $"a click in the view {click}, its undo {undoClick} and redo {redoClick}; Previous view {previous}, Next view {next}; " +
+            $"copying it into assembly.step {copyOut}, its undo {undoOut} and redo {redoOut}; copying that model's pin in {copyIn}, its undo {undoIn}; " +
+            $"at 412 px the drawer opening {open}, a tap on {count} parts' row closing it {tap}";
     }
 
     /// <summary>
@@ -444,14 +517,15 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
     /// A row's name in the model's tree, with the tree open, scrolled to its top (rows off screen aren't
     /// drawn, D198) and the root opened if the row is under it.
     /// </summary>
-    private async Task<ILocator> TreeRowAsync(string id, int root, int node)
+    private async Task<ILocator> TreeRowAsync(string id, int root, int node, string? fileName = null)
     {
-        if (await Page.GetByTestId("model-tree").CountAsync() == 0)
+        var item = fileName is null ? Page.Locator("[data-testid=model-item]").First : Page.Locator("[data-testid=model-item]").Filter(new() { HasText = fileName });
+        if (await item.GetByTestId("model-tree").CountAsync() == 0)
         {
-            await Page.GetByTestId("model-tree-toggle").ClickAsync();
+            await item.GetByTestId("model-tree-toggle").ClickAsync();
         }
 
-        await Page.GetByTestId("model-tree").EvaluateAsync("tree => tree.scrollIntoView({ block: 'start' })");
+        await item.GetByTestId("model-tree").EvaluateAsync("tree => tree.scrollIntoView({ block: 'start' })");
         var rootRow = Page.Locator($"[data-tree-node=\"{id}:{root}\"]");
         if (node != root && await rootRow.GetAttributeAsync("aria-expanded") == "false")
         {
