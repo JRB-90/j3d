@@ -1350,6 +1350,28 @@ Branch `feature/m20-hardening`, from `main` at `c676f64`, with M19's close-out i
 - **Measuring (D244):** by hand first, then in `LargeModelTests`; fixes for anything over the line.
 - **The phone (D245):** a ladder of sizes the owner imports on their phone; the README says what fits. **Result (2026-10-29):** all six loaded and worked on the owner's Android phone in Chrome: `plant-10000` (1.8 MB), `so101` (20 MB), and 25, 50, 100 and 200 MB of unique parts.
 - **The pivot (D248):** a turn turns about the model under the screen centre.
+
+**As built:**
+
+- **Measured** (D244; the built-in browser at 1,440 × 900 on the development machine's GPU, with `plant-10000.step` and `so101.step` open; each step timed from its input until its result was in the page, with the longest main-thread task in the second after it in brackets. The pane was visible but the app window unfocused, so it drew about 3 frames a second, which inflated the times that wait on frames and none of the tasks):
+
+  | | |
+  |---|---|
+  | a click on a plant part, its undo and redo (selection steps, D209), the tree closed / 57 rows open | 175 / 26 / 33 ms (none over 50) / 24 / 13 / 14 ms (none) |
+  | `1` (Model mode, all 10,122 parts selected), its undo and redo | 319 / 19 / 202 ms (none over 50) |
+  | a click on the plant's root in the tree (10,122 parts), its undo and redo | 79 (78) / 21 / 60 ms (60) |
+  | Previous view and Next view, to rest | 1.8 s each, the 0.25 s transition at the pane's 3 frames a second (no task over 50 ms) |
+  | copying the plant's Line 1 (241 parts) into `so101`, its undo, redo, undo | 237 ms (94) / 41 / 41 / 36 ms (none) |
+  | moving a 3-part assembly of `so101` into the plant (Cut, Paste), undo, redo | 471 ms (69) / 83 / 63 ms |
+  | copying all of `so101` (270 parts) into the plant, its undo and redo | 8.3 s, "Bringing 270 parts…" within 29 ms (longest task 101) / 62 / 52 ms |
+  | at 375 × 812 with touch (D234): opening the drawer, a tap on Line 1's row (241 parts, closing it), opening the sheet, opening ⋮ | 12 / 308 / 4 / 48 ms (none over 50) |
+
+  Nothing crossed D63's line without feedback, so nothing needed splitting. A key pressed while ⋮ was closing did nothing, as keys do while a menu is open (D164).
+- **The phone** (D245, R29): all six of the ladder loaded and worked on the owner's Android phone in Chrome (2026-10-29), up to 200 MB of unique parts; the README says so, and that nothing larger was tried there.
+- **The pivot** (D248, §6.3): the viewer's part input re-pivots when a turn's press first moves past a click's or a tap's tolerance (a right-drag, or one finger alone): `pivotAtCentre` picks under the canvas's centre and calls camera-controls' `setOrbitPoint`, which keeps the view; once a press, so a tap never changes the target. `NavigationTests` checks it on the bracket from Home after a pan (the target moves from the box's centre, z = 20, onto the top plate), and that the pivot stays at the view's centre.
+- **Arrivals** (D246): `StoreOps.pruneArrivals` deletes a model's `arrival-*` files its restored edits don't name, asked for by the store's `loaded` handler for each restored model the store holds; the store's request queue runs it before any later arrival is written. Vitest (`store-ops.test.ts`) and an E2E test (`TransferTests`: a copy undone, then a reload, leaves no file) cover it.
+- **`LargeModelTests`** (D244): iteration 4 joins `EditAsync`: a click and its undo and redo, the top view then Previous and Next view, the sub-assembly copied into `assembly.step` (undone and redone) and that model's pin copied in (undone), and at 412 px the drawer opened and a row tapped, each timed but only its outcome asserted. Headless on this machine, with software drawing at about a frame a second, every step passed. The first CI dispatch (run 40956835595) failed in Firefox only: the turn to the top view outlasted `WaitForCameraRestAsync`'s 30 s at CI's seconds a frame, so that step now waits with the large tests' own 5 minutes.
+- **Docs:** README (the pivot, the phone's sizes, a copy's time between models, arrivals deleted on the next load), PRODUCT.md (the pivot). `THIRD-PARTY-NOTICES.md` is unchanged: nothing new ships.
 - **Arrivals (D246):** files a restored model's edits no longer use are deleted on restore.
 - The README (controls, touch, between models, limits), PRODUCT.md, DESIGN.md, `docs/development.md` and `THIRD-PARTY-NOTICES.md` (if anything new ships) brought up to date; a CI dispatch with large fixtures; Firefox in CI (D247).
 - **Exit:** every iteration 4 criterion in §1 is ticked.
