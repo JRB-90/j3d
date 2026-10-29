@@ -221,6 +221,9 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
       if (restored && !restored.edits && store.editsOf(summary.id)) {
         store.forgetEdits(summary.id); // they no longer fit it (R25): it's kept as imported
       }
+      if (restored) {
+        store.pruneArrivals(summary.id, restored.edits?.arrivals?.map(({ file }) => file) ?? []); // D246
+      }
       const sources = restored ? undefined : models.sourcesOf(summary.id);
       if (sources) {
         void store.save(summary, sources).then((outcome) => {

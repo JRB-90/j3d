@@ -242,6 +242,18 @@ export class ModelStore {
     }
   }
 
+  /**
+   * Deletes the arrival files a restored model's edits don't name (M20, D246): an undone move or copy
+   * left them, and with the history gone nothing can use them again.
+   */
+  pruneArrivals(id: ModelId, keep: readonly string[]): void {
+    if (this.status === 'kept' && this.complete.has(id)) {
+      this.request({ type: 'pruneArrivals', id, keep: [...keep] }).catch((error: unknown) =>
+        console.warn(`J3D: unused arrivals in model ${id} couldn't be deleted.`, error),
+      );
+    }
+  }
+
   /** A kept arrival's file (M18), for a model coming back. */
   async readArrival(id: ModelId, name: string): Promise<Blob> {
     return this.request<Blob>({ type: 'readArrival', id, name });

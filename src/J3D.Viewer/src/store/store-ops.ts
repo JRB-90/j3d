@@ -31,6 +31,8 @@ export const ManifestNames = ['manifest-0.json', 'manifest-1.json'] as const;
 export const MetaName = 'meta.json';
 /** A model's edits and moves (M16, D205), written to two files in turn as the manifest is. */
 export const EditsNames = ['edits-0.json', 'edits-1.json'] as const;
+/** How an arrival's file is named (M18): `arrival-<uuid>.step` or `.glb`. */
+export const ArrivalPrefix = 'arrival-';
 /** Files are copied this many bytes at a time, so none is ever whole in memory. */
 export const ChunkBytes = 4 * 1024 * 1024;
 
@@ -216,6 +218,25 @@ export class StoreOps {
     return (await folder.getFileHandle(name)).getFile();
   }
 
+  /**
+   * Deletes a model's arrival files that aren't in `keep` (M20, D246): once a model is restored, an
+   * arrival its kept edits don't name can't come back, since the undo history isn't kept. Returns how
+   * many went.
+   */
+  async pruneArrivals(id: ModelId, keep: readonly string[]): Promise<number> {
+    const folder = await (await this.models()).getDirectoryHandle(id);
+    const unused: string[] = [];
+    for await (const name of folder.keys()) {
+      if (name.startsWith(ArrivalPrefix) && !keep.includes(name)) {
+        unused.push(name);
+      }
+    }
+    for (const name of unused) {
+      await removeIfPresent(folder, name);
+    }
+    return unused.length;
+  }
+
   async delete(id: ModelId): Promise<void> {
     await removeIfPresent(await this.models(), id);
   }
@@ -312,6 +333,8 @@ function run(store: StoreOps, request: StoreRequest): Promise<unknown> {
       return store.writeArrival(request.id, request.name, request.file);
     case 'readArrival':
       return store.readArrival(request.id, request.name);
+    case 'pruneArrivals':
+      return store.pruneArrivals(request.id, request.keep);
   }
 }
 
