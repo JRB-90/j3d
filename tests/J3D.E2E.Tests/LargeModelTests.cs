@@ -307,7 +307,8 @@ public sealed class LargeModelTests(J3DAppFixture app) : ViewerPageTest(app)
 
         var top = (await ViewCubePointAsync("top"))!;
         await Page.Mouse.ClickAsync((float)top.X, (float)top.Y);
-        await WaitForCameraRestAsync();
+        // CI's software drawing of the plant takes seconds a frame, past WaitForCameraRestAsync's 30 s (D201).
+        await Page.WaitForFunctionAsync("() => !window.__j3dTest.camera().moving", null, new() { Timeout = Slow, PollingInterval = 100 });
         const string Back = "() => { const h = window.__j3dTest.viewHistory(); return !window.__j3dTest.camera().moving && h.canGoForward; }";
         const string Forward = "() => { const h = window.__j3dTest.viewHistory(); return !window.__j3dTest.camera().moving && !h.canGoForward; }";
         var previous = await TimedAsync(() => Page.Keyboard.PressAsync("["), Back);
