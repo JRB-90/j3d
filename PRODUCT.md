@@ -56,8 +56,8 @@ machine, large-assembly scale, and arranging assemblies and writing them back.
   - measures from a reference;
   - moves objects with the triad or by typing values;
   - exports the scene or the selection.
-- **Navigation:** left-drag or middle-drag pans, right-drag rotates (turntable, Z stays up), and the wheel zooms toward
-  the pointer. The view is orthographic by default. A view cube (top right) gives 26 standard views, and **Home** gives
+- **Navigation:** left-drag or middle-drag pans, right-drag rotates (turntable, Z stays up, about the model in the
+  middle of the view), and the wheel zooms toward the pointer. The view is orthographic by default. A view cube (top right) gives 26 standard views, and **Home** gives
   an isometric view with everything fitted. Most commands also have single-key shortcuts (`F`, `H`, `I`, `M`, `W`,
   `E`, `O`, `1`–`3`, `Esc`, `Ctrl+Z`/`Ctrl+Y`).
 - **Sessions:** imported files are kept in the browser's private storage (OPFS) and imported again on the next visit,

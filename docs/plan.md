@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). Iteration 3 complete (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) merged** (D165–D171), then a **clarity pass merged** (D172–D179); **M14 (assembly editing) merged** (D180–D187); **M15 (exporting edits, and Expand) merged** (D188–D197); **M16 (hardening) merged** (D198–D205, R27). **Iteration 4 under way** (§1, D206–D217): **M17 (Rotate, and undoing selection and the camera) merged** (D218–D224); **M18 (moving and copying between models) merged** (D225–D233); **M19 (phone and tablet layouts) merged** (D234–D243); **M20 (hardening) in progress** (D244–D247). Iteration 5 (a reusable library, D214) is planned at its start · **Last updated:** 2026-10-27
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). Iteration 3 complete (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) merged** (D165–D171), then a **clarity pass merged** (D172–D179); **M14 (assembly editing) merged** (D180–D187); **M15 (exporting edits, and Expand) merged** (D188–D197); **M16 (hardening) merged** (D198–D205, R27). **Iteration 4 under way** (§1, D206–D217): **M17 (Rotate, and undoing selection and the camera) merged** (D218–D224); **M18 (moving and copying between models) merged** (D225–D233); **M19 (phone and tablet layouts) merged** (D234–D243); **M20 (hardening) in progress** (D244–D248). Iteration 5 (a reusable library, D214) is planned at its start · **Last updated:** 2026-10-27
 
 ---
 
@@ -210,7 +210,7 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D13 | Display | Shaded faces, BREP edge overlay, STEP/IGES colours, assembly tree | Needs XCAF symbols in the build. |
 | D14 | Tree interaction | **Display only**; delete is always whole-model | **Superseded by D144** (iteration 3): placements and structure become editable. |
 | D15 | UI library | **MudBlazor** (9.x), dark-only theme, system font stack | |
-| D16 | Mouse | **Left = pan, middle = pan, right = rotate, wheel = zoom**; touch supported | Custom mapping: not a Three.js, SolidWorks or Fusion preset. **Amended by D152:** a right click that doesn't drag opens a context menu. |
+| D16 | Mouse | **Left = pan, middle = pan, right = rotate, wheel = zoom**; touch supported | Custom mapping: not a Three.js, SolidWorks or Fusion preset. **Amended by D152:** a right click that doesn't drag opens a context menu. **Amended by D248 (M20):** a turn turns about the model under the screen centre. |
 | D17 | Rotation | **Turntable**, fixed up axis | |
 | D18 | Up axis | **Z-up** | glTF (Y-up by spec) is rotated on import. |
 | D19 | Camera extras | Auto-fit on import, Fit all (button + `F`), **ortho default** + toggle | No zoom-to-cursor. **Amended by D74:** zoom-to-cursor in iteration 2. |
@@ -442,6 +442,7 @@ Decided with the project owner on 2026-10-13 (D1–D27 in the first Q&A, D28–D
 | D245 | What fits on a phone (M20, R29, R2) | **A ladder the owner tries**: `plant-10000` (1.8 MB, 10,122 parts), `so101` (20 MB), and generated STEPs of unique parts at 25, 50, 100 and 200 MB, each imported on the owner's Android phone in Chrome over `adb reverse` (D241); the owner reports which load, in how long, and which fail; failures should be the clean `OutOfMemory` (R2). The README states what fits | Proposed as recommended. Chosen over also warning before large imports on low-memory devices (a threshold guessed from one phone), and over the existing files only. |
 | D246 | Arrivals left after an undo (M20, D230, M18) | **Cleaned up on restore**: when a model is restored, arrival files its kept edits no longer use are deleted, since the undo history doesn't survive a reload (assumption 11) and nothing can bring them back. The README's limit goes | Proposed as recommended. Chosen over leaving it documented, and over deleting each as it leaves the history (undo and redo bookkeeping in .NET and the store). |
 | D247 | Firefox for M20 (D216) | **Left to CI**, as M19: Chromium locally, Firefox in CI on the PR; Docker isn't started | Proposed as recommended. Chosen over the Firefox suite in Docker locally too. |
+| D248 | What a turn turns about (M20, D16, D74) | **The model under the screen centre**: when a turn starts (a right-drag, or one finger, once it has moved past a click's or a tap's tolerance), the camera's target moves to the model's surface under the centre of the view, the view staying where it is (camera-controls' `setOrbitPoint`); with nothing under the centre it stays put. Still turntable, Z up | Found in the owner's pass on their phone (M20): after a two-finger pan and pinch the turn seemed off-centre, because panning and zooming toward the pointer (D74) leave the target at its old depth, in front of or behind the part, which then swings round. The same with a mouse. Proposed as recommended. Chosen over the point under the finger or pointer where the turn starts, and over leaving it. |
 
 ---
 
@@ -1343,11 +1344,12 @@ Branch `feature/m19-phone-tablet`, from `main` at `342f0c0`, with M18's close-ou
 
 ### M20 — Hardening
 
-Branch `feature/m20-hardening`, from `main` at `c676f64`, with M19's close-out in its first commit. Decided at its start: D244–D247.
+Branch `feature/m20-hardening`, from `main` at `c676f64`, with M19's close-out in its first commit. Decided at its start: D244–D247; then D248 (the turn's pivot), from the owner's phone pass.
 
 - The large generated assembly and the real one through what iteration 4 added: undoing selections, the view history, moving and copying between models, and the layouts in phone emulation, each timed, and whatever crosses a line fixed (D63's method); the large files tried on the owner's phone (R29).
 - **Measuring (D244):** by hand first, then in `LargeModelTests`; fixes for anything over the line.
-- **The phone (D245):** a ladder of sizes the owner imports on their phone; the README says what fits.
+- **The phone (D245):** a ladder of sizes the owner imports on their phone; the README says what fits. **Result (2026-10-29):** all six loaded and worked on the owner's Android phone in Chrome: `plant-10000` (1.8 MB), `so101` (20 MB), and 25, 50, 100 and 200 MB of unique parts.
+- **The pivot (D248):** a turn turns about the model under the screen centre.
 - **Arrivals (D246):** files a restored model's edits no longer use are deleted on restore.
 - The README (controls, touch, between models, limits), PRODUCT.md, DESIGN.md, `docs/development.md` and `THIRD-PARTY-NOTICES.md` (if anything new ships) brought up to date; a CI dispatch with large fixtures; Firefox in CI (D247).
 - **Exit:** every iteration 4 criterion in §1 is ticked.

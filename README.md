@@ -113,7 +113,7 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 
 | Action | Mouse | Touch | Keys and buttons |
 |---|---|---|---|
-| Rotate (turntable, Z stays up) | Right-drag | One finger | Click a face, edge or corner of the **view cube** (top right) for one of 26 standard views |
+| Rotate (turntable, Z stays up, about the model in the middle of the view) | Right-drag | One finger | Click a face, edge or corner of the **view cube** (top right) for one of 26 standard views |
 | Pan | Left-drag or middle-drag | Two-finger drag | |
 | Zoom | Wheel (towards the pointer) | Pinch | |
 | Fit everything visible in view | | | **Fit all** in the toolbar, or `F` |
@@ -244,7 +244,9 @@ adb reverse tcp:5274 tcp:5274
 ```
 
 Then open `http://localhost:5274` in Chrome, Edge or Firefox on the phone. `chrome://inspect` on the PC shows the
-phone's page for debugging.
+phone's page for debugging. On an Android phone (tested in Chrome), STEP files of up to at least 200 MB of unique
+parts load and work, as do the 10,000-part generated plant and the real SO-101 arm (20 MB). Larger files weren't
+tried on a phone.
 
 Building, testing, rebuilding the OCCT WebAssembly and the CI are covered in [docs/development.md](docs/development.md).
 The design, decisions and milestones are in [docs/plan.md](docs/plan.md).
