@@ -89,8 +89,9 @@ machine, large-assembly scale, and arranging assemblies and writing them back.
   (D234–D243), the compact layout below 900 px wide or 500 px tall, and a finger's sizes, long press and Add on any
   touch screen.
 
-**Planned (iteration 5):** the reusable library (D214). Then the owner's round of testing and refinement, after which
-the project is complete (D215).
+**Planned (iteration 5):** the reusable library (D214): `@j3d/occt`, `@j3d/viewer` and `J3D.Blazor`, as files on this
+repo's GitHub Releases (D249–D263). The app itself doesn't change. Then the owner's round of testing and refinement,
+after which the project is complete (D215).
 
 **Constraints:**
 
