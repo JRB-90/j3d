@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). Iteration 3 complete (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) merged** (D165–D171), then a **clarity pass merged** (D172–D179); **M14 (assembly editing) merged** (D180–D187); **M15 (exporting edits, and Expand) merged** (D188–D197); **M16 (hardening) merged** (D198–D205, R27). **Iteration 4 under way** (§1, D206–D217): **M17 (Rotate, and undoing selection and the camera) merged** (D218–D224); **M18 (moving and copying between models) merged** (D225–D233); **M19 (phone and tablet layouts) merged** (D234–D243); **M20 (hardening) in progress** (D244–D248). Iteration 5 (a reusable library, D214) is planned at its start · **Last updated:** 2026-10-27
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). Iteration 3 complete (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) merged** (D165–D171), then a **clarity pass merged** (D172–D179); **M14 (assembly editing) merged** (D180–D187); **M15 (exporting edits, and Expand) merged** (D188–D197); **M16 (hardening) merged** (D198–D205, R27). **Iteration 4 under way** (§1, D206–D217): **M17 (Rotate, and undoing selection and the camera) merged** (D218–D224); **M18 (moving and copying between models) merged** (D225–D233); **M19 (phone and tablet layouts) merged** (D234–D243); **M20 (hardening) merged** (D244–D248). Iteration 5 (a reusable library, D214) is planned at its start · **Last updated:** 2026-10-27
 
 ---
 
@@ -176,7 +176,7 @@ Edits still change placements and structure, never shapes (D144), and each can b
 
 **M20: hardening**
 
-- [ ] On the large generated assembly and the real one (D156), undoing selections, Previous and Next view, and moving and copying between models respond within D63's ~200 ms line or show their progress, and the large files load or fail cleanly on the owner's phone (R29).
+- [x] On the large generated assembly and the real one (D156), undoing selections, Previous and Next view, and moving and copying between models respond within D63's ~200 ms line or show their progress, and the large files load or fail cleanly on the owner's phone (R29).
 - [ ] Every criterion above is covered by tests that pass in CI (unit, bUnit, Vitest with real OCCT, Playwright in Chromium and Firefox, with phone and tablet emulation), and by the owner's manual pass in Chrome and Edge and on their Android phone (D64, D211).
 
 #### Out of scope for iteration 4
@@ -1342,7 +1342,7 @@ Branch `feature/m19-phone-tablet`, from `main` at `342f0c0`, with M18's close-ou
 - **Tests:** viewer Vitest 275; OCCT 47 (unchanged); client bUnit 287 (+15: `ShellStateTests` 5, `CompactUiTests` 10); host 7; E2E 133 (+26: `CompactLayoutTests` 9 in both browsers, the drawer, the sheet, the projection in ⋮ and the mouse's folds at six sizes; `TouchTests` 17 in Chromium's Pixel 7 emulation, the finger's folds at thirteen widths, a long press on a part and on a tree row, Add with a tap that moves 8 px, and a tablet on its side and upright). Locally: Chromium 130 passed, the large-file and both stress tests skipped. Firefox is left to CI.
 - **CI:** run 40515171313 on the PR was green: build and unit tests, and E2E in Chromium and Firefox (the touch tests skipped in Firefox). The owner tried it by hand on their Android phone on 2026-10-27, and M19's criterion is ticked.
 
-### M20 — Hardening
+### M20 — Hardening ✅ ([JRB-90/j3d#26](https://github.com/JRB-90/j3d/pull/26), squash-merged as `6dfd2ab`)
 
 Branch `feature/m20-hardening`, from `main` at `c676f64`, with M19's close-out in its first commit. Decided at its start: D244–D247; then D248 (the turn's pivot), from the owner's phone pass.
 
@@ -1372,6 +1372,8 @@ Branch `feature/m20-hardening`, from `main` at `c676f64`, with M19's close-out i
 - **Arrivals** (D246): `StoreOps.pruneArrivals` deletes a model's `arrival-*` files its restored edits don't name, asked for by the store's `loaded` handler for each restored model the store holds; the store's request queue runs it before any later arrival is written. Vitest (`store-ops.test.ts`) and an E2E test (`TransferTests`: a copy undone, then a reload, leaves no file) cover it.
 - **`LargeModelTests`** (D244): iteration 4 joins `EditAsync`: a click and its undo and redo, the top view then Previous and Next view, the sub-assembly copied into `assembly.step` (undone and redone) and that model's pin copied in (undone), and at 412 px the drawer opened and a row tapped, each timed but only its outcome asserted. Headless on this machine, with software drawing at about a frame a second, every step passed. The first CI dispatch (run 40956835595) failed in Firefox only: the turn to the top view outlasted `WaitForCameraRestAsync`'s 30 s at CI's seconds a frame, so that step now waits with the large tests' own 5 minutes.
 - **Docs:** README (the pivot, the phone's sizes, a copy's time between models, arrivals deleted on the next load), PRODUCT.md (the pivot). `THIRD-PARTY-NOTICES.md` is unchanged: nothing new ships.
+- **Add** (D237): a full local run, and the second large dispatch, failed `TouchTests` once each: a tap straight after turning Add on replaced the selection, the toolbar showing Add before the viewer had heard (the likely cause; it passed alone). `SceneState.Pick` now adds while Add is on, in Model and Object mode; Feature mode still depends on the viewer's `setAddMode`.
+- **CI:** the PR's run 40962407990 was green on its last commit. The large dispatches were on earlier commits: 40956835595 failed Firefox's camera wait (above); 40961160880 passed the large-file test in both browsers and failed only the Add test in Chromium, before that fix.
 - **Arrivals (D246):** files a restored model's edits no longer use are deleted on restore.
 - The README (controls, touch, between models, limits), PRODUCT.md, DESIGN.md, `docs/development.md` and `THIRD-PARTY-NOTICES.md` (if anything new ships) brought up to date; a CI dispatch with large fixtures; Firefox in CI (D247).
 - **Exit:** every iteration 4 criterion in §1 is ticked.
