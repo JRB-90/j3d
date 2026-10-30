@@ -18,10 +18,13 @@ import type { MeshExportFormat } from './view/mesh-export.js';
 import type { MoveFrame, MoveMode, MoveTarget } from './view/move.js';
 import { Viewer, type SelectionMode, type ViewerOptions } from './view/viewer.js';
 
-/** How an export ended (M9): the file saved, cancelled, or why it failed. Mirrors J3D.Web.Client/Interop/ExportOutcome.cs. */
+/** How an export ended (M9): the file saved, cancelled, or why it failed. Mirrors J3D.Blazor/Interop/ExportOutcome.cs. */
 export interface ExportOutcome {
+  /** The file saved. */
   fileName?: string;
+  /** The export was stopped. */
   cancelled?: boolean;
+  /** Why it failed. */
   error?: string;
 }
 
@@ -29,12 +32,13 @@ export interface ExportOutcome {
  * Expanded file parts' pieces (M15), each after its piece parent (-1: the part's new assembly), with
  * the file's name or "", and whether it draws something. Since M16 (D199) each part asked for comes
  * with the index of its pieces in `pieceSets`, sent once for the parts placing one definition (as a list
- * per part, the large plant's 840 took 145 ms for .NET to read). Mirrors J3D.Web.Client/Interop/ExpandOutcome.cs.
+ * per part, the large plant's 840 took 145 ms for .NET to read). Mirrors J3D.Blazor/Interop/ExpandOutcome.cs.
  */
 export interface ExpandOutcome {
   nodes?: number[];
   sets?: number[];
   pieceSets?: { name: string; parent: number; part: boolean }[][];
+  /** Why it failed. */
   error?: string;
 }
 
@@ -42,23 +46,29 @@ export interface ExpandOutcome {
  * Objects moved or copied to another model (M18, D225, D227): the arrival the caller's edit takes in, or
  * why there's none. `nodes` are the arrival's nodes after its own assembly, in tree order: each one's
  * arrival parent (0 for the objects themselves), its name, whether it draws, whether Expand would split
- * it (D190) and whether it was hidden (D229). Mirrors J3D.Web.Client/Interop/TransferOutcome.cs.
+ * it (D190) and whether it was hidden (D229). Mirrors J3D.Blazor/Interop/TransferOutcome.cs.
  */
 export interface TransferOutcome {
+  /** The arrival's file, kept with the target model. */
   file?: string;
+  /** How many objects it brought. */
   count?: number;
   nodes?: { parent: number; name: string; part: boolean; expandable: boolean; hidden: boolean }[];
   /** The target model isn't kept, or its storage was full: it has the objects this visit only. */
   notKept?: 'full' | 'failed';
+  /** Why it failed. */
   error?: string;
 }
 
-/** What the browser gives the viewer. Mirrors J3D.Web.Client/Interop/ViewerCapabilities.cs. */
+/** What the browser gives the viewer. Mirrors J3D.Blazor/Interop/ViewerCapabilities.cs. */
 export interface ViewerCapabilities {
+  /** The viewer can draw. Without it imports still run and nothing shows. */
   webGl2: boolean;
+  /** The page is cross-origin isolated, which lets a STEP or BREP export stop part-way. Without it a stopped export finishes in its worker and its result is dropped. */
   crossOriginIsolated: boolean;
 }
 
+/** What {@link createViewer} takes: the view's options, with keeping models and dropping files. */
 export interface CreateViewerOptions extends ViewerOptions {
   /**
    * Keeps models in the browser's private storage across visits (D82), in a folder named `name`, so that
@@ -72,6 +82,7 @@ export interface CreateViewerOptions extends ViewerOptions {
   onModelNotKept?: (id: ModelId, full: boolean) => void;
 }
 
+/** What {@link createViewer} gives: how a page drives the viewer. */
 export interface ViewerHandle {
   /** Imports files, each by its name, with any sidecars among them (D269). */
   importFiles(files: Iterable<File>): ModelSummary[];
@@ -83,6 +94,7 @@ export interface ViewerHandle {
   subscribe(listener: ModelManagerListener): () => void;
   /** Every model and how it stands. */
   models(): ModelEntry[];
+  /** What the browser gives the viewer. */
   capabilities(): ViewerCapabilities;
   /**
    * Cancels an import, deletes a loaded model or dismisses a failed one, and with it its kept files;
@@ -145,6 +157,7 @@ export interface ViewerHandle {
    * keeping the file with it: the caller then makes the edit, which arrives through `setStructure`.
    */
   transfer(sourceId: string, nodes: number[], targetId: string): Promise<TransferOutcome>;
+  /** Stops the viewer and its workers, and takes back what it added to the page. */
   dispose(): void;
 }
 
@@ -549,6 +562,7 @@ export function createViewerParts(host: HTMLElement, options: CreateViewerOption
   return { handle, models, view, store };
 }
 
+/** What this browser gives a viewer, with none created. */
 export function detectCapabilities(): ViewerCapabilities {
   const gl = document.createElement('canvas').getContext('webgl2');
   gl?.getExtension('WEBGL_lose_context')?.loseContext();

@@ -6,6 +6,8 @@ namespace J3D.Blazor;
 [JsonConverter(typeof(JsonStringEnumConverter<Projection>))]
 public enum Projection
 {
+    /// <summary>No perspective: parallel edges stay parallel.</summary>
     [JsonStringEnumMemberName("orthographic")] Orthographic,
+    /// <summary>Further things look smaller.</summary>
     [JsonStringEnumMemberName("perspective")] Perspective,
 }

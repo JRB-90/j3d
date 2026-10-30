@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.JSInterop;
 using static J3D.Blazor.Tests.TestModels;
 
 namespace J3D.Blazor.Tests;
@@ -113,6 +114,24 @@ public sealed class J3DViewerTests : BunitTestBase
         await cut.InvokeAsync(() => cut.Instance.Callbacks.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
 
         Assert.True(Session.IsReady);
+    }
+
+    [Fact]
+    public async Task The_page_hears_ready_once_the_session_can_use_the_viewer()
+    {
+        // The bridge reports from inside createViewer, so in a browser the report comes before the handle.
+        var browser = new SlowBrowser();
+        Services.AddSingleton<IJSRuntime>(browser);
+        bool? readyInHandler = null;
+        var cut = Render<J3DViewer>(parameters => parameters
+            .Add(viewer => viewer.OnReady, _ => readyInHandler = Session.IsReady));
+
+        await cut.InvokeAsync(() => cut.Instance.Callbacks.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
+        Assert.Null(readyInHandler);
+
+        await cut.InvokeAsync(browser.FinishCreating);
+
+        Assert.True(readyInHandler);
     }
 
     [Fact]
@@ -357,4 +376,28 @@ public sealed class J3DViewerTests : BunitTestBase
     ];
 
     private SceneState Scene => Services.GetRequiredService<SceneState>();
+
+    /// <summary>A browser whose <c>createViewer</c> answers only when told, so a test can put the viewer's report first.</summary>
+    private sealed class SlowBrowser : IJSRuntime, IJSObjectReference
+    {
+        private readonly TaskCompletionSource _created = new();
+
+        public void FinishCreating() => _created.SetResult();
+
+        public async ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
+        {
+            if (identifier == "createViewer")
+            {
+                await _created.Task;
+            }
+
+            object? answer = typeof(TValue) == typeof(StoredScene) ? StoredScene.Empty : this;
+            return answer is TValue value ? value : default!;
+        }
+
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args) =>
+            InvokeAsync<TValue>(identifier, args);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 }

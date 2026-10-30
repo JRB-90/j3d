@@ -10,6 +10,7 @@
 export const ImportFormat = { Step: 0, Iges: 1, Brep: 2 } as const;
 export type ImportFormat = (typeof ImportFormat)[keyof typeof ImportFormat];
 
+/** How an import ended, as the C++ facade numbers it. */
 export const ImportStatus = { Ok: 0, ParseFailed: 1, Empty: 2, OutOfMemory: 3, Internal: 4 } as const;
 export type ImportStatus = (typeof ImportStatus)[keyof typeof ImportStatus];
 
@@ -42,6 +43,7 @@ export interface J3DMeshDataHandle {
   delete(): void;
 }
 
+/** The C++ `J3DModel` as Embind binds it. `wrappers/j3d_facade.cpp` says what each call does. */
 export interface J3DModelHandle {
   allocateInput(byteLength: number): number;
   releaseInput(): void;
@@ -76,19 +78,27 @@ export interface J3DModelHandle {
   delete(): void;
 }
 
+/** The Emscripten module, as {@link OcctModel} needs it. */
 export interface OcctModule {
+  /** The bound model class. */
   J3DModel: new () => J3DModelHandle;
+  /** The module's memory. */
   wasmMemory: WebAssembly.Memory;
+  /** Set while importing, to hear OCCT's progress. */
   j3dProgress?: ((phase: number, fraction: number) => void) | undefined;
+  /** Set while exporting, polled to stop it. */
   j3dCancelled?: (() => boolean) | undefined;
 }
 
 /** Geometry of one prototype (a unique part + style) in the part's own coordinates. */
 export interface PrototypeMesh {
+  /** xyz per vertex. */
   positions: Float32Array;
+  /** xyz per vertex. */
   normals: Float32Array;
   /** Opaque triangles first, then translucent ones. */
   indices: Uint32Array;
+  /** How many of `indices` are opaque. */
   opaqueIndexCount: number;
   /** Linear RGBA per vertex; absent when the prototype has a single colour. */
   colors?: Float32Array;
@@ -104,7 +114,9 @@ export interface PrototypeMesh {
   vertices: Float32Array;
 }
 
+/** A node of a model's tree. */
 export interface SceneNode {
+  /** As the file names it. */
   name: string;
   /** Index into nodes, or -1 for a root. */
   parent: number;
@@ -119,28 +131,39 @@ export interface SceneNode {
   pieces?: number;
 }
 
+/** One placement of a prototype. */
 export interface SceneInstance {
+  /** The tree node that places it. */
   node: number;
+  /** Index into prototypes. */
   prototype: number;
   /** World transform, column-major 4x4 (Three.js Matrix4.fromArray order). */
   matrix: number[];
 }
 
+/** A model as the kernel gives it: its tree, its placements and its meshes. */
 export interface ImportedScene {
+  /** The tree. */
   nodes: SceneNode[];
+  /** Every placement of a mesh. */
   instances: SceneInstance[];
+  /** Every unique mesh. */
   prototypes: PrototypeMesh[];
 }
 
+/** How an import meshes, and how it reports. */
 export interface ImportOptions {
   /** Linear deflection relative to the model's bounding-box diagonal. */
   linearDeflectionRatio?: number;
   /** Angular deflection in radians. */
   angularDeflection?: number;
+  /** The import's phases. */
   onProgress?: ProgressCallback;
 }
 
+/** The linear deflection used unless told otherwise, relative to the bounding-box diagonal. */
 export const DefaultLinearDeflectionRatio = 0.001;
+/** The angular deflection used unless told otherwise, in radians. */
 export const DefaultAngularDeflection = 0.35;
 
 /** The WASM heap's ceiling: MAXIMUM_MEMORY in libcascade.config.ts. */
@@ -153,6 +176,7 @@ export const MaximumHeapBytes = 4 * 2 ** 30;
  */
 export const OutOfMemoryHeapFraction = 0.9;
 
+/** An import that failed, with how it ended. */
 export class OcctImportError extends Error {
   constructor(
     readonly status: ImportStatus,
@@ -169,7 +193,9 @@ export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
 
 /** A face, edge or vertex of one placement of a prototype (M7). */
 export interface EntityRef {
+  /** A face, an edge or a vertex. */
   kind: EntityKind;
+  /** The prototype it belongs to. */
   prototype: number;
   /** The face, edge or vertex number, as in the prototype's ranges and vertices. */
   index: number;
@@ -177,15 +203,20 @@ export interface EntityRef {
   matrix: readonly number[];
 }
 
+/** A point or a vector. */
 export type Xyz = [number, number, number];
 
 /** A part's whole-shape properties, reported with every entity (D104). */
 export interface PartMeasure {
   /** 0 for open shells. */
   volume: number;
+  /** Surface area. */
   area: number;
+  /** Centre of mass. */
   centroid: Xyz;
+  /** Bounds' low corner. */
   min?: Xyz;
+  /** Bounds' high corner. */
   max?: Xyz;
 }
 
@@ -222,18 +253,27 @@ export type EntityMeasure = (
 
 /** Two entities (describePair): what applies of distance, angle and centre distance. */
 export interface PairMeasure {
+  /** Says this is a pair. */
   kind: 'pair';
+  /** The shortest distance between them. */
   distance?: number;
+  /** Where that distance starts. */
   pointA?: Xyz;
+  /** Where that distance ends. */
   pointB?: Xyz;
+  /** What the angle is between. */
   angleOf?: 'planes' | 'lines' | 'line and plane';
   /** Degrees, 0-90. */
   angle?: number;
+  /** The distance between their centres. */
   centreDistance?: number;
+  /** The first one's centre. */
   centreA?: Xyz;
+  /** The second one's centre. */
   centreB?: Xyz;
 }
 
+/** A measurement that failed. */
 export class OcctMeasureError extends Error {
   constructor(message: string) {
     super(message);
@@ -253,6 +293,7 @@ export type ExportStatus = (typeof ExportStatus)[keyof typeof ExportStatus];
 export const ExportPhase = { Transferring: 2, Writing: 5 } as const;
 export type ExportPhase = (typeof ExportPhase)[keyof typeof ExportPhase];
 
+/** How an export reports, and how to stop it. */
 export interface ExportOptions {
   /** Fraction in [0, 1], or a negative number while the phase has no measurable progress. */
   onProgress?: (phase: ExportPhase, fraction: number) => void;
@@ -260,6 +301,7 @@ export interface ExportOptions {
   isCancelled?: () => boolean;
 }
 
+/** An export that failed, with how it ended. */
 export class OcctExportError extends Error {
   constructor(
     readonly status: ExportStatus,
@@ -288,7 +330,9 @@ export interface ExpandedPiece {
  * node of the arrival or -1.
  */
 export interface Arrival {
+  /** The number of its first node. */
   base: number;
+  /** Its nodes, in tree order. */
   nodes: SceneNode[];
 }
 
@@ -304,6 +348,7 @@ export const FileOrigin = -2;
 
 /** One node of an export plan, each after its parent (wrappers/j3d_facade.cpp, exportTree). */
 export interface PlanNode {
+  /** How it's written. */
   kind: PlanKind;
   /** An earlier node, or -1 for the top level. */
   parent: number;
@@ -313,6 +358,7 @@ export interface PlanNode {
   piece: number;
   /** The placement in the parent's frame, column-major 4x4: the identity at the top level, but for a part. */
   matrix: readonly number[];
+  /** Its name in the file. */
   name: string;
 }
 

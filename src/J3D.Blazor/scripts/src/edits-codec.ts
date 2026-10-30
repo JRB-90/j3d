@@ -4,7 +4,7 @@ import type { ArrivedNode, ExpandedNode, KeptArrival, ModelEdits } from '@j3d/vi
  * A model's edits packed for interop (M16, D199): .NET sends all of a model's edits with each one
  * (§6.4), and as JSON the large plant's after Expand all took 160 ms to serialise under the WebAssembly
  * interpreter, every edit. Packed, its numbers cross as one buffer of 32-bit integers (Blazor passes
- * bytes without JSON) and its names as one string. J3D.Web.Client's EditsCodec writes the same layout:
+ * bytes without JSON) and its names as one string. J3D.Blazor's EditsCodec writes the same layout:
  *
  * `version, added.length, ...added, children.length, (parent, nodes.length, ...nodes)*, names.length,
  * (node, name length)*, pieces.length or -1 when absent, (node, expands, piece, part 0/1, name length)*`,

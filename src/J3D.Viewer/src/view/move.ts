@@ -23,7 +23,9 @@ export type MoveFrame = 'local' | 'parent' | 'world';
 
 /** One object to move: a tree node, or a whole model as node -1 (D167, D169). */
 export interface MoveTarget {
+  /** The model. */
   id: ModelId;
+  /** The tree node, or -1 for the whole model. */
   node: number;
 }
 

@@ -2,7 +2,7 @@ import type { ModelEdits } from '@j3d/viewer';
 import { describe, expect, it } from 'vitest';
 import { decodeEdits, encodeEdits } from './edits-codec.js';
 
-/** The example J3D.Web.Client.Tests' EditsCodecTests packs, with the numbers and text it expects. */
+/** The example J3D.Blazor.Tests' EditsCodecTests packs, with the numbers and text it expects. */
 const example: ModelEdits = {
   added: [3, -1],
   children: [{ parent: 0, nodes: [5, 2] }],

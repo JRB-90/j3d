@@ -5,22 +5,31 @@ import type { EntityMeasure, PairMeasure, PartMeasure, Xyz } from '@j3d/occt/fac
  * group (a part's name) are listed under it, so the name isn't repeated on every line.
  */
 export interface MeasureRow {
+  /** What it is. */
   name: string;
+  /** Its value, ready to show. */
   value: string;
+  /** The part it's listed under, if any. */
   group?: string;
 }
 
 /**
- * A measurement as .NET shows it (mirrors J3D.Web.Client/Interop/MeasureInfo.cs): a title, the
+ * A measurement as .NET shows it (mirrors J3D.Blazor/Interop/MeasureInfo.cs): a title, the
  * label drawn in 3D, the rows for the panel, and the parts it measures, so it can follow them (D108).
  * The id is empty for the pending first pick.
  */
 export interface MeasureInfo {
+  /** Its id, empty for the pending first pick. */
   id: string;
+  /** Its heading in a panel. */
   title: string;
+  /** What's drawn in 3D. */
   label: string;
+  /** A panel's lines. */
   rows: MeasureRow[];
+  /** The parts it measures. */
   parts: { id: string; node: number }[];
+  /** Its values are approximate, shown with ≈. */
   approximate: boolean;
 }
 

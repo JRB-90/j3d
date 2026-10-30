@@ -137,11 +137,13 @@ public sealed partial class ModelTree
     /// <summary>Every node id, the file's and the added ones, in the model or not.</summary>
     public int Count => _parents.Length;
 
+    /// <summary>The top-level nodes.</summary>
     public IReadOnlyList<int> Roots => ChildrenOf(TopLevel);
 
     /// <summary>Every part node in the model, in tree order.</summary>
     public IReadOnlyList<int> Parts => _parts;
 
+    /// <summary>A node as edited.</summary>
     public TreeNode this[int index] => new(NameOf(index), _parents[index], _prototypes[index]);
 
     /// <summary>A node's name: as given since the import, else as the file names it (or the node it copies).</summary>
@@ -153,11 +155,13 @@ public sealed partial class ModelTree
     /// <summary>A node's children in order (<see cref="TopLevel"/>: the top-level nodes).</summary>
     public IReadOnlyList<int> ChildrenOf(int index) => _children.TryGetValue(index, out var children) ? children : [];
 
+    /// <summary>Whether the node has children.</summary>
     public bool HasChildren(int index) => ChildrenOf(index).Count > 0;
 
     /// <summary>The node is in the model: one of its ids, and reachable from its top level.</summary>
     public bool Contains(int index) => index >= 0 && index < Count && _live[index];
 
+    /// <summary>Whether the node is in the model and draws a part.</summary>
     public bool IsPart(int index) => Contains(index) && _prototypes[index] >= 0;
 
     /// <summary>A node in the model that draws nothing itself: an assembly, or a mesh model's group, which can hold others (D182).</summary>

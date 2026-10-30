@@ -24,5 +24,6 @@ public sealed record MeasureRow(string Name, string Value, string? Group = null)
 /// <summary>A part a measurement touches: its model and tree node.</summary>
 public sealed record MeasurePart(string Id, int Node)
 {
+    /// <summary>The model measured.</summary>
     public ModelId ModelId => new(Id);
 }

@@ -9,20 +9,28 @@ export type ImportPhase = 'reading' | 'parsing' | 'transferring' | 'meshing' | '
 /** Error codes shown in the model list (docs/plan.md §6.2). */
 export type ImportErrorCode = 'Unsupported' | 'MissingFile' | 'ParseFailed' | 'Empty' | 'OutOfMemory' | 'Internal';
 
+/** Why an import failed. */
 export interface ImportError {
+  /** What kind of failure. */
   code: ImportErrorCode;
+  /** What to tell the user. */
   message: string;
 }
 
+/** x, y and z. */
 export type Vector3Tuple = [number, number, number];
 
 /** Axis-aligned bounds in world (Z-up) coordinates. */
 export interface Bounds {
+  /** The low corner. */
   min: Vector3Tuple;
+  /** The high corner. */
   max: Vector3Tuple;
 }
 
+/** What a model holds and draws. */
 export interface ModelStats {
+  /** Nodes in its tree. */
   nodes: number;
   /** Unique meshes (BREP: unique part + style; mesh models: geometries). */
   prototypes: number;
@@ -44,6 +52,7 @@ export type BrepExportFormat = 'step' | 'brep';
 
 /** Measurement queries to a BREP model's worker (M7), answered one at a time. */
 export interface BrepMeasurer {
+  /** An entity's properties. */
   entity(entity: EntityRef): Promise<EntityMeasure>;
   /** `shapeB`: entity B exported from another model's worker (D102). */
   pair(a: EntityRef, b: EntityRef, shapeB?: string): Promise<PairMeasure>;

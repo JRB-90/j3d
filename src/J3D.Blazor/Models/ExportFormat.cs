@@ -9,8 +9,11 @@ namespace J3D.Blazor;
 [JsonConverter(typeof(JsonStringEnumConverter<MeshExportFormat>))]
 public enum MeshExportFormat
 {
+    /// <summary>Binary glTF.</summary>
     [JsonStringEnumMemberName("glb")] Glb,
+    /// <summary>Binary STL.</summary>
     [JsonStringEnumMemberName("stl")] StlBinary,
+    /// <summary>ASCII STL.</summary>
     [JsonStringEnumMemberName("stl-ascii")] StlAscii,
 }
 
@@ -18,14 +21,18 @@ public enum MeshExportFormat
 [JsonConverter(typeof(JsonStringEnumConverter<BrepExportFormat>))]
 public enum BrepExportFormat
 {
+    /// <summary>A STEP file.</summary>
     [JsonStringEnumMemberName("step")] Step,
+    /// <summary>An OCCT BREP file.</summary>
     [JsonStringEnumMemberName("brep")] Brep,
 }
 
+/// <summary>Text for a <see cref="MeshExportFormat"/>.</summary>
 public static class MeshExportFormatExtensions
 {
     extension(MeshExportFormat format)
     {
+        /// <summary>The format as a menu shows it.</summary>
         public string DisplayName => format switch
         {
             MeshExportFormat.Glb => "GLB",
@@ -36,10 +43,12 @@ public static class MeshExportFormatExtensions
     }
 }
 
+/// <summary>Text for a <see cref="BrepExportFormat"/>.</summary>
 public static class BrepExportFormatExtensions
 {
     extension(BrepExportFormat format)
     {
+        /// <summary>The format as a menu shows it.</summary>
         public string DisplayName => format switch
         {
             BrepExportFormat.Step => "STEP",

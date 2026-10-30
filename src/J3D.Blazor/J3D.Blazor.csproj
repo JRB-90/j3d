@@ -5,7 +5,27 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <!-- The library's browser code is its own npm workspace, built below; none of it is .NET content. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);scripts\**</DefaultItemExcludes>
+    <!-- Its comments are its reference (D262, D284), so a public member without one fails the build. -->
+    <NoWarn>$(NoWarn.Replace('CS1591', ''))</NoWarn>
   </PropertyGroup>
+
+  <!-- Packed by scripts/pack.mjs, which stamps the version and cuts the notices (D257, D285). -->
+  <PropertyGroup>
+    <Version>0.0.0</Version>
+    <Description>A Blazor WebAssembly component that views CAD and mesh models in the browser, with their selection, undo and tree edits.</Description>
+    <Authors>Jake Brown</Authors>
+    <PackageLicenseExpression>MIT AND LGPL-2.1-only</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/JRB-90/j3d</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/JRB-90/j3d</RepositoryUrl>
+    <PackageTags>blazor;webassembly;cad;step;iges;opencascade;threejs</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="$(RepoRoot)LICENSE" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(J3DNoticesFile)" Pack="true" PackagePath="\" Visible="false" Condition="'$(J3DNoticesFile)' != ''" />
+  </ItemGroup>
 
   <ItemGroup>
     <SupportedPlatform Include="browser" />

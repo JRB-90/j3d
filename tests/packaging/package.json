@@ -1,10 +1,11 @@
 {
   "name": "j3d-packaging-check",
   "private": true,
-  "description": "Installs the packed @j3d/viewer and @j3d/occt into an app, builds it with Vite and with webpack, and runs it (D268).",
+  "description": "Installs the packed packages into an app built with Vite and with webpack (D268), and into the samples (D259), and runs them.",
   "type": "module",
   "scripts": {
-    "test": "node run.mjs"
+    "test": "node run.mjs",
+    "samples": "node samples.mjs"
   },
   "dependencies": {
     "three": "0.186.1"

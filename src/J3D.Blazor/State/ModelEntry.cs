@@ -2,19 +2,27 @@ using System.Collections.Immutable;
 
 namespace J3D.Blazor;
 
+/// <summary>How a model's import stands.</summary>
 public enum ModelStatus
 {
+    /// <summary>Waiting its turn.</summary>
     Queued,
+    /// <summary>Being imported.</summary>
     Importing,
+    /// <summary>Imported and in the view.</summary>
     Loaded,
+    /// <summary>The import failed: see <see cref="ModelEntry.Error"/>.</summary>
     Failed,
 }
 
 /// <summary>Whether a node's parts are drawn: all of them, none, or some (the tree's half eye, D96).</summary>
 public enum PartVisibility
 {
+    /// <summary>All its parts show.</summary>
     Visible,
+    /// <summary>All its parts are hidden.</summary>
     Hidden,
+    /// <summary>Some of each.</summary>
     Mixed,
 }
 
@@ -48,6 +56,7 @@ public sealed record ModelEntry(ModelSummary Summary)
     public static ModelEntry Restoring(ModelEntry deleted) =>
         new(deleted.Summary) { Hidden = deleted.Hidden, Placements = deleted.Placements, NotKept = deleted.NotKept, IsRestored = true };
 
+    /// <summary>How its import stands.</summary>
     public ModelStatus Status { get; private init; } = ModelStatus.Queued;
 
     /// <summary>The phase being imported; set only while <see cref="ModelStatus.Importing"/>.</summary>
@@ -67,6 +76,7 @@ public sealed record ModelEntry(ModelSummary Summary)
     /// <summary>Non-fatal problems with the loaded model, such as textures that weren't supplied.</summary>
     public IReadOnlyList<string> Warnings => Info?.Warnings ?? [];
 
+    /// <summary>Why its import failed, if it did.</summary>
     public ImportError? Error { get; private init; }
 
     /// <summary>The loaded model's tree, indexed once (decisions D53, D77).</summary>
@@ -103,6 +113,7 @@ public sealed record ModelEntry(ModelSummary Summary)
     /// <summary>How many parts are being brought in from another model, while that runs (M18, D233), or null.</summary>
     public int? Bringing { get; private init; }
 
+    /// <summary>The model's id.</summary>
     public ModelId Id => Summary.Id;
 
     /// <summary>Queued or importing: removing it cancels the import.</summary>

@@ -4,7 +4,7 @@ import type { DotNetObjectReference } from './interop.js';
 
 /**
  * A model's tree as one array per field, parents before children (mirrors TreeColumns in
- * J3D.Web.Client/Interop/ModelLoadedInfo.cs). .NET reads three arrays far faster than an object per
+ * J3D.Blazor/Interop/ModelLoadedInfo.cs). .NET reads three arrays far faster than an object per
  * node: a 10,437-node tree took 850 ms as objects (decision D63).
  */
 export interface TreeColumns {
@@ -16,7 +16,7 @@ export interface TreeColumns {
 }
 
 /**
- * What .NET is told about a loaded model (mirrors J3D.Web.Client/Interop/ModelLoadedInfo.cs). Since M16
+ * What .NET is told about a loaded model (mirrors J3D.Blazor/Interop/ModelLoadedInfo.cs). Since M16
  * the tree and a restored model's kept edits cross packed beside it (D204): as JSON, .NET took 450 ms to
  * read the large plant's after Expand all.
  */
@@ -94,7 +94,7 @@ export function toColumns(tree: readonly (TreeNode & { pieces?: number })[]): Tr
 /**
  * A tree's columns packed for .NET (M16, D204), as edits-codec.ts packs edits: `version, n,
  * parents (n), prototypes (n), name lengths (n), expandable.length, ...expandable` as 32-bit integers,
- * and the names one after another in `text`. J3D.Web.Client's TreeCodec reads it.
+ * and the names one after another in `text`. J3D.Blazor's TreeCodec reads it.
  */
 export function packTree({ names, parents, prototypes, expandable = [] }: TreeColumns): { numbers: Uint8Array; text: string } {
   const values = Int32Array.from([1, names.length, ...parents, ...prototypes, ...names.map((name) => name.length), expandable.length, ...expandable]);

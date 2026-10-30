@@ -128,10 +128,13 @@ public sealed partial class SceneState
     /// <summary>Cut, Copy and New assembly take objects of one model (D180, D185).</summary>
     public bool CanCut => OneModelObjects() is not null;
 
+    /// <summary>Copy takes what <see cref="CanCut"/> says Cut does.</summary>
     public bool CanCopy => CanCut;
 
+    /// <summary>New assembly takes what <see cref="CanCut"/> says Cut does.</summary>
     public bool CanGroup => CanCut;
 
+    /// <summary>There's something to paste and somewhere to put it.</summary>
     public bool CanPaste => PasteTarget() is not null;
 
     /// <summary>Delete removes objects in Object mode, and whole models in Model mode (D187).</summary>
@@ -151,8 +154,10 @@ public sealed partial class SceneState
     /// <summary>A node Cut took, not yet pasted: the tree dims it (assumption 20).</summary>
     public bool IsCut(ModelId id, int node) => Clipboard is { Cut: true } clipboard && clipboard.Id == id && clipboard.Items.Any(item => item.Node == node);
 
+    /// <summary>Takes the selected objects, which move when pasted.</summary>
     public void Cut() => Take(cut: true);
 
+    /// <summary>Takes the selected objects, which are added as new instances when pasted.</summary>
     public void Copy() => Take(cut: false);
 
     /// <summary>

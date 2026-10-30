@@ -1,5 +1,6 @@
 import { Box3, Matrix4, Quaternion, Vector3, type Sphere } from 'three';
 
+/** The camera's projection: orthographic unless changed. */
 export type Projection = 'orthographic' | 'perspective';
 
 /** World up (decision D18). */

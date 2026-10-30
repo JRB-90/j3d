@@ -10,7 +10,9 @@ internal sealed record MoveTargetRef(ModelId Id, int Node);
 /// </summary>
 public sealed record MoveTargetInfo(ModelId Id, int Node, IReadOnlyList<double> Local, IReadOnlyList<double> ParentWorld, double UnitScale)
 {
+    /// <summary>Its placement in its parent's frame.</summary>
     public Matrix4d LocalMatrix => new(Local);
 
+    /// <summary>Its parent's frame in the world.</summary>
     public Matrix4d ParentWorldMatrix => new(ParentWorld);
 }

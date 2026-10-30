@@ -23,6 +23,8 @@ on:
         description: "S4 only: files under tests/fixtures to import with both OCCT builds, space-separated (large/large-<MB>mb.step and large/curved-<MB>mb.step are generated)"
         required: false
         default: ''
+  # Run whole by release.yml, on a tag (D282).
+  workflow_call:
 
 permissions:
   contents: read
@@ -100,9 +102,10 @@ jobs:
       - name: Test host (xUnit + WebApplicationFactory)
         run: dotnet test --project tests/J3D.Web.Tests -c Release --no-build
 
-  # The packed packages in an app built with Vite and with webpack, nothing configured for them (D268).
+  # The packed packages in an app built with Vite and with webpack, nothing configured for them (D268),
+  # and in the samples, each copied out of the repo and run on its production output (D259, D285).
   packaging:
-    name: Packaging (Vite, webpack)
+    name: Packaging (Vite, webpack, samples)
     needs: build-test
     runs-on: ubuntu-26.04
     steps:
@@ -121,6 +124,10 @@ jobs:
       - name: Fetch Git LFS objects
         run: git lfs pull
 
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -138,6 +145,10 @@ jobs:
       - name: Pack, install, build and run
         working-directory: tests/packaging
         run: npm test
+
+      - name: Try the samples on the packed files
+        working-directory: tests/packaging
+        run: npm run samples
 
   e2e:
     name: E2E (${{ matrix.browser }})

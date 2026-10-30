@@ -45,7 +45,7 @@ public sealed partial class J3DViewer(IJSRuntime js, ViewerSession session, Scen
     /// <summary>The changes last sent, which the next waits for (M16): sending can now yield part-way (D199).</summary>
     private Task _sending = Task.CompletedTask;
 
-    /// <summary>Raised once the viewer has started and reported the browser's capabilities.</summary>
+    /// <summary>Raised once the viewer has started, with the browser's capabilities, and <see cref="ViewerSession"/> can use it.</summary>
     [Parameter]
     public EventCallback<ViewerCapabilities> OnReady { get; set; }
 
@@ -94,6 +94,7 @@ public sealed partial class J3DViewer(IJSRuntime js, ViewerSession session, Scen
     /// <summary>What the viewer calls back: internal, as the entry points must be public (D270).</summary>
     internal ViewerCallbacks Callbacks => field ??= new ViewerCallbacks(this, session, scene);
 
+    /// <inheritdoc />
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
@@ -120,16 +121,14 @@ public sealed partial class J3DViewer(IJSRuntime js, ViewerSession session, Scen
         scene.ClearFeaturesRequested += OnClearFeaturesRequested;
         scene.TransferRequested += OnTransferRequested;
         scene.ExpandRequested += OnExpandRequested;
-        AttachToSession();
+        await AttachToSessionAsync();
     }
 
     /// <summary>The viewer has started: <see cref="ViewerCallbacks.OnViewerReady"/>.</summary>
     internal async Task ReportReadyAsync(ViewerCapabilities capabilities)
     {
         Capabilities = capabilities;
-        AttachToSession();
-        await OnReady.InvokeAsync(capabilities);
-        StateHasChanged();
+        await AttachToSessionAsync();
     }
 
     internal void Notify(ViewerNotice notice) => _ = OnNotice.InvokeAsync(notice);
@@ -143,6 +142,7 @@ public sealed partial class J3DViewer(IJSRuntime js, ViewerSession session, Scen
         }
     }
 
+    /// <summary>Stops the viewer and takes it out of the session, and its models with it.</summary>
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
@@ -446,16 +446,26 @@ public sealed partial class J3DViewer(IJSRuntime js, ViewerSession session, Scen
     /// The viewer reports its capabilities while it starts, so either may be known first. Once both
     /// are, the models kept from the last visit come back (D82).
     /// </summary>
-    private void AttachToSession()
+    /// <summary>
+    /// Runs on the viewer's handle and on its report, which can arrive either way round, since the bridge
+    /// reports from inside <c>createViewer</c>. The page hears only after both, so <see cref="OnReady"/> finds
+    /// the session able to use the viewer.
+    /// </summary>
+    private async Task AttachToSessionAsync()
     {
-        if (_viewer is not null && Capabilities is not null)
+        if (_viewer is null || Capabilities is null)
         {
-            session.Attach(_viewer, Capabilities);
-            if (!_restoreStarted)
-            {
-                _restoreStarted = true;
-                _ = RestoreAsync(_viewer);
-            }
+            return;
         }
+
+        session.Attach(_viewer, Capabilities);
+        if (!_restoreStarted)
+        {
+            _restoreStarted = true;
+            _ = RestoreAsync(_viewer);
+        }
+
+        await OnReady.InvokeAsync(Capabilities);
+        StateHasChanged();
     }
 }

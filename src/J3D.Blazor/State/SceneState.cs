@@ -46,6 +46,7 @@ public sealed partial class SceneState
     /// <summary>Raised when the context menu asks for a GLB or STL export: of the selection, or of the visible scene.</summary>
     public event Action<MeshExportFormat, bool>? ExportRequested;
 
+    /// <summary>Every model, in list order.</summary>
     public ImmutableList<ModelEntry> Models { get; private set; } = [];
 
     /// <summary>What a click selects (D146).</summary>
@@ -194,8 +195,10 @@ public sealed partial class SceneState
             _ => Pose.Of(placement.ParentWorldMatrix * CurrentLocal(placement), placement.UnitScale),
         };
 
+    /// <summary>There's a step to undo.</summary>
     public bool CanUndo => _history.CanUndo;
 
+    /// <summary>There's a step to redo.</summary>
     public bool CanRedo => _history.CanRedo;
 
     /// <summary>What Undo would undo, for its tooltip (D224), or null.</summary>
@@ -212,8 +215,10 @@ public sealed partial class SceneState
         nameof(Selection),
         () => [.. Models.SelectMany(model => model.Selected.Order().Select(node => (model, node)))]);
 
+    /// <summary>Some model has a selected part.</summary>
     public bool HasSelection => Models.Any(model => !model.Selected.IsEmpty);
 
+    /// <summary>Some model has a hidden part.</summary>
     public bool HasHidden => Models.Any(model => !model.Hidden.IsEmpty);
 
     /// <summary>Isolate would change something: there's a selection and a visible part outside it.</summary>
@@ -224,6 +229,7 @@ public sealed partial class SceneState
     public bool CanExport => HasSelection || Models.Any(model =>
         model.Tree is { } tree && tree.Parts.Any(part => !model.Hidden.Contains(part)));
 
+    /// <summary>The model with this id, or null.</summary>
     public ModelEntry? Find(ModelId id) => Models.Find(model => model.Id == id);
 
     /// <summary>A model was queued. It goes to the end of the list.</summary>
@@ -385,6 +391,7 @@ public sealed partial class SceneState
     /// <summary>The toolbar's Measure button or the M key (D79). Turning it off drops the reference and the result (D147).</summary>
     public void ToggleMeasureMode() => SetMeasureMode(!MeasureMode);
 
+    /// <summary>Turns the Measure tool on or off.</summary>
     public void SetMeasureMode(bool on)
     {
         if (on != MeasureMode)
@@ -678,6 +685,7 @@ public sealed partial class SceneState
         Set(Models, always: true);
     }
 
+    /// <summary>Turns the Move tool off.</summary>
     public void StopMoving()
     {
         if (Moving is not null)
@@ -687,6 +695,7 @@ public sealed partial class SceneState
         }
     }
 
+    /// <summary>Chooses the axes the Move tool uses.</summary>
     public void SetMoveFrame(MoveFrame frame)
     {
         if (frame != Frame)
@@ -749,6 +758,7 @@ public sealed partial class SceneState
         return Move(placement.Id, placement.Node, local, after);
     }
 
+    /// <summary>Undoes the last step.</summary>
     public void Undo()
     {
         if (_history.Undo() is { } step)
@@ -762,6 +772,7 @@ public sealed partial class SceneState
         }
     }
 
+    /// <summary>Redoes the last step undone.</summary>
     public void Redo()
     {
         if (_history.Redo() is { } step)

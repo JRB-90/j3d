@@ -9,7 +9,10 @@ namespace J3D.Blazor;
 [JsonConverter(typeof(JsonStringEnumConverter<SelectMode>))]
 public enum SelectMode
 {
+    /// <summary>A click selects a whole model.</summary>
     [JsonStringEnumMemberName("model")] Models,
+    /// <summary>A click selects a placed part.</summary>
     [JsonStringEnumMemberName("object")] Objects,
+    /// <summary>A click selects a BREP model's face, edge or vertex.</summary>
     [JsonStringEnumMemberName("feature")] Features,
 }
