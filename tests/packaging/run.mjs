@@ -6,65 +6,15 @@
 //   npm test -- webpack                  only the targets whose name has that word
 
 import { execSync, spawn } from 'node:child_process';
-import { copyFileSync, cpSync, createReadStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { createServer } from 'node:http';
-import { extname, join, resolve } from 'node:path';
+import { copyFileSync, cpSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import { drawnShare, here, launch, repo, serve, startProcess, waitForServer, watchProblems } from './harness.mjs';
 
-const here = resolve(import.meta.dirname);
-const repo = resolve(here, '..', '..');
 const only = process.argv[2];
 const packPort = 5399;
 const packed = join(here, 'packed');
 const fixtures = ['assembly.step', 'box.brep', 'part.stl', 'draco.glb', 'ktx2.glb', 'meshopt.glb'];
-
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.map': 'application/json' };
-
-function serve(dir, port) {
-  const server = createServer((request, response) => {
-    const path = decodeURIComponent(new URL(request.url, 'http://local').pathname);
-    const file = join(dir, path === '/' ? 'index.html' : path);
-    if (!existsSync(file) || statSync(file).isDirectory()) {
-      response.writeHead(404).end();
-      return;
-    }
-    response.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
-    createReadStream(file).pipe(response);
-  });
-  return new Promise((ready) => server.listen(port, '127.0.0.1', () => ready({ stop: () => server.close() })));
-}
-
-function startProcess(command) {
-  const child = spawn(command, { cwd: here, shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  let log = '';
-  child.stdout.on('data', (chunk) => (log += chunk));
-  child.stderr.on('data', (chunk) => (log += chunk));
-  return {
-    log: () => log,
-    stop() {
-      if (process.platform === 'win32') {
-        try {
-          execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' });
-        } catch {
-          // already gone
-        }
-      } else {
-        child.kill();
-      }
-    },
-  };
-}
-
-async function waitForServer(url, server) {
-  const end = Date.now() + 60_000;
-  while (Date.now() < end) {
-    if (await fetch(url).then(({ ok }) => ok, () => false)) {
-      return;
-    }
-    await new Promise((wait) => setTimeout(wait, 500));
-  }
-  throw new Error(`${url} never answered.\n${server.log?.().slice(-1500) ?? ''}`);
-}
 
 function assert(condition, message, failures) {
   if (!condition) {
@@ -72,38 +22,9 @@ function assert(condition, message, failures) {
   }
 }
 
-/** How much of the viewer isn't its first pixel's colour: a canvas that drew nothing is all one colour. */
-const drawnShare = (page, png) =>
-  page.evaluate(async (base64) => {
-    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-    const image = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
-    const canvas = new OffscreenCanvas(image.width, image.height);
-    const context = canvas.getContext('2d');
-    context.drawImage(image, 0, 0);
-    const { data } = context.getImageData(0, 0, image.width, image.height);
-    let different = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i] !== data[0] || data[i + 1] !== data[1] || data[i + 2] !== data[2]) {
-        different++;
-      }
-    }
-    return different / (data.length / 4);
-  }, png.toString('base64'));
-
 async function check(page, url) {
   const failures = [];
-  const problems = [];
-  page.on('pageerror', (error) => problems.push(`page error: ${error.message}`));
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
-      problems.push(`console error: ${message.text().slice(0, 300)}`);
-    }
-  });
-  page.on('response', (response) => {
-    if (response.status() >= 400) {
-      problems.push(`${response.status()} ${response.url()}`);
-    }
-  });
+  const problems = watchProblems(page);
 
   await page.goto(url);
   await page.waitForFunction(() => window.__packaging?.ready === true, null, { timeout: 120_000 });
@@ -176,7 +97,7 @@ const targets = [
   },
 ];
 
-execSync(`node "${join(repo, 'scripts', 'pack.mjs')}" --out "${packed}" --url http://127.0.0.1:${packPort}`, { cwd: repo, stdio: 'inherit' });
+execSync(`node "${join(repo, 'scripts', 'pack.mjs')}" --out "${packed}" --url http://127.0.0.1:${packPort} --npm-only`, { cwd: repo, stdio: 'inherit' });
 
 // Not execSync: this process serves the tarballs npm is fetching.
 const packServer = await serve(packed, packPort);
@@ -191,7 +112,7 @@ for (const folder of ['public/fixtures', 'webpack-public/fixtures']) {
   fixtures.forEach((name) => copyFileSync(join(repo, 'tests', 'fixtures', name), join(here, folder, name)));
 }
 
-const browser = await chromium.launch({ headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await launch(chromium);
 let failed = false;
 for (const target of targets.filter(({ name }) => !only || name.includes(only))) {
   console.log(`\n=== ${target.name}`);

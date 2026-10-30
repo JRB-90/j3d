@@ -1,0 +1,140 @@
+name: Release
+
+# A v* tag tests, packs and releases the three packages, all at the tag's version (D257). A tag with a
+# hyphen, such as v0.1.0-rc.1, stops at an unpublished draft, which rehearses all this and ships nothing
+# (D278). Otherwise the release is a prerelease until both samples install from its public URLs, which
+# no earlier step can try, and then it's marked latest (D283, R33).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # All of CI, on the tagged commit (D282).
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  pack:
+    name: Pack and try the samples
+    needs: ci
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # Git LFS objects (the OCCT WASM) are cached by content to save LFS bandwidth quota.
+      - name: List Git LFS objects
+        run: git lfs ls-files --long | cut -d ' ' -f1 | sort > .lfs-assets-id
+
+      - name: Cache Git LFS objects
+        uses: actions/cache@v6
+        with:
+          path: .git/lfs/objects
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+
+      - name: Fetch Git LFS objects
+        run: git lfs pull
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm workspaces
+        run: npm ci
+
+      - name: Pack
+        run: node scripts/pack.mjs --out "$RUNNER_TEMP/packed" --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" --version "${GITHUB_REF_NAME#v}"
+
+      - name: Install the samples' browser
+        working-directory: tests/packaging
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright-core install --with-deps chromium-headless-shell
+
+      # These are the files the release uploads. Their kernel URL isn't public yet, so the samples take the
+      # kernel from its tarball here (R33).
+      - name: Try the samples on those files
+        working-directory: tests/packaging
+        run: node samples.mjs --packed "$RUNNER_TEMP/packed" --version "${GITHUB_REF_NAME#v}"
+
+      - name: Keep the files for the release
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: ${{ runner.temp }}/packed/
+          if-no-files-found: error
+
+  release:
+    name: Create the release
+    needs: pack
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch the files
+        uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: packed
+
+      - name: Write the notes
+        run: |
+          cat > notes.md <<EOF
+          The three J3D packages at ${GITHUB_REF_NAME#v}. [docs/library.md](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/library.md) takes a new project from nothing to a loaded model.
+
+          - \`j3d-viewer\`: the three.js viewer, for any web app. Installing its URL brings the kernel too.
+          - \`j3d-occt\`: the OCCT kernel, a separate LGPL file.
+          - \`J3D.Blazor\`: a Blazor component and the scene's state. It goes in a NuGet folder feed, as NuGet can't install from a URL.
+          EOF
+
+      - name: Create it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then state=--draft; else state=--prerelease; fi
+          gh release create "$GITHUB_REF_NAME" packed/* --verify-tag --title "$GITHUB_REF_NAME" --notes-file notes.md "$state"
+
+  verify:
+    name: Install from the release
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install the samples' browser
+        working-directory: tests/packaging
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright-core install --with-deps chromium-headless-shell
+
+      - name: Try the samples from the public URLs
+        working-directory: tests/packaging
+        run: node samples.mjs --release "$GITHUB_REF_NAME"
+
+      - name: Mark it latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --prerelease=false --latest

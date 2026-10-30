@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>J3D sample</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        font: 14px system-ui, sans-serif;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+      }
+
+      /* The viewer fills its element, so give it a size. */
+      #viewer {
+        flex: 1;
+        min-height: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <input id="files" type="file" multiple />
+      <span id="status">Choose a file, or drop one on the view.</span>
+    </header>
+    <main id="viewer"></main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

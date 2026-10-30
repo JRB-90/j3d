@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Custom OCCT 8 WebAssembly build for J3D (libcascade toolchain) and its TypeScript facade.",
-  "license": "LGPL-2.1-only",
+  "license": "LGPL-2.1-only WITH OCCT-exception-1.0",
   "type": "module",
   "sideEffects": false,
   "exports": {

@@ -441,6 +441,10 @@ tests/packaging/dist-webpack/
 tests/packaging/public/
 tests/packaging/webpack-public/fixtures/
 tests/packaging/package-lock.json
+
+# The samples' installs and builds. They're tried from a copy, and a lock would need a release to exist.
+samples/vite/dist/
+samples/vite/package-lock.json
 # libcascade toolchain scratch (src/J3D.Occt)
 .libcascade/
 # Playwright / Vitest artefacts
