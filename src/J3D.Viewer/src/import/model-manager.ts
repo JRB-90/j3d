@@ -1,6 +1,5 @@
 import { kindOf, type ModelFormat } from '../formats.js';
-import { ModelImportError, toImportError } from './errors.js';
-import { throttleProgress, type ProgressListener } from './progress.js';
+import { ModelImportError, throttleProgress, toImportError, type ProgressListener } from '@j3d/occt/core';
 import type { ImportRunner, ImportTask } from './runner.js';
 import { planBatch, SidecarSet, UnusedSidecarReason, type BatchFile } from './sidecars.js';
 import { editedStats } from '../edit/stats.js';

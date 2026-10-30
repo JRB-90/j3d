@@ -1,6 +1,5 @@
-import { encodeEdits } from './edit/edits-codec.js';
-import type { ModelManager } from './import/model-manager.js';
-import type { Bounds, ModelStats, TreeNode } from './import/types.js';
+import type { Bounds, ModelStats, TreeNode, ViewerHandle } from '@j3d/viewer';
+import { encodeEdits } from './edits-codec.js';
 import type { DotNetObjectReference } from './interop.js';
 
 /**
@@ -36,7 +35,7 @@ export interface ModelLoadedInfo {
  * Calls made meanwhile wait behind it, so .NET still sees each model's events in order. Returns the
  * unsubscribe function, which also drops any calls still waiting.
  */
-export function forwardModelEvents(models: Pick<ModelManager, 'subscribe'>, dotnet: DotNetObjectReference): () => void {
+export function forwardModelEvents(models: Pick<ViewerHandle, 'subscribe'>, dotnet: DotNetObjectReference): () => void {
   let waiting: (() => void)[] | null = null;
   const call = (method: string, args: unknown[]) => () => {
     dotnet.invokeMethodAsync(method, ...args).catch((error: unknown) => console.error(`J3D: .NET's ${method} failed.`, error));

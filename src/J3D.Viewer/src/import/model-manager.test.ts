@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ModelImportError } from './errors.js';
+import { ModelImportError } from '@j3d/occt/core';
 import { EditsDroppedWarning, ModelManager, type ModelManagerListener } from './model-manager.js';
 import type { ImportRequest, ImportRunner, ImportTask } from './runner.js';
 import { UnusedSidecarReason, type BatchFile } from './sidecars.js';

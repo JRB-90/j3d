@@ -1,7 +1,6 @@
+import type { LoadedModel, ModelManagerListener, ModelSummary } from '@j3d/viewer';
 import { Object3D } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ModelManagerListener } from './import/model-manager.js';
-import type { LoadedModel, ModelSummary } from './import/types.js';
 import type { DotNetObjectReference } from './interop.js';
 import { forwardModelEvents, packTree } from './model-events.js';
 

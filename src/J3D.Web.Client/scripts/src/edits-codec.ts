@@ -1,4 +1,4 @@
-import type { ArrivedNode, ExpandedNode, KeptArrival, ModelEdits } from './structure.js';
+import type { ArrivedNode, ExpandedNode, KeptArrival, ModelEdits } from '@j3d/viewer';
 
 /**
  * A model's edits packed for interop (M16, D199): .NET sends all of a model's edits with each one

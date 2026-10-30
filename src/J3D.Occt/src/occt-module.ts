@@ -1,4 +1,3 @@
-import wasmUrl from '@j3d/occt/single/wasm?url';
 import { ModelImportError, errorMessage } from './errors.js';
 
 let compiled: Promise<WebAssembly.Module> | undefined;
@@ -30,7 +29,7 @@ async function compile(): Promise<WebAssembly.Module> {
 }
 
 async function fetchWasm(): Promise<Response> {
-  const response = await fetch(wasmUrl);
+  const response = await fetch(new URL('./j3d_occt_single.wasm', import.meta.url));
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} for ${response.url}`);
   }

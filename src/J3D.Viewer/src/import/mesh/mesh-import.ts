@@ -8,7 +8,7 @@ import {
   type Object3D,
 } from 'three';
 import { NeutralGrey, SurfaceMetalness, SurfaceRoughness } from '../../view/surface.js';
-import { ModelImportError } from '../errors.js';
+import { ModelImportError } from '@j3d/occt/core';
 import type { MeshWorkerRequest, MeshWorkerResponse, WorkerMeshFormat } from '../protocol.js';
 import { liveWorkers, type ImportRequest, type ImportRunner } from '../runner.js';
 import type { ImportResult } from '../types.js';
@@ -68,7 +68,7 @@ export function createMeshRunner(options: MeshRunnerOptions): ImportRunner {
 }
 
 function parseInWorker(request: ImportRequest, onWorker: (release: () => void) => void): Promise<SerializedMeshScene> {
-  const worker = new Worker(new URL('../workers/mesh-worker.ts', import.meta.url), {
+  const worker = new Worker(new URL('../workers/mesh-worker.js', import.meta.url), {
     type: 'module',
     name: `J3D mesh: ${request.fileName}`,
   });

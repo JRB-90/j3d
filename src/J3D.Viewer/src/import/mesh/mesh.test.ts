@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { BufferGeometry, DoubleSide, Mesh, MeshPhongMaterial, MeshStandardMaterial, Texture, type Material, type Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ModelFormat } from '../../formats.js';
-import { ModelImportError } from '../errors.js';
+import { ModelImportError } from '@j3d/occt/core';
 import type { ImportRequest } from '../runner.js';
 import { SidecarSet, type BatchFile } from '../sidecars.js';
 import { describeMeshModel, disposeObject } from './describe.js';

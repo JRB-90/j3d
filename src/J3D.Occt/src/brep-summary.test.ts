@@ -1,4 +1,4 @@
-import type { ImportedScene, PrototypeMesh } from '@j3d/occt/facade';
+import type { ImportedScene, PrototypeMesh } from './facade.js';
 import { describe, expect, it } from 'vitest';
 import { sceneTransferables, summariseBrepScene } from './brep-summary.js';
 

@@ -69,7 +69,8 @@ import {
   type Placement,
   type ScreenSpace,
 } from './parts.js';
-import { CompactQuery, LongPressMilliseconds, swallowClickAfter, TapTolerance, TouchQuery } from '../shell.js';
+import { adoptViewerStyles, NoCubeClass, ViewerClass } from './styles.js';
+import { CompactQuery, LongPressMilliseconds, swallowClickAfter, TapTolerance, TouchQuery } from './touch.js';
 import { CompactViewCubeSize, ViewCube, ViewCubeSize } from './view-cube.js';
 import { HomeRegion, regionView, type ViewRegion } from './view-regions.js';
 import { sameView, ViewHistory } from './view-history.js';
@@ -179,6 +180,19 @@ export interface ContextTarget {
 }
 
 export interface ViewerOptions {
+  /**
+   * J3D's keys (D256): `true` acts on them while the pointer or focus is in the viewer, `'page'` wherever
+   * they're pressed, for an app the viewer is the heart of. Off by default.
+   */
+  keys?: boolean | 'page';
+  /** Asked first about each key: true means the page has it (a menu is open, say), and the viewer leaves it alone. */
+  keyFilter?: (event: KeyboardEvent) => boolean;
+  /** The view cube (D267). On by default. */
+  viewCube?: boolean;
+  /** The Home button (D267). On by default. */
+  homeButton?: boolean;
+  /** The Previous view and Next view buttons (D267). On by default. */
+  viewButtons?: boolean;
   /** A click that didn't drag: the part under the pointer, or undefined on empty space. */
   onPick?: (part: PartRef | undefined, additive: boolean) => void;
   onCommand?: (command: ViewerCommand) => void;
@@ -244,6 +258,9 @@ export class Viewer {
   private readonly materials = new MaterialCache();
   private readonly models = new Map<ModelId, SceneModel>();
   private readonly viewCube = new ViewCube();
+  private get cubeOn(): boolean {
+    return this.options.viewCube ?? true;
+  }
   private readonly timer = new Timer();
   private readonly cleanup: (() => void)[] = [];
   private projectionMode: Projection = 'orthographic';
@@ -303,6 +320,10 @@ export class Viewer {
   ) {
     // Z up (decision D18): set before any camera exists, and on each camera before camera-controls reads it.
     Object3D.DEFAULT_UP.copy(Up);
+    adoptViewerStyles(host);
+    host.classList.add(ViewerClass);
+    host.classList.toggle(NoCubeClass, !this.cubeOn);
+    this.cleanup.push(() => host.classList.remove(ViewerClass, NoCubeClass));
 
     const renderer = new WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -410,16 +431,28 @@ export class Viewer {
     this.cleanup.push(() => observer.disconnect());
 
     this.listen(canvas, 'contextmenu', (event) => event.preventDefault());
-    this.listen(window, 'keydown', (event) => this.onKeyDown(event));
+    if (options.keys) {
+      this.listen(window, 'keydown', (event) => {
+        if (options.keys === 'page' || host.matches(':hover') || host.contains(document.activeElement)) {
+          this.onKeyDown(event);
+        }
+      });
+    }
     // Ctrl snaps the triad while it's held (D168).
     this.listen(window, 'keydown', (event) => this.moveTool.setSnapping(event.ctrlKey || event.key === 'Control'));
     this.listen(window, 'keyup', (event) => this.moveTool.setSnapping(event.ctrlKey && event.key !== 'Control'));
     this.listen(window, 'blur', () => this.moveTool.setSnapping(false));
-    this.installViewCubeInput(canvas);
+    if (this.cubeOn) {
+      this.installViewCubeInput(canvas);
+    }
     this.installMoveInput(canvas);
     this.installPartInput(canvas);
-    this.installHomeButton();
-    this.installViewHistoryButtons();
+    if (options.homeButton ?? true) {
+      this.installHomeButton();
+    }
+    if (options.viewButtons ?? true) {
+      this.installViewHistoryButtons();
+    }
     // Phones and tablets (M19): a finger gets a larger triad (D242), and the compact layout a smaller view cube (D240).
     this.watchMedia(TouchQuery, (touch) => this.moveTool.setTouch(touch));
     this.watchMedia(CompactQuery, (compact) => {
@@ -1188,7 +1221,7 @@ export class Viewer {
 
   /** The view cube region under a client point, and where a region is on screen (for tests). */
   viewCubeRegionAt(clientX: number, clientY: number): ViewRegion | undefined {
-    return this.viewCube.pick(clientX, clientY, this.renderer.domElement.getBoundingClientRect());
+    return this.cubeOn ? this.viewCube.pick(clientX, clientY, this.renderer.domElement.getBoundingClientRect()) : undefined;
   }
 
   viewCubePointOf(region: ViewRegion): { x: number; y: number } | undefined {
@@ -1405,7 +1438,9 @@ export class Viewer {
       const { calls, triangles, lines } = this.renderer.info.render;
       this.lastFrame = { drawCalls: calls, triangles, lines };
     }
-    this.viewCube.render(this.renderer, camera, this.width, this.height);
+    if (this.cubeOn) {
+      this.viewCube.render(this.renderer, camera, this.width, this.height);
+    }
     this.measureTool.updateLabels();
     this.needsRender = false;
     this.frames++;
@@ -1422,15 +1457,7 @@ export class Viewer {
    * Ctrl+Z and Ctrl+Y stay the input's own.
    */
   private onKeyDown(event: KeyboardEvent): void {
-    if (event.altKey || isEditable(event.target)) {
-      return;
-    }
-    // A menu is open over the page: its keys are the menu's, and Escape closes it rather than
-    // clearing the selection or ending a tool behind it.
-    if (openMenu()) {
-      if (event.key === 'Escape') {
-        closeMenu();
-      }
+    if (event.altKey || isEditable(event.target) || this.options.keyFilter?.(event)) {
       return;
     }
     const key = event.key.toLowerCase();
@@ -1911,22 +1938,6 @@ function sameSet(a: ReadonlySet<number>, b: ReadonlySet<number>): boolean {
 /** Fractions across a range, from the middle outwards: 0.5, then nearer the edges. */
 function gridFractions(steps: number): number[] {
   return Array.from({ length: steps }, (_, i) => (i + 0.5) / steps).sort((a, b) => Math.abs(a - 0.5) - Math.abs(b - 0.5));
-}
-
-/**
- * A menu open in the page's popover layer (the page's UI library draws menus there, with an overlay that
- * closes them when it's clicked). Tooltips use the same layer, so only a list counts.
- */
-function openMenu(): Element | null {
-  return document.querySelector('.mud-popover-open .mud-list');
-}
-
-/** Closes the open menu as a click beside it would. */
-function closeMenu(): void {
-  const overlay = document.querySelector('.mud-overlay');
-  if (overlay instanceof HTMLElement) {
-    overlay.click();
-  }
 }
 
 function isEditable(target: EventTarget | null): boolean {

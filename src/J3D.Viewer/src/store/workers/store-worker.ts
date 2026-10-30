@@ -2,7 +2,7 @@
 // file into a synchronous access handle a chunk at a time, which every engine supports in a
 // worker, and answers requests one at a time so a delete never overtakes the copy before it.
 
-import type { WorkerScope } from '../../import/protocol.js';
+import type { WorkerScope } from '@j3d/occt/core';
 import type { StoreRequestMessage, StoreResponse } from '../protocol.js';
 import { respond, StoreOps, type DirectoryHandle } from '../store-ops.js';
 

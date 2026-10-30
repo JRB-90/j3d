@@ -5,7 +5,7 @@ using J3D.Web.Client.Models;
 namespace J3D.Web.Client.Tests.Interop;
 
 /// <summary>
-/// The viewer's model events, as src/J3D.Viewer/src/model-events.ts sends them, deserialised with
+/// The viewer's model events, as src/J3D.Web.Client/scripts/src/model-events.ts sends them, deserialised with
 /// the web defaults Blazor's JS interop uses.
 /// </summary>
 public sealed class ModelEventJsonTests

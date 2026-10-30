@@ -48,8 +48,13 @@ public sealed partial class ThirdPartyNoticesTests
     [Fact]
     public void Every_runtime_dependency_is_listed_with_the_version_that_ships()
     {
+        // The viewer's own dependencies, and the app's for the three.js the viewer leaves to it (D255).
         var viewer = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo, "src", "J3D.Viewer", "package.json")));
-        foreach (var dependency in viewer.RootElement.GetProperty("dependencies").EnumerateObject())
+        var scripts = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo, "src", "J3D.Web.Client", "scripts", "package.json")));
+        var npm = viewer.RootElement.GetProperty("dependencies").EnumerateObject()
+            .Concat(scripts.RootElement.GetProperty("dependencies").EnumerateObject())
+            .Where(static dependency => dependency.Name != "@j3d/viewer");
+        foreach (var dependency in npm)
         {
             Assert.True(NpmComponents.TryGetValue(dependency.Name, out var name), $"npm dependency {dependency.Name} isn't in ThirdParty or THIRD-PARTY-NOTICES.md");
             if (dependency.Name != "@j3d/occt")

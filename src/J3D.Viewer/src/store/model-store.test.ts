@@ -369,3 +369,52 @@ describe('ModelStore', () => {
     expect(tab.store.state).toMatchObject({ stored: [], order: [] });
   });
 });
+
+describe('ModelStore options (D256)', () => {
+  it('keeps a named store in its own folder under its own lock, apart from another on the origin', async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const first = openTab(disk, locks, { name: 'first' });
+    const second = openTab(disk, locks, { name: 'second' });
+
+    expect((await first.store.opened).status).toBe('kept');
+    expect((await second.store.opened).status).toBe('kept');
+    expect(locks.held).toEqual(new Set(['first-store', 'second-store']));
+
+    await first.store.save(summary('a'), [source('a.step')]);
+    await second.store.save(summary('b'), [source('b.step')]);
+
+    const files = Object.keys(disk.files());
+    expect(files).toContain('first/models/a/0');
+    expect(files).toContain('second/models/b/0');
+    first.store.dispose();
+    second.store.dispose();
+  });
+
+  it('is j3d when no name is given, so the app finds what it kept', async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const tab = openTab(disk, locks);
+
+    await tab.store.opened;
+    await tab.store.save(summary('a'), [source('a.step')]);
+
+    expect(locks.held).toEqual(new Set(['j3d-store']));
+    expect(Object.keys(disk.files())).toContain('j3d/models/a/0');
+    tab.store.dispose();
+  });
+
+  it('keeps nothing when off: no worker, no lock and no files', async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const tab = openTab(disk, locks, { off: true });
+
+    expect(await tab.store.opened).toEqual({ status: 'unavailable', models: [], camera: null, unreadable: 0 });
+    expect(await tab.store.save(summary('a'), [source('a.step')])).toBe('notKept');
+
+    expect(tab.worker).toBeUndefined();
+    expect(locks.held.size).toBe(0);
+    expect(disk.files()).toEqual({});
+    tab.store.dispose();
+  });
+});

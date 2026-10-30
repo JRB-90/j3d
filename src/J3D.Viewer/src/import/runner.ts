@@ -1,5 +1,5 @@
 import type { ModelFormat } from '../formats.js';
-import type { ProgressListener } from './progress.js';
+import type { ProgressListener } from '@j3d/occt/core';
 import type { Sidecars } from './sidecars.js';
 import type { ImportResult } from './types.js';
 

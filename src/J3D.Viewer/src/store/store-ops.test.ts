@@ -220,3 +220,21 @@ describe('StoreOps', () => {
     expect(await ops.pruneArrivals('a', [])).toBe(0);
   });
 });
+
+describe('StoreOps, named (D256)', () => {
+  it('works in the folder its name gives, and clearing leaves other stores alone', async () => {
+    const disk = new FakeDisk();
+    const first = new StoreOps(disk.root);
+    const second = new StoreOps(disk.root);
+    await first.open('first');
+    await second.open('second');
+    await first.save('a', meta('a'), [new Blob(['a data'])]);
+    await second.save('b', meta('b'), [new Blob(['b data'])]);
+
+    await first.clear();
+
+    const files = Object.keys(disk.files());
+    expect(files.some((path) => path.startsWith('first/'))).toBe(false);
+    expect(files).toContain('second/models/b/0');
+  });
+});

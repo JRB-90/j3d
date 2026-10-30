@@ -1,6 +1,6 @@
+import type { ModelEdits } from '@j3d/viewer';
 import { describe, expect, it } from 'vitest';
 import { decodeEdits, encodeEdits } from './edits-codec.js';
-import type { ModelEdits } from './structure.js';
 
 /** The example J3D.Web.Client.Tests' EditsCodecTests packs, with the numbers and text it expects. */
 const example: ModelEdits = {

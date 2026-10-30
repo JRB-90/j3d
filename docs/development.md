@@ -18,8 +18,9 @@ are in [plan.md](plan.md); this page is the practical side.
 |---|---|
 | `src/J3D.Web` | ASP.NET Core host: static assets with cross-origin isolation headers, the prerendered shell |
 | `src/J3D.Web.Client` | Blazor WebAssembly UI (MudBlazor): toolbar, model list, About, the interop wrappers and state |
-| `src/J3D.Viewer` | TypeScript: the Three.js viewer, the import pipeline and its workers |
-| `src/J3D.Occt` | The custom OCCT WebAssembly build (libcascade toolchain), its C++ facade and typed wrapper ([README](../src/J3D.Occt/README.md)) |
+| `src/J3D.Web.Client/scripts` | The app's browser code (`@j3d/client-scripts`): the bridge from `@j3d/viewer` to .NET, and the layout's touch handling. Its Vite build is what the browser loads |
+| `src/J3D.Viewer` | `@j3d/viewer`: the Three.js viewer, the import pipeline and its mesh and store workers |
+| `src/J3D.Occt` | `@j3d/occt`: the custom OCCT WebAssembly build (libcascade toolchain), its C++ facade, and the model worker with its main-thread API ([README](../src/J3D.Occt/README.md)) |
 | `tests/J3D.Web.Client.Tests` | xUnit v3 + bUnit: components, state, interop JSON, the third-party notices |
 | `tests/J3D.Web.Tests` | xUnit v3 + WebApplicationFactory: the host's headers and MIME types |
 | `tests/J3D.E2E.Tests` | xUnit v3 + Playwright: the real app in Chromium and Firefox |
@@ -31,13 +32,18 @@ are in [plan.md](plan.md); this page is the practical side.
 dotnet run --project src/J3D.Web --launch-profile https
 ```
 
-`dotnet build` runs `npm ci` the first time, then the viewer's Vite build, whose output goes to
-`src/J3D.Web.Client/wwwroot/viewer/` (git-ignored). The static-assets manifest is fixed at build time, so rebuild after
-changing the viewer before running the app again. To work on the viewer with a watch build, run it alongside and skip
-it in MSBuild:
+`dotnet build` runs `npm ci` the first time, then compiles `@j3d/occt` and `@j3d/viewer` into their `lib/` folders and
+bundles what they'd ship with the app's bridge, into `src/J3D.Web.Client/wwwroot/viewer/` (all git-ignored). Typechecks
+and Vitest read the packages' sources through the `j3d-source` export condition, so they need no build. The
+static-assets manifest is fixed at build time, so rebuild after changing the viewer before running the app again. To
+work on the viewer with a watch build, run both of these alongside and skip it in MSBuild:
 
 ```bash
 npm run dev --workspace @j3d/viewer
+```
+
+```bash
+npm run dev --workspace @j3d/client-scripts
 ```
 
 ```bash
@@ -45,7 +51,8 @@ dotnet build J3D.slnx -p:SkipViewerBuild=true
 ```
 
 In Development the host also renders a `<meta name="j3d-test-hook">`, which turns on the viewer's test hook
-(`window.__j3dTest`, `src/J3D.Viewer/src/test-hook.ts`): the E2E tests drive and inspect the viewer through it.
+(`window.__j3dTest`, `src/J3D.Viewer/src/test-hook.ts`, reached through `@j3d/viewer/testing`): the E2E tests drive and
+inspect the viewer through it.
 
 The app keeps imported models in the browser's origin private file system and imports them again on every load
 (docs/plan.md §6.2). To start from an empty scene, use **Clear all** above the model list, or clear the site's data for

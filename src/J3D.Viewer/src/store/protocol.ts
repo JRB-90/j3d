@@ -5,7 +5,7 @@ import type { ModelId } from '../import/types.js';
 import type { KeptEdits, Manifest, StoredMeta } from './types.js';
 
 export type StoreRequest =
-  | { type: 'open' }
+  | { type: 'open'; name?: string }
   | { type: 'save'; id: ModelId; meta: StoredMeta; files: Blob[] }
   | { type: 'load'; id: ModelId }
   | { type: 'delete'; id: ModelId }

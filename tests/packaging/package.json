@@ -1,0 +1,19 @@
+{
+  "name": "j3d-packaging-check",
+  "private": true,
+  "description": "Installs the packed @j3d/viewer and @j3d/occt into an app, builds it with Vite and with webpack, and runs it (D268).",
+  "type": "module",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "playwright-core": "1.63.0",
+    "vite": "8.3.5",
+    "webpack": "5.112.2",
+    "webpack-cli": "6.0.1",
+    "webpack-dev-server": "5.2.7"
+  }
+}

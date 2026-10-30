@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filesFromDataTransfer } from './batch-files.js';
+import { filesFromDataTransfer, filesFromList } from './batch-files.js';
 
 // Minimal stand-ins for the File and Directory Entries API, which Node doesn't have.
 const file = (fullPath: string) => ({
@@ -75,5 +75,15 @@ describe('filesFromDataTransfer', () => {
   it('ignores non-file items such as dragged text', async () => {
     const drop = { items: [{ kind: 'string' }], files: [] } as unknown as DataTransfer;
     expect(await filesFromDataTransfer(drop)).toEqual([]);
+  });
+});
+
+describe('filesFromList', () => {
+  it('takes each file by its own name (D269)', () => {
+    const files = [new File(['x'], 'part.gltf'), new File(['y'], 'part.bin')];
+    expect(filesFromList(files)).toEqual([
+      { file: files[0], path: 'part.gltf' },
+      { file: files[1], path: 'part.bin' },
+    ]);
   });
 });

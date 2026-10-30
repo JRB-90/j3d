@@ -6,7 +6,7 @@ using Microsoft.JSInterop;
 namespace J3D.Web.Client.Interop;
 
 /// <summary>
-/// Typed wrapper around the TypeScript viewer (src/J3D.Viewer/src/index.ts): the only code that
+/// Typed wrapper around the TypeScript viewer (src/J3D.Web.Client/scripts/src/index.ts): the only code that
 /// calls into it (docs/plan.md §6.4). The viewer calls back through the
 /// <see cref="DotNetObjectReference{TValue}"/> it was created with.
 /// </summary>
