@@ -24,6 +24,7 @@
     private string Status => Scene.Selection switch
     {
         [var (model, node), ..] => model.Tree?.NameOf(node) ?? model.Summary.FileName,
+        _ when Scene.Models.Any(model => model.IsPending) => "Opening…",
         _ when _notice is not null => _notice,
         _ when Scene.Models.IsEmpty => "Choose a file, or drop one on the view.",
         _ => "Click a part to select it.",
@@ -33,7 +34,15 @@
 
     public void Dispose() => Scene.Changed -= Refresh;
 
-    private void Refresh() => _ = InvokeAsync(StateHasChanged);
+    private void Refresh()
+    {
+        if (Scene.Models.Any(model => model.IsPending))
+        {
+            _notice = null;
+        }
+
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     private Task AttachFilesAsync(ViewerCapabilities capabilities) => Session.AttachFileInputAsync(_files);
 

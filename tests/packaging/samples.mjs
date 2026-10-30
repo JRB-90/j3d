@@ -113,6 +113,12 @@ async function smoke(browser, url, viewerSelector) {
       throw new Error('A click on the part selected nothing.');
     });
     console.log(`drew ${(share * 100).toFixed(1)}% of the viewer, picked "${await status.textContent()}"`);
+
+    // The sample fills its window, with the viewer in charge of what's inside it.
+    const size = await page.evaluate(() => ({ height: document.documentElement.scrollHeight, inner: window.innerHeight }));
+    if (size.height > size.inner) {
+      throw new Error(`The page scrolls: ${size.height} px in a ${size.inner} px window.`);
+    }
     if (problems.length > 0) {
       throw new Error('The page reported problems.');
     }
