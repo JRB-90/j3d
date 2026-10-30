@@ -7,9 +7,13 @@ following Replicad's approach: a trimmed build plus project-owned C++ wrappers. 
 |---|---|
 | `libcascade.config.ts` | Build config: bound symbols, Emscripten settings, `single` (default) and `multi` variants |
 | `wrappers/j3d_facade.cpp` | C++ facade: `J3DModel` (import → mesh → scene/prototypes; measuring, M7; STEP and BREP export, M9) and `J3DMeshData` (buffers) |
-| `src/facade.ts` | Typed wrapper: `OcctModel.load(module, source, format, fileName, options)` |
+| `src/index.ts` | The package: `openModel(file, format, options)` opens a model in a worker of its own |
+| `src/open-model.ts`, `src/model-worker.ts`, `src/protocol.ts` | That worker and the main thread's side of it |
+| `src/core.ts` | `@j3d/occt/core`: errors, progress and types, with no worker in it |
+| `src/facade.ts` | `@j3d/occt/facade`, typed wrapper: `OcctModel.load(module, source, format, fileName, options)`, for use inside a worker |
 | `src/facade.test.ts` | Integration tests: the real WASM under Node against `tests/fixtures` (also `measure.test.ts` and `export.test.ts`) |
 | `dist/` | Built `j3d_occt_{single,multi}` glue, `.wasm` (Git LFS), types, provenance. **Committed, never hand-edited.** |
+| `scripts/build.mjs` | Compiles the package to `lib/`, beside a copy of the glue and the single-threaded WASM (D264) |
 | `scripts/check-dist.mjs` | Fails if `dist/` wasn't built from the current config and C++ (used by CI) |
 | `scripts/generate-fixtures.mjs` | Regenerates the OCCT fixtures in `tests/fixtures` |
 | `scripts/generate-large-step.mjs` | Writes large STEP files (block or curved copies) into the git-ignored `tests/fixtures/large/` (`npm run fixtures:large`) |
