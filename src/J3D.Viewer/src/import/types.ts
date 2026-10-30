@@ -20,15 +20,23 @@ export type {
   Vector3Tuple,
 } from '@j3d/occt/core';
 
+/** Names a model for as long as the viewer has it. */
 export type ModelId = string;
 
+/** How a model's import stands. */
 export type ModelStatus = 'queued' | 'importing' | 'loaded' | 'failed';
 
+/** A model as soon as it's queued: what can be said without importing it. */
 export interface ModelSummary {
+  /** Its id. */
   id: ModelId;
+  /** Its file's name. */
   fileName: string;
+  /** Its format. */
   format: ModelFormat;
+  /** Read by the kernel (`brep`) or as a mesh. */
   kind: ModelKind;
+  /** Its file's size. */
   sizeBytes: number;
 }
 
@@ -40,6 +48,7 @@ export interface KeptPlacement {
 
 /** One node of the model tree. The tree is flat: parents always come before their children. */
 export interface TreeNode {
+  /** As the file names it. */
   name: string;
   /** Index of the parent node, or -1 for a root. */
   parent: number;
@@ -98,7 +107,9 @@ export interface ImportResult {
   warnings: string[];
 }
 
+/** A model once imported: its tree, bounds and stats, and what the viewer draws. */
 export interface LoadedModel extends ImportResult {
+  /** What it is. */
   summary: ModelSummary;
   /**
    * Imported again from its kept files, after a reload or an undone delete (M8): the hidden parts to

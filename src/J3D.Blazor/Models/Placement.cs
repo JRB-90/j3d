@@ -6,7 +6,9 @@ namespace J3D.Blazor;
 [JsonConverter(typeof(JsonStringEnumConverter<MoveMode>))]
 public enum MoveMode
 {
+    /// <summary>Moves the target along an axis.</summary>
     [JsonStringEnumMemberName("translate")] Translate,
+    /// <summary>Turns the target about an axis.</summary>
     [JsonStringEnumMemberName("rotate")] Rotate,
 }
 
@@ -14,8 +16,11 @@ public enum MoveMode
 [JsonConverter(typeof(JsonStringEnumConverter<MoveFrame>))]
 public enum MoveFrame
 {
+    /// <summary>The target's own axes.</summary>
     [JsonStringEnumMemberName("local")] Local,
+    /// <summary>Its parent's axes.</summary>
     [JsonStringEnumMemberName("parent")] Parent,
+    /// <summary>The world's axes.</summary>
     [JsonStringEnumMemberName("world")] World,
 }
 
@@ -27,6 +32,7 @@ public sealed class Matrix4d : IEquatable<Matrix4d>
 {
     private readonly double[] _elements;
 
+    /// <summary>A matrix from its 16 elements, column by column.</summary>
     public Matrix4d(IReadOnlyList<double> elements)
     {
         ArgumentNullException.ThrowIfNull(elements);
@@ -38,6 +44,7 @@ public sealed class Matrix4d : IEquatable<Matrix4d>
         _elements = [.. elements];
     }
 
+    /// <summary>The transform that changes nothing.</summary>
     public static Matrix4d Identity { get; } = new([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
     /// <summary>The element in a row and a column, both from 0.</summary>
@@ -46,6 +53,7 @@ public sealed class Matrix4d : IEquatable<Matrix4d>
     /// <summary>The elements, column by column, for the viewer.</summary>
     public double[] ToArray() => [.. _elements];
 
+    /// <summary>The transform that does <paramref name="b"/> and then <paramref name="a"/>.</summary>
     public static Matrix4d operator *(Matrix4d a, Matrix4d b)
     {
         ArgumentNullException.ThrowIfNull(a);
@@ -68,6 +76,7 @@ public sealed class Matrix4d : IEquatable<Matrix4d>
         return new(product);
     }
 
+    /// <summary>The transform that does <paramref name="b"/> and then <paramref name="a"/>.</summary>
     public static Matrix4d Multiply(Matrix4d a, Matrix4d b) => a * b;
 
     /// <summary>The inverse of an affine transform (a placement, perhaps scaled): the 3 × 3 part inverted, then the translation.</summary>
@@ -110,10 +119,13 @@ public sealed class Matrix4d : IEquatable<Matrix4d>
          Math.Sqrt(this[0, 1] * this[0, 1] + this[1, 1] * this[1, 1] + this[2, 1] * this[2, 1]),
          Math.Sqrt(this[0, 2] * this[0, 2] + this[1, 2] * this[1, 2] + this[2, 2] * this[2, 2]));
 
+    /// <inheritdoc />
     public bool Equals(Matrix4d? other) => other is not null && _elements.AsSpan().SequenceEqual(other._elements);
 
+    /// <inheritdoc />
     public override bool Equals(object? obj) => Equals(obj as Matrix4d);
 
+    /// <inheritdoc />
     public override int GetHashCode()
     {
         var hash = new HashCode();
@@ -132,6 +144,7 @@ public sealed class Matrix4d : IEquatable<Matrix4d>
 /// </summary>
 public sealed record Pose(double X, double Y, double Z, double Rx, double Ry, double Rz)
 {
+    /// <summary>Nowhere moved and nothing turned.</summary>
     public static Pose Zero { get; } = new(0, 0, 0, 0, 0, 0);
 
     /// <summary>

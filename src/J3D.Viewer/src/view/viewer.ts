@@ -126,7 +126,9 @@ const TouchReach = 2;
 
 /** One part of one model: a tree node that draws something (D77). */
 export interface PartRef {
+  /** The model. */
   id: ModelId;
+  /** The tree node. */
   node: number;
 }
 
@@ -158,10 +160,15 @@ export type ViewerCommand =
  * frame in the world, column-major, with the model's millimetres per unit (D105).
  */
 export interface MoveTargetInfo {
+  /** The model. */
   id: ModelId;
+  /** The tree node, or -1 for the whole model. */
   node: number;
+  /** Its placement in its parent's frame. */
   local: number[];
+  /** That frame in the world. */
   parentWorld: number[];
+  /** The model's millimetres per unit. */
   unitScale: number;
 }
 
@@ -173,12 +180,17 @@ export type SelectionMode = 'model' | 'object' | 'feature';
 
 /** A right click that didn't drag (D164): where, the part under it, and whether there's an entity to measure from. */
 export interface ContextTarget {
+  /** The pointer's position. */
   x: number;
+  /** The pointer's position. */
   y: number;
+  /** The part under it, if any. */
   part: PartRef | undefined;
+  /** There's an entity under it to measure from. */
   canMeasure: boolean;
 }
 
+/** How the view behaves, and what it reports. */
 export interface ViewerOptions {
   /**
    * J3D's keys (D256): `true` acts on them while the pointer or focus is in the viewer, `'page'` wherever
@@ -195,11 +207,13 @@ export interface ViewerOptions {
   viewButtons?: boolean;
   /** A click that didn't drag: the part under the pointer, or undefined on empty space. */
   onPick?: (part: PartRef | undefined, additive: boolean) => void;
+  /** A key asked for something the caller owns, such as hide or undo. Keys are off unless `keys` asks for them. */
   onCommand?: (command: ViewerCommand) => void;
   /** The Measure tool's reference, or null when there's none (D147). */
   onMeasureReference?: (info: MeasureInfo | null) => void;
   /** The reference against the last click, or null. */
   onMeasureResult?: (info: MeasureInfo | null) => void;
+  /** A measurement failed, with why. */
   onMeasureError?: (message: string) => void;
   /** The features selected in Feature mode, once their values are known (D146, D163). */
   onFeatures?: (selection: FeatureSelectionInfo) => void;

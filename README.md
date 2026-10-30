@@ -253,6 +253,12 @@ tried on a phone.
 Building, testing, rebuilding the OCCT WebAssembly and the CI are covered in [docs/development.md](docs/development.md).
 The design, decisions and milestones are in [docs/plan.md](docs/plan.md).
 
+## In your own project
+
+The viewer also comes as packages for your own app: `@j3d/viewer` for any web app, `J3D.Blazor` for Blazor WebAssembly,
+and `@j3d/occt` for the kernel alone. [docs/library.md](docs/library.md) takes a new project from nothing to a loaded
+model, and [samples/](samples) holds a working app of each kind.
+
 ## Licence
 
 J3D is MIT-licensed ([LICENSE](LICENSE)). It makes use of the Open CASCADE Technology software (LGPL-2.1 with the Open

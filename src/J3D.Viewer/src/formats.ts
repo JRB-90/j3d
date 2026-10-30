@@ -1,6 +1,6 @@
 /**
  * Supported import formats. This module is the single source of truth for file-extension detection;
- * .NET receives the lowercase format name (see J3D.Web.Client/Models/ModelFormat.cs).
+ * .NET receives the lowercase format name (see J3D.Blazor/Models/ModelFormat.cs).
  */
 export type ModelFormat = 'step' | 'iges' | 'brep' | 'stl' | 'obj' | 'gltf';
 
@@ -19,6 +19,7 @@ const formatsByExtension: ReadonlyMap<string, ModelFormat> = new Map<string, Mod
   ['.glb', 'gltf'],
 ]);
 
+/** The file extensions the viewer imports, in lower case, each with its dot. */
 export const supportedExtensions: readonly string[] = [...formatsByExtension.keys()];
 
 /**
@@ -36,6 +37,7 @@ export function extensionOf(fileName: string): string {
   return dot < 0 ? '' : fileName.slice(dot).toLowerCase();
 }
 
+/** The format a file's name says it is, if it's one the viewer imports. */
 export function detectFormat(fileName: string): ModelFormat | undefined {
   return formatsByExtension.get(extensionOf(fileName));
 }
@@ -44,6 +46,7 @@ export function isSidecar(fileName: string): boolean {
   return sidecarExtensions.includes(extensionOf(fileName));
 }
 
+/** Whether a format is read by the kernel (`brep`) or as a mesh. */
 export function kindOf(format: ModelFormat): ModelKind {
   switch (format) {
     case 'step':

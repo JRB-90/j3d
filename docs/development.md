@@ -22,12 +22,15 @@ are in [plan.md](plan.md); this page is the practical side.
 | `src/J3D.Blazor` | The Razor library: `<J3DViewer>`, the scene's state, undo and tree edits, and the interop, with no MudBlazor |
 | `src/J3D.Blazor/scripts` | Its browser code (`@j3d/blazor-scripts`): the bridge from `@j3d/viewer` to .NET. Its Vite build is the viewer bundle the library ships |
 | `src/J3D.Viewer` | `@j3d/viewer`: the Three.js viewer, the import pipeline and its mesh and store workers |
-| `src/J3D.Occt` | `@j3d/occt`: the custom OCCT WebAssembly build (libcascade toolchain), its C++ facade, and the model worker with its main-thread API ([README](../src/J3D.Occt/README.md)) |
+| `src/J3D.Occt` | `@j3d/occt`: the custom OCCT WebAssembly build (libcascade toolchain), its C++ facade, and the model worker with its main-thread API ([BUILDING](../src/J3D.Occt/BUILDING.md)) |
 | `tests/J3D.Blazor.Tests` | xUnit v3 + bUnit: `<J3DViewer>`, the state, interop JSON |
 | `tests/J3D.Web.Client.Tests` | xUnit v3 + bUnit: the app's components, the third-party notices |
 | `tests/J3D.Web.Tests` | xUnit v3 + WebApplicationFactory: the host's headers and MIME types |
 | `tests/J3D.E2E.Tests` | xUnit v3 + Playwright: the real app in Chromium and Firefox |
+| `tests/packaging` | Node + Playwright: the packed packages in a Vite and a webpack app, and the samples |
 | `tests/fixtures` | Generated, licence-free CAD and mesh files shared by every test ([README](../tests/fixtures/README.md)) |
+| `samples` | A Vite app and a Blazor Web App on the released packages, outside the solution and the workspaces |
+| `scripts` | `pack.mjs` writes the three packages, and `package-notices.mjs` cuts each one's notices from `THIRD-PARTY-NOTICES.md` |
 
 ## Build and run
 
@@ -72,6 +75,8 @@ E2E test runs in a fresh browser context, so it starts with an empty store.
 | Client (xUnit + bUnit) | `dotnet test --project tests/J3D.Web.Client.Tests` |
 | Host | `dotnet test --project tests/J3D.Web.Tests` |
 | E2E (Playwright) | `dotnet test --project tests/J3D.E2E.Tests` |
+| The packed packages in Vite and webpack | `npm install && npm test` in `tests/packaging`; `npm test -- webpack` for one bundler |
+| The samples, from packed files | `npm install && npm run samples` in `tests/packaging`; `npm run samples -- blazor` for one |
 
 The build treats warnings as errors and enforces `.editorconfig` and the analyzers (including the trim analyzer on the
 client), so a clean build is part of passing.
@@ -229,8 +234,9 @@ toolchain puts on the facade's C++ are listed in [plan.md §6.1](plan.md).
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main`, on `ubuntu-26.04` (pinned, D68, D131):
 
 1. **Build & unit tests:** the OCCT staleness check, typecheck, Vitest (including the OCCT integration tests), a
-   Release build, and the client and host tests.
-2. **E2E**, one job per browser: publish the app and run the Playwright suite against it (D65). Firefox runs headed under
+   Release build, and the library, client and host tests.
+2. **Packaging:** the packed packages in an app built with Vite and with webpack, then both samples on the packed files.
+3. **E2E**, one job per browser: publish the app and run the Playwright suite against it (D65). Firefox runs headed under
    Xvfb, a class at a time. Failed pixel checks upload their screenshots as `e2e-screenshots-<browser>`.
 
 Run it by hand with extra inputs (`gh workflow run ci.yml --ref <branch> -f <input>=<value>`):
@@ -242,6 +248,29 @@ Run it by hand with extra inputs (`gh workflow run ci.yml --ref <branch> -f <inp
 | `threads_benchmark` | Runs only the threading benchmark on these files (e.g. `large/large-25mb.step large/curved-25mb.step`), with the tables in the job summary |
 
 `.github/workflows/occt-wasm.yml` is the OCCT build described above.
+
+## Releasing
+
+`.github/workflows/release.yml` runs on a `v*` tag. All three packages take the tag's version, and nothing in the repo
+holds it, so a release needs no version commit.
+
+1. **Rehearse if the workflow changed.** A tag with a hyphen stops at an unpublished draft, which ships nothing:
+
+   ```bash
+   git tag v0.1.0-rc.1
+   ```
+
+   ```bash
+   git push origin v0.1.0-rc.1
+   ```
+
+   Delete the draft and the tag afterwards.
+2. **Tag `main`** with the version and push it. CI runs in full, then the workflow packs, tries the samples on those
+   files, and creates a prerelease with them. If a job fails on a flake, rerun it from the Actions page.
+3. **The release turns latest by itself** once both samples install from its public URLs. If that check fails, the
+   release stays a prerelease: fix the fault and release the next version.
+4. **Point the docs at it.** `samples/` and `docs/library.md` name a version, which `tests/packaging` swaps for what it's
+   testing, so they don't fail when they fall behind. Update them with the next change.
 
 ## Conventions
 

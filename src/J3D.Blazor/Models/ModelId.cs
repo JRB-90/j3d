@@ -7,6 +7,7 @@ namespace J3D.Blazor;
 [JsonConverter(typeof(ModelIdJsonConverter))]
 public readonly record struct ModelId(string Value)
 {
+    /// <inheritdoc />
     public override string ToString() => Value;
 }
 

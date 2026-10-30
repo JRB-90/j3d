@@ -94,6 +94,7 @@ public sealed partial class J3DViewer(IJSRuntime js, ViewerSession session, Scen
     /// <summary>What the viewer calls back: internal, as the entry points must be public (D270).</summary>
     internal ViewerCallbacks Callbacks => field ??= new ViewerCallbacks(this, session, scene);
 
+    /// <inheritdoc />
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
@@ -141,6 +142,7 @@ public sealed partial class J3DViewer(IJSRuntime js, ViewerSession session, Scen
         }
     }
 
+    /// <summary>Stops the viewer and takes it out of the session, and its models with it.</summary>
     public async ValueTask DisposeAsync()
     {
         _disposed = true;

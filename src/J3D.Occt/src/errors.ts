@@ -1,6 +1,8 @@
 import type { ImportError, ImportErrorCode } from './types.js';
 
+/** The message when a model outgrows WebAssembly's 4 GB. */
 export const OutOfWasmMemoryMessage = "Model too large for the browser's 4 GB WebAssembly limit.";
+/** The message when a model outgrows the browser's memory. */
 export const OutOfMemoryMessage = "Model too large for the browser's memory.";
 
 /** An import failure with one of the codes in docs/plan.md §6.2. */
@@ -48,6 +50,7 @@ export function toImportError(error: unknown, wasm = false): ImportError {
   return { code: code ?? 'Internal', message: message || 'The import failed.' };
 }
 
+/** The message of anything thrown. */
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;

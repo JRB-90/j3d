@@ -5,11 +5,13 @@ import { describeEntity, entityAt, modelOf, removeHighlight, sameEntity, type Me
 import type { Highlight } from './parts.js';
 
 /**
- * What Feature selection holds (D146, D163; mirrors J3D.Web.Client/Interop/FeatureSelection.cs): each
+ * What Feature selection holds (D146, D163; mirrors J3D.Blazor/Interop/FeatureSelection.cs): each
  * selected face, edge or vertex's values, in the order they were picked, and the totals that add up.
  */
 export interface FeatureSelectionInfo {
+  /** Each selected feature's values, in the order picked. */
   features: MeasureInfo[];
+  /** The totals that add up. */
   totals: MeasureRow[];
   /**
    * Every selected feature, described or not, as one string (M17): .NET compares it to tell a change, and

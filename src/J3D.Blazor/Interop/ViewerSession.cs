@@ -15,13 +15,16 @@ public sealed class ViewerSession
     /// <summary>Raised when the viewer starts or stops, or the projection changes.</summary>
     public event Action? Changed;
 
+    /// <summary>What the browser gives the viewer, or null until it has started.</summary>
     public ViewerCapabilities? Capabilities { get; private set; }
 
+    /// <summary>The camera's projection.</summary>
     public Projection Projection { get; private set; } = Projection.Orthographic;
 
     /// <summary>The viewer is running and can draw (the browser has WebGL2).</summary>
     public bool IsReady => _viewer is not null && Capabilities is { IsSupported: true };
 
+    /// <summary>Imports the files picked in <paramref name="input"/>, whose <c>accept</c> list the viewer sets. Call it from <see cref="J3DViewer.OnReady"/> or later: before that there's no viewer, and it does nothing.</summary>
     public async Task AttachFileInputAsync(ElementReference input)
     {
         if (_viewer is not null)
@@ -42,6 +45,7 @@ public sealed class ViewerSession
         }
     }
 
+    /// <summary>Frames every model, keeping the view's direction.</summary>
     public async Task FitAllAsync()
     {
         if (IsReady)
@@ -50,6 +54,7 @@ public sealed class ViewerSession
         }
     }
 
+    /// <summary>Switches the camera, keeping the framing.</summary>
     public async Task SetProjectionAsync(Projection projection)
     {
         if (IsReady && projection != Projection)

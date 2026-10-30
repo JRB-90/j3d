@@ -4,7 +4,7 @@ import type { TreeNode } from '../import/types.js';
 
 /**
  * A model's edits to its tree (M14, D151–D152, D180–D187), as .NET makes them and the store keeps them
- * (mirrors J3D.Web.Client/State/ModelEdits.cs). Node ids from the file's node count up are added nodes,
+ * (mirrors J3D.Blazor/State/ModelEdits.cs). Node ids from the file's node count up are added nodes,
  * in the order they were added. A child list that changed replaces the file's; a node in no list is
  * removed, with everything under it. Placements aren't here: they're kept as moves are (M13).
  */
@@ -41,8 +41,11 @@ export interface KeptArrival {
  * source is -1, as a new assembly's.
  */
 export interface ArrivedNode {
+  /** The added node's id. */
   node: number;
+  /** Which arrival it came in. */
   arrival: number;
+  /** Which of that arrival's nodes it is. */
   index: number;
   /** Its name when it arrived. */
   name: string;
@@ -75,6 +78,7 @@ export function arrivalBase(fileCount: number, arrivals: readonly KeptArrival[] 
  * (piece -1), or one of the part's pieces. Its added source is -1, as a new assembly's.
  */
 export interface ExpandedNode {
+  /** The added node's id. */
   node: number;
   /** The part it expands: a file node, or a copy of one. It leaves the tree as the assembly takes its place. */
   expands: number;

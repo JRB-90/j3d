@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace J3D.Blazor;
 
+/// <summary>Registers what the library needs.</summary>
 public static class J3DBlazorServices
 {
     extension(IServiceCollection services)

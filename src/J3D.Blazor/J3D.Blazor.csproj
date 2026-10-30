@@ -5,6 +5,8 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
     <!-- The library's browser code is its own npm workspace, built below; none of it is .NET content. -->
     <DefaultItemExcludes>$(DefaultItemExcludes);scripts\**</DefaultItemExcludes>
+    <!-- Its comments are its reference (D262, D284), so a public member without one fails the build. -->
+    <NoWarn>$(NoWarn.Replace('CS1591', ''))</NoWarn>
   </PropertyGroup>
 
   <!-- Packed by scripts/pack.mjs, which stamps the version and cuts the notices (D257, D285). -->

@@ -10,7 +10,9 @@ namespace J3D.Blazor;
 /// </summary>
 public sealed record FeatureSelection(IReadOnlyList<MeasureInfo> Features, IReadOnlyList<MeasureRow> Totals, string Keys = "", bool ByUser = false)
 {
+    /// <summary>No features selected.</summary>
     public static readonly FeatureSelection Empty = new([], []);
 
+    /// <summary>Whether no features are selected.</summary>
     public bool IsEmpty => Features.Count == 0;
 }

@@ -1,46 +1,42 @@
-# J3D.Occt — custom OCCT WebAssembly build
+# @j3d/occt
 
-OCCT 8.0.1 compiled to WebAssembly with the [libcascade toolchain](https://www.npmjs.com/package/@libcascade/toolchain),
-following Replicad's approach: a trimmed build plus project-owned C++ wrappers. Design notes: [docs/plan.md §6.1](../../docs/plan.md#61-occt-webassembly-build-srcj3docct).
+The [Open CASCADE Technology](https://dev.opencascade.org/) kernel compiled to WebAssembly, behind a worker per model. It opens STEP, IGES and BREP files in the browser and gives their tree and meshes, and it measures, expands and exports them. There's no three.js in it.
 
-| Path | Purpose |
-|---|---|
-| `libcascade.config.ts` | Build config: bound symbols, Emscripten settings, `single` (default) and `multi` variants |
-| `wrappers/j3d_facade.cpp` | C++ facade: `J3DModel` (import → mesh → scene/prototypes; measuring, M7; STEP and BREP export, M9) and `J3DMeshData` (buffers) |
-| `src/index.ts` | The package: `openModel(file, format, options)` opens a model in a worker of its own |
-| `src/open-model.ts`, `src/model-worker.ts`, `src/protocol.ts` | That worker and the main thread's side of it |
-| `src/core.ts` | `@j3d/occt/core`: errors, progress and types, with no worker in it |
-| `src/facade.ts` | `@j3d/occt/facade`, typed wrapper: `OcctModel.load(module, source, format, fileName, options)`, for use inside a worker |
-| `src/facade.test.ts` | Integration tests: the real WASM under Node against `tests/fixtures` (also `measure.test.ts` and `export.test.ts`) |
-| `dist/` | Built `j3d_occt_{single,multi}` glue, `.wasm` (Git LFS), types, provenance. **Committed, never hand-edited.** |
-| `scripts/build.mjs` | Compiles the package to `lib/`, beside a copy of the glue and the single-threaded WASM (D264) |
-| `scripts/check-dist.mjs` | Fails if `dist/` wasn't built from the current config and C++ (used by CI) |
-| `scripts/generate-fixtures.mjs` | Regenerates the OCCT fixtures in `tests/fixtures` |
-| `scripts/generate-large-step.mjs` | Writes large STEP files (block or curved copies) into the git-ignored `tests/fixtures/large/` (`npm run fixtures:large`) |
-| `scripts/benchmark-threads.mjs` | Spike S4: imports files with both variants, one process per import, and compares them phase by phase (`npm run benchmark:threads`) |
+`@j3d/viewer` installs this for you. Use it directly only if you want the kernel without that viewer.
 
-## Commands
+## Install
 
-Everyday work uses the committed `dist/` and needs no container:
+It's a file on a [GitHub Release](https://github.com/JRB-90/j3d/releases), not on the npm registry:
 
 ```bash
-npm test --workspace @j3d/occt
+npm install https://github.com/JRB-90/j3d/releases/download/v0.1.0/j3d-occt-0.1.0.tgz
 ```
 
-Changing the config or C++ needs a rebuild, which requires Docker (about 6–7 minutes per variant):
+Vite and webpack need no configuration: your bundler copies the worker and the WebAssembly itself.
 
-```bash
-npm run build:wasm --workspace @j3d/occt
+## Use
+
+```ts
+import { openModel } from '@j3d/occt';
+
+const model = await openModel(file, 'step');
+
+for (const node of model.scene.nodes) {
+  console.log(node.name);
+}
+console.log(`${model.stats.triangles} triangles, ${model.memoryBytes} bytes of WebAssembly heap`);
+
+model.dispose();
 ```
 
-Pushing changes to `libcascade.config.ts` or `wrappers/` also triggers the **OCCT WASM** workflow, which rebuilds,
-tests and commits `dist/` itself. CI fails while `dist/` is stale:
+Each model has a worker of its own, which keeps its BREP until `dispose()`. `scene` holds the tree (`nodes`), each mesh once (`prototypes`, in plain typed arrays) and every placement of one (`instances`).
 
-```bash
-npm run check:dist --workspace @j3d/occt
-```
+The model's `measure`, `exporter`, `expander` and `arriver` work on it in that worker. `onProgress` reports the import's phases and `signal` stops it.
 
-## Writing facade C++
+For a worker of your own, `@j3d/occt/facade` is the typed wrapper around the module, and `@j3d/occt/core` holds the errors, progress and types with no worker in them.
 
-The bindgen binds every top-level class in `wrappers/`. Keep helpers as **private nested classes** and free
-functions `inline`; include `emscripten.h` only under `__has_include`. See the plan's "Toolchain constraints" list.
+[`docs/library.md`](https://github.com/JRB-90/j3d/blob/main/docs/library.md) covers all three J3D packages. How the WebAssembly is built is in [`BUILDING.md`](https://github.com/JRB-90/j3d/blob/main/src/J3D.Occt/BUILDING.md).
+
+## Licence
+
+LGPL 2.1 with the Open CASCADE exception: see `LICENSE`. The WebAssembly is a separate file, and everything needed to rebuild it, or build it from a modified OCCT, is in [`src/J3D.Occt`](https://github.com/JRB-90/j3d/tree/main/src/J3D.Occt). `THIRD-PARTY-NOTICES.md` lists what's compiled into it.

@@ -10,10 +10,15 @@ import type { ImportError, ImportPhase, ImportResult, KeptPlacement, KeptState, 
 
 /** Model lifecycle events. Progress is limited to 10 reports per second per model. */
 export interface ModelManagerListener {
+  /** A model joined the queue. */
   queued?(summary: ModelSummary): void;
+  /** An import moved on. `fraction` is null while it can't say how far it is. */
   progress?(id: ModelId, phase: ImportPhase, fraction: number | null): void;
+  /** A model finished importing. */
   loaded?(model: LoadedModel): void;
+  /** A model's import failed. */
   failed?(id: ModelId, error: ImportError): void;
+  /** A model was removed. */
   removed?(id: ModelId): void;
   /** A file that won't be imported: an unsupported type, or a sidecar no model in its batch used. */
   rejected?(fileName: string, reason: string): void;
@@ -21,11 +26,17 @@ export interface ModelManagerListener {
 
 /** A snapshot of one model's state. */
 export interface ModelEntry {
+  /** What it is. */
   summary: ModelSummary;
+  /** How its import stands. */
   status: ModelStatus;
+  /** The phase it's in, while importing. */
   phase?: ImportPhase;
+  /** How far through the phase, or null when that can't be said. */
   fraction?: number | null;
+  /** The model, once loaded. */
   model?: LoadedModel;
+  /** Why its import failed. */
   error?: ImportError;
 }
 

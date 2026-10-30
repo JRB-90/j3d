@@ -8,5 +8,6 @@ namespace J3D.Blazor;
 /// </param>
 public sealed record ViewerCapabilities(bool WebGl2, bool CrossOriginIsolated)
 {
+    /// <summary>Whether the viewer can draw, for which it needs WebGL2.</summary>
     public bool IsSupported => WebGl2;
 }

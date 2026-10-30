@@ -63,7 +63,9 @@ export interface StoredMeta {
 
 /** A model to import again, as .NET lists it: its summary and the hidden parts to apply on load. */
 export interface StoredModel {
+  /** What it is. */
   summary: ModelSummary;
+  /** The part nodes to hide as it loads. */
   hidden: number[];
 }
 
@@ -78,8 +80,12 @@ export type StoreStatus = 'kept' | 'otherTab' | 'unavailable';
  * since M16 how many kept models couldn't be read this time, which stay kept for the next (D200).
  */
 export interface StoredScene {
+  /** Whether this tab keeps its models. */
   status: StoreStatus;
+  /** The models to import again, in order. */
   models: StoredModel[];
+  /** The camera as it was left, or null. */
   camera: CameraSnapshot | null;
+  /** How many kept models couldn't be read this time. */
   unreadable: number;
 }

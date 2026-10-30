@@ -5,6 +5,7 @@ import type { ProgressListener } from './progress.js';
 import type { ArriveRequest, ExpandRequest, ExportRequest, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse } from './protocol.js';
 import { ExportCancelledError, type Bounds, type BrepArriver, type BrepExpander, type BrepExporter, type BrepMeasurer, type ModelStats, type OcctFormat } from './types.js';
 
+/** What {@link openModel} takes. */
 export interface OpenModelOptions {
   /** Named in the worker and in OCCT's messages. Defaults to a `File`'s own name. */
   fileName?: string;
@@ -24,14 +25,21 @@ export interface OpenModelOptions {
 
 /** A model open in a worker of its own, whose BREP stays alive there until {@link OpenedModel.dispose}. */
 export interface OpenedModel {
+  /** Its tree, placements and meshes. */
   scene: ImportedScene;
+  /** Its bounds. */
   bounds: Bounds;
+  /** What it draws. */
   stats: ModelStats;
   /** The worker's WebAssembly heap. */
   memoryBytes: number;
+  /** Measures it. */
   measure: BrepMeasurer;
+  /** Saves it as STEP or BREP. */
   exporter: BrepExporter;
+  /** Splits its compound parts. */
   expander: BrepExpander;
+  /** Reads in objects from another model. */
   arriver: BrepArriver;
   /** Ends the worker, which frees the whole model at once. Exports in progress reject. */
   dispose(): void;

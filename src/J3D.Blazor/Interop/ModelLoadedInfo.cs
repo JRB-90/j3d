@@ -43,6 +43,7 @@ internal sealed record TreeColumns(IReadOnlyList<string> Names, IReadOnlyList<in
 /// <param name="Prototype">The prototype a part node draws, or -1 for a group or assembly.</param>
 public sealed record TreeNode(string Name, int Parent, int Prototype)
 {
+    /// <summary>Whether the node draws a part, rather than grouping others.</summary>
     public bool IsPart => Prototype >= 0;
 }
 

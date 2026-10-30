@@ -4,14 +4,21 @@
 import type { Arrival, EntityRef, ExpandedPiece, ImportedScene, PlanNode, PrototypeMesh } from './facade.js';
 import type { Bounds, BrepExportFormat, ImportError, ImportPhase, ModelStats, OcctFormat } from './types.js';
 
+/** A worker's progress through an import. */
 export interface ProgressMessage {
+  /** Says what this is. */
   type: 'progress';
+  /** The phase. */
   phase: ImportPhase;
+  /** How far through it, or null when that can't be said. */
   fraction: number | null;
 }
 
+/** A worker's failed import. */
 export interface FailedMessage {
+  /** Says what this is. */
   type: 'failed';
+  /** Why it failed. */
   error: ImportError;
 }
 
@@ -95,6 +102,8 @@ export type ModelWorkerResponse =
 
 /** The parts of a dedicated worker's global scope the workers use (the DOM lib types `self` as Window). */
 export interface WorkerScope<TRequest, TResponse> {
+  /** Takes messages from the main thread. */
   onmessage: ((event: MessageEvent<TRequest>) => void) | null;
+  /** Sends one to the main thread. */
   postMessage(message: TResponse, transfer?: Transferable[]): void;
 }

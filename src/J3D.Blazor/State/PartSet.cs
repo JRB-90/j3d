@@ -16,22 +16,31 @@ public sealed class PartSet : IReadOnlySet<int>
 
     private PartSet(HashSet<int> nodes) => _nodes = nodes;
 
+    /// <summary>The set with no parts.</summary>
     public static PartSet Empty { get; } = new([]);
 
+    /// <inheritdoc />
     public int Count => _nodes.Count;
 
+    /// <summary>Whether the set has no parts.</summary>
     public bool IsEmpty => _nodes.Count == 0;
 
+    /// <summary>A set of these nodes, for a collection expression.</summary>
     public static PartSet Create(ReadOnlySpan<int> nodes) => nodes.IsEmpty ? Empty : new([.. nodes]);
 
+    /// <summary>A set of these nodes. A set passed in is used as it is.</summary>
     public static PartSet From(IEnumerable<int> nodes) => nodes as PartSet ?? Wrap([.. nodes]);
 
+    /// <inheritdoc />
     public bool Contains(int item) => _nodes.Contains(item);
 
+    /// <summary>This set with the node in it.</summary>
     public PartSet Add(int node) => Contains(node) ? this : Wrap([.. _nodes, node]);
 
+    /// <summary>This set without the node.</summary>
     public PartSet Remove(int node) => Contains(node) ? Where(other => other != node) : this;
 
+    /// <summary>This set with these nodes in it.</summary>
     public PartSet Union(IEnumerable<int> nodes)
     {
         var union = new HashSet<int>(_nodes);
@@ -39,6 +48,7 @@ public sealed class PartSet : IReadOnlySet<int>
         return union.Count == Count ? this : Wrap(union);
     }
 
+    /// <summary>This set without these nodes.</summary>
     public PartSet Except(IEnumerable<int> nodes)
     {
         var rest = new HashSet<int>(_nodes);
@@ -46,6 +56,7 @@ public sealed class PartSet : IReadOnlySet<int>
         return rest.Count == Count ? this : Wrap(rest);
     }
 
+    /// <summary>The nodes <paramref name="keep"/> says yes to.</summary>
     public PartSet Where(Func<int, bool> keep)
     {
         var kept = new HashSet<int>(_nodes.Count);
@@ -60,18 +71,25 @@ public sealed class PartSet : IReadOnlySet<int>
         return kept.Count == Count ? this : Wrap(kept);
     }
 
+    /// <inheritdoc />
     public bool SetEquals(IEnumerable<int> other) => ReferenceEquals(this, other) || _nodes.SetEquals(other);
 
+    /// <inheritdoc />
     public bool IsProperSubsetOf(IEnumerable<int> other) => _nodes.IsProperSubsetOf(other);
 
+    /// <inheritdoc />
     public bool IsProperSupersetOf(IEnumerable<int> other) => _nodes.IsProperSupersetOf(other);
 
+    /// <inheritdoc />
     public bool IsSubsetOf(IEnumerable<int> other) => _nodes.IsSubsetOf(other);
 
+    /// <inheritdoc />
     public bool IsSupersetOf(IEnumerable<int> other) => _nodes.IsSupersetOf(other);
 
+    /// <inheritdoc />
     public bool Overlaps(IEnumerable<int> other) => _nodes.Overlaps(other);
 
+    /// <inheritdoc />
     public IEnumerator<int> GetEnumerator() => _nodes.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
