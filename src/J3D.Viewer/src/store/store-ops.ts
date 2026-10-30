@@ -1,6 +1,6 @@
-import type { ModelId } from '../import/types';
-import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol';
-import type { KeptEdits, Manifest, ManifestModel, StoredMeta } from './types';
+import type { ModelId } from '../import/types.js';
+import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol.js';
+import type { KeptEdits, Manifest, ManifestModel, StoredMeta } from './types.js';
 
 // The parts of the origin private file system the store worker uses (docs/plan.md §6.2, D112).
 // Declared here because TypeScript's DOM library lacks the worker-only synchronous access handle,

@@ -1,4 +1,4 @@
-import type { Sidecars } from '../sidecars';
+import type { Sidecars } from '../sidecars.js';
 
 /** A 1×1 white PNG, used in place of a texture that wasn't supplied so nothing is fetched from the server. */
 export const MissingTextureUrl =

@@ -6,11 +6,11 @@ import { readFileSync } from 'node:fs';
 import { ExportFormat, ImportFormat, OcctModel, type ImportedScene, type OcctModule } from '@j3d/occt/facade';
 import init from '@j3d/occt/single';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { buildBrepObject } from '../view/brep-object';
-import { MaterialCache } from '../view/materials';
+import { buildBrepObject } from '../view/brep-object.js';
+import { MaterialCache } from '../view/materials.js';
 import { Matrix4 } from 'three';
-import { exportPlan, writesAsImported } from './export-plan';
-import { ModelStructure, NoEdits, TopLevel, type Expansions, type ModelEdits } from './structure';
+import { exportPlan, writesAsImported } from './export-plan.js';
+import { ModelStructure, NoEdits, TopLevel, type Expansions, type ModelEdits } from './structure.js';
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`../../../../tests/fixtures/${name}`, import.meta.url)));
 const shift = (x: number, y = 0, z = 0) => new Matrix4().makeTranslation(x, y, z);

@@ -14,7 +14,7 @@ import {
   OcctModel,
   type ImportedScene,
   type OcctModule,
-} from './facade';
+} from './facade.js';
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`../../../tests/fixtures/${name}`, import.meta.url)));
 

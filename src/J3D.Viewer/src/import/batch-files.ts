@@ -1,4 +1,4 @@
-import type { BatchFile } from './sidecars';
+import type { BatchFile } from './sidecars.js';
 
 /** The files of one picker selection. */
 export function filesFromInput(input: HTMLInputElement): BatchFile[] {

@@ -1,4 +1,4 @@
-import type { ArrivedNode, ExpandedNode, KeptArrival, ModelEdits } from './structure';
+import type { ArrivedNode, ExpandedNode, KeptArrival, ModelEdits } from './structure.js';
 
 /**
  * A model's edits packed for interop (M16, D199): .NET sends all of a model's edits with each one

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ModelSummary } from '../import/types';
-import { FakeDisk } from './fake-opfs';
-import { ChunkBytes, ShortWriteError, StorageFullError, StoreOps } from './store-ops';
-import type { CameraSnapshot, StoredMeta } from './types';
+import type { ModelSummary } from '../import/types.js';
+import { FakeDisk } from './fake-opfs.js';
+import { ChunkBytes, ShortWriteError, StorageFullError, StoreOps } from './store-ops.js';
+import type { CameraSnapshot, StoredMeta } from './types.js';
 
 const camera: CameraSnapshot = { projection: 'perspective', position: [1, 2, 3], target: [0, 0, 0], focalOffset: [0, 0, 0], zoom: 1 };
 

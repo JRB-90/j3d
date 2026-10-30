@@ -17,10 +17,10 @@ import {
   type MeshStandardMaterial,
   type Object3D,
 } from 'three';
-import type { PlanSource } from '../edit/export-plan';
-import { ModelStructure, TopLevel, type Expansions } from '../edit/structure';
-import type { KeptPlacement, Vector3Tuple } from '../import/types';
-import { EdgeVisibilityAttribute, type LinearRgba, type MaterialCache } from './materials';
+import type { PlanSource } from '../edit/export-plan.js';
+import { ModelStructure, TopLevel, type Expansions } from '../edit/structure.js';
+import type { KeptPlacement, Vector3Tuple } from '../import/types.js';
+import { EdgeVisibilityAttribute, type LinearRgba, type MaterialCache } from './materials.js';
 import {
   EdgePickRadius,
   ModelFrame,
@@ -33,7 +33,7 @@ import {
   type PickedEntity,
   type Placement,
   type ScreenSpace,
-} from './parts';
+} from './parts.js';
 
 /** Prototypes placed at least this many times are drawn with one instanced draw call (docs/plan.md §6.3). */
 export const InstancingThreshold = 16;

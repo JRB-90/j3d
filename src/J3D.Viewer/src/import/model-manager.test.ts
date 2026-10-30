@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ModelImportError } from './errors';
-import { EditsDroppedWarning, ModelManager, type ModelManagerListener } from './model-manager';
-import type { ImportRequest, ImportRunner, ImportTask } from './runner';
-import { UnusedSidecarReason, type BatchFile } from './sidecars';
-import type { ImportResult } from './types';
+import { ModelImportError } from './errors.js';
+import { EditsDroppedWarning, ModelManager, type ModelManagerListener } from './model-manager.js';
+import type { ImportRequest, ImportRunner, ImportTask } from './runner.js';
+import { UnusedSidecarReason, type BatchFile } from './sidecars.js';
+import type { ImportResult } from './types.js';
 
 interface FakeTask extends ImportTask {
   request: ImportRequest;

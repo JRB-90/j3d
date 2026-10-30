@@ -2,8 +2,8 @@
 // ArrayBuffers; everything else is small.
 
 import type { Arrival, EntityRef, ExpandedPiece, ImportedScene, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
-import type { SerializedMeshScene } from './mesh/serialize';
-import type { Bounds, ImportError, ImportPhase, ModelStats } from './types';
+import type { SerializedMeshScene } from './mesh/serialize.js';
+import type { Bounds, ImportError, ImportPhase, ModelStats } from './types.js';
 
 export type OcctFormat = 'step' | 'iges' | 'brep';
 export type WorkerMeshFormat = 'stl' | 'obj';

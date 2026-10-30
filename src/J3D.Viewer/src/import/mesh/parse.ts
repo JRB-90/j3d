@@ -3,8 +3,8 @@
 import { LineSegments, Points, type BufferGeometry, type Material, type Object3D } from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
-import { ModelImportError } from '../errors';
-import { serializeGeometry, type SerializedMaterial, type SerializedMeshScene } from './serialize';
+import { ModelImportError } from '../errors.js';
+import { serializeGeometry, type SerializedMaterial, type SerializedMeshScene } from './serialize.js';
 
 export function parseStl(bytes: Uint8Array, fileName: string): SerializedMeshScene {
   const buffer = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.slice().buffer;

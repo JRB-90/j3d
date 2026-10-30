@@ -1,5 +1,5 @@
-import type { ArrivalsState, ModelContent } from '../import/types';
-import { arrivalBase, EditsMismatchError, type ArrivalContent, type Arrivals, type KeptArrival } from './structure';
+import type { ArrivalsState, ModelContent } from '../import/types.js';
+import { arrivalBase, EditsMismatchError, type ArrivalContent, type Arrivals, type KeptArrival } from './structure.js';
 
 /** Reads a mesh model's arrival from its GLB (M18, D227): the viewer's, since it needs three's loader. */
 export type MeshArrivalReader = (file: Blob) => Promise<ArrivalContent>;

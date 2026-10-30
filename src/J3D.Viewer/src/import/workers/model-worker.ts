@@ -4,10 +4,10 @@
 
 import { ExportFormat, ExportStatus, ImportFormat, OcctExportError, OcctModel, type OcctModule } from '@j3d/occt/facade';
 import createOcct, { type InitOpenCascadeOptions } from '@j3d/occt/single';
-import { sceneTransferables, summariseBrepScene } from '../brep-summary';
-import { toImportError } from '../errors';
-import { occtOutput } from '../occt-output';
-import { throttleProgress } from '../progress';
+import { sceneTransferables, summariseBrepScene } from '../brep-summary.js';
+import { toImportError } from '../errors.js';
+import { occtOutput } from '../occt-output.js';
+import { throttleProgress } from '../progress.js';
 import type {
   ArriveRequest,
   BrepExportFormat,
@@ -19,8 +19,8 @@ import type {
   ModelWorkerResponse,
   OcctFormat,
   WorkerScope,
-} from '../protocol';
-import type { ImportPhase } from '../types';
+} from '../protocol.js';
+import type { ImportPhase } from '../types.js';
 
 const scope = globalThis as unknown as WorkerScope<ModelWorkerRequest, ModelWorkerResponse>;
 

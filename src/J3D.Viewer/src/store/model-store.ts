@@ -1,9 +1,9 @@
-import { hasEdits, type ModelEdits } from '../edit/structure';
-import { basename, type BatchFile } from '../import/sidecars';
-import type { KeptPlacement, ModelId, ModelSummary } from '../import/types';
-import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol';
-import type { OpenedStore } from './store-ops';
-import type { CameraSnapshot, KeptEdits, ManifestModel, StoredMeta, StoredScene, StoreStatus } from './types';
+import { hasEdits, type ModelEdits } from '../edit/structure.js';
+import { basename, type BatchFile } from '../import/sidecars.js';
+import type { KeptPlacement, ModelId, ModelSummary } from '../import/types.js';
+import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol.js';
+import type { OpenedStore } from './store-ops.js';
+import type { CameraSnapshot, KeptEdits, ManifestModel, StoredMeta, StoredScene, StoreStatus } from './types.js';
 
 /** The store worker, or a stand-in for tests. */
 export interface StoreWorker {

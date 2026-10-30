@@ -1,9 +1,9 @@
-import { ModelImportError, toImportError } from './errors';
-import { compileOcctModule } from './occt-module';
-import { ExportCancelledError, type BrepArriver, type BrepExpander, type BrepExporter, type BrepMeasurer } from './types';
-import type { ArriveRequest, ExpandRequest, ExportRequest, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, OcctFormat } from './protocol';
-import { liveWorkers, type ImportRunner } from './runner';
-import type { ImportResult } from './types';
+import { ModelImportError, toImportError } from './errors.js';
+import { compileOcctModule } from './occt-module.js';
+import { ExportCancelledError, type BrepArriver, type BrepExpander, type BrepExporter, type BrepMeasurer } from './types.js';
+import type { ArriveRequest, ExpandRequest, ExportRequest, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, OcctFormat } from './protocol.js';
+import { liveWorkers, type ImportRunner } from './runner.js';
+import type { ImportResult } from './types.js';
 
 export interface OcctRunnerOptions {
   /** Test hook: hold each new import after instantiation until it is cancelled. */

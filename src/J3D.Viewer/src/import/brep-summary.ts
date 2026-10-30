@@ -1,5 +1,5 @@
 import type { ImportedScene, PrototypeMesh } from '@j3d/occt/facade';
-import type { Bounds, ModelStats, Vector3Tuple } from './types';
+import type { Bounds, ModelStats, Vector3Tuple } from './types.js';
 
 /** World bounds and counts of an imported OCCT scene. Runs in the model worker, before transfer. */
 export function summariseBrepScene(scene: ImportedScene): { bounds: Bounds; stats: ModelStats } {

@@ -6,15 +6,15 @@
 import { readFileSync } from 'node:fs';
 import { BufferGeometry, DoubleSide, Mesh, MeshPhongMaterial, MeshStandardMaterial, Texture, type Material, type Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
-import type { ModelFormat } from '../../formats';
-import { ModelImportError } from '../errors';
-import type { ImportRequest } from '../runner';
-import { SidecarSet, type BatchFile } from '../sidecars';
-import { describeMeshModel, disposeObject } from './describe';
-import { importGltf } from './gltf-import';
-import { buildScene } from './mesh-import';
-import { toStandardMaterial } from './obj-materials';
-import { parseObj, parseStl } from './parse';
+import type { ModelFormat } from '../../formats.js';
+import { ModelImportError } from '../errors.js';
+import type { ImportRequest } from '../runner.js';
+import { SidecarSet, type BatchFile } from '../sidecars.js';
+import { describeMeshModel, disposeObject } from './describe.js';
+import { importGltf } from './gltf-import.js';
+import { buildScene } from './mesh-import.js';
+import { toStandardMaterial } from './obj-materials.js';
+import { parseObj, parseStl } from './parse.js';
 
 const fixture = (path: string) => new Uint8Array(readFileSync(new URL(`../../../../../tests/fixtures/${path}`, import.meta.url)));
 const fileOf = (path: string, bytes = fixture(path)) => new File([bytes], path.slice(path.lastIndexOf('/') + 1));

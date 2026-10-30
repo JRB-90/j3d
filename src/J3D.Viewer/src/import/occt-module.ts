@@ -1,5 +1,5 @@
 import wasmUrl from '@j3d/occt/single/wasm?url';
-import { ModelImportError, errorMessage } from './errors';
+import { ModelImportError, errorMessage } from './errors.js';
 
 let compiled: Promise<WebAssembly.Module> | undefined;
 

@@ -19,7 +19,7 @@ import {
   type ImportedScene,
   type OcctModule,
   type PlanNode,
-} from './facade';
+} from './facade.js';
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`../../../tests/fixtures/${name}`, import.meta.url)));
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ImportRequest, ImportRunner } from './runner';
-import { lazyRunner } from './runners';
-import type { ImportResult } from './types';
+import type { ImportRequest, ImportRunner } from './runner.js';
+import { lazyRunner } from './runners.js';
+import type { ImportResult } from './types.js';
 
 const request = {} as ImportRequest;
 const result = {} as ImportResult;

@@ -16,10 +16,10 @@ import {
   type Material,
   type Object3D,
 } from 'three';
-import { isJ3dEdges, J3dEdgesTag, J3dRangesTag } from '../import/mesh/j3d-gltf';
-import type { TreeNode } from '../import/types';
-import { EdgeColour, type LinearRgba } from './materials';
-import { SurfaceMetalness, SurfaceRoughness } from './surface';
+import { isJ3dEdges, J3dEdgesTag, J3dRangesTag } from '../import/mesh/j3d-gltf.js';
+import type { TreeNode } from '../import/types.js';
+import { EdgeColour, type LinearRgba } from './materials.js';
+import { SurfaceMetalness, SurfaceRoughness } from './surface.js';
 
 /** One model's share of an export (M9): its tree and geometry, and which of its parts are hidden or selected. */
 export interface ExportSource {

@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import init from '../dist/j3d_occt_single.js';
-import { EntityKind, ExportFormat, FileOrigin, ImportFormat, OcctMeasureError, OcctModel, PlanKind, type OcctModule, type PlanNode } from './facade';
+import { EntityKind, ExportFormat, FileOrigin, ImportFormat, OcctMeasureError, OcctModel, PlanKind, type OcctModule, type PlanNode } from './facade.js';
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`../../../tests/fixtures/${name}`, import.meta.url)));
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];

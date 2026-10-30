@@ -26,16 +26,16 @@ import {
   type Texture,
 } from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { editedStats } from '../edit/stats';
+import { editedStats } from '../edit/stats.js';
 import type { PlanNode } from '@j3d/occt/facade';
-import { arrivalsOf } from '../edit/arrive';
-import { expansionsOf } from '../edit/expand';
-import { exportPlan, transferPlan, writesAsImported, type PlanSource } from '../edit/export-plan';
-import { ModelStructure, sameEdits, type ModelEdits } from '../edit/structure';
-import type { BrepMeasurer, KeptPlacement, LoadedModel, ModelId, ModelStats, Vector3Tuple } from '../import/types';
-import type { CameraSnapshot } from '../store/types';
-import { buildBrepObject } from './brep-object';
-import { buildExportScene, exportFileName, type ExportSource } from './export-scene';
+import { arrivalsOf } from '../edit/arrive.js';
+import { expansionsOf } from '../edit/expand.js';
+import { exportPlan, transferPlan, writesAsImported, type PlanSource } from '../edit/export-plan.js';
+import { ModelStructure, sameEdits, type ModelEdits } from '../edit/structure.js';
+import type { BrepMeasurer, KeptPlacement, LoadedModel, ModelId, ModelStats, Vector3Tuple } from '../import/types.js';
+import type { CameraSnapshot } from '../store/types.js';
+import { buildBrepObject } from './brep-object.js';
+import { buildExportScene, exportFileName, type ExportSource } from './export-scene.js';
 import {
   clippingPlanes,
   fitBox,
@@ -51,14 +51,14 @@ import {
   Up,
   type BoxFit,
   type Projection,
-} from './camera-math';
-import { MaterialCache } from './materials';
-import { FeatureSelection, type FeatureSelectionInfo } from './features';
-import { MeasureTool, type MeasureModel, type Picked } from './measure';
-import type { MeasureInfo } from './measure-format';
-import type { MeshExportFormat } from './mesh-export';
-import { MoveTool, OriginFrames, type MoveFrame, type MoveMode, type MoveTarget } from './move';
-import { OrderIndependentTransparency, sceneMaterials, type SceneMaterials } from './oit';
+} from './camera-math.js';
+import { MaterialCache } from './materials.js';
+import { FeatureSelection, type FeatureSelectionInfo } from './features.js';
+import { MeasureTool, type MeasureModel, type Picked } from './measure.js';
+import type { MeasureInfo } from './measure-format.js';
+import type { MeshExportFormat } from './mesh-export.js';
+import { MoveTool, OriginFrames, type MoveFrame, type MoveMode, type MoveTarget } from './move.js';
+import { OrderIndependentTransparency, sceneMaterials, type SceneMaterials } from './oit.js';
 import {
   HighlightMaterials,
   MeshParts,
@@ -68,11 +68,11 @@ import {
   type ModelParts,
   type Placement,
   type ScreenSpace,
-} from './parts';
-import { CompactQuery, LongPressMilliseconds, swallowClickAfter, TapTolerance, TouchQuery } from '../shell';
-import { CompactViewCubeSize, ViewCube, ViewCubeSize } from './view-cube';
-import { HomeRegion, regionView, type ViewRegion } from './view-regions';
-import { sameView, ViewHistory } from './view-history';
+} from './parts.js';
+import { CompactQuery, LongPressMilliseconds, swallowClickAfter, TapTolerance, TouchQuery } from '../shell.js';
+import { CompactViewCubeSize, ViewCube, ViewCubeSize } from './view-cube.js';
+import { HomeRegion, regionView, type ViewRegion } from './view-regions.js';
+import { sameView, ViewHistory } from './view-history.js';
 
 CameraControls.install({ THREE: { Vector2, Vector3, Vector4, Quaternion, Matrix4, Spherical, Box3, Sphere, Raycaster } });
 
@@ -811,7 +811,7 @@ export class Viewer {
       if (built.models.length === 0) {
         throw new Error(selection ? 'Nothing is selected.' : 'There are no visible parts to export.');
       }
-      const { writeMeshFile } = await import('./mesh-export');
+      const { writeMeshFile } = await import('./mesh-export.js');
       const bytes = await writeMeshFile(built.scene, format, this.renderer);
       return { fileName: exportFileName(built.models, selection, format === 'glb' ? 'glb' : 'stl'), bytes };
     } finally {
@@ -858,7 +858,7 @@ export class Viewer {
       return { plan, order, hidden: source.hidden };
     }
     const parts = source.parts as MeshParts;
-    const { writeMeshArrival } = await import('./mesh-arrival');
+    const { writeMeshArrival } = await import('./mesh-arrival.js');
     const { bytes, order } = await writeMeshArrival(source.structure, (node) => parts.nodeObjects[node]!, objects);
     return { glb: bytes, order, hidden: source.hidden };
   }

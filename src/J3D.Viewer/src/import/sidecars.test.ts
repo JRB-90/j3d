@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planBatch, resolvePath, SidecarSet, type BatchFile } from './sidecars';
+import { planBatch, resolvePath, SidecarSet, type BatchFile } from './sidecars.js';
 
 const entry = (path: string, fromFolder = false): BatchFile => ({
   file: new File(['x'], path.slice(path.lastIndexOf('/') + 1)),

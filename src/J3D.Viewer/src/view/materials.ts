@@ -1,5 +1,5 @@
 import { Color, DoubleSide, LinearSRGBColorSpace, LineBasicMaterial, MeshStandardMaterial, type Material } from 'three';
-import { SurfaceMetalness, SurfaceRoughness } from './surface';
+import { SurfaceMetalness, SurfaceRoughness } from './surface.js';
 
 /** Near-black BREP edges (docs/plan.md §6.6). */
 export const EdgeColour = 0x0c0d0f;

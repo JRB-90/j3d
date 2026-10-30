@@ -1,7 +1,7 @@
-import { encodeEdits } from './edit/edits-codec';
-import type { ModelManager } from './import/model-manager';
-import type { Bounds, ModelStats, TreeNode } from './import/types';
-import type { DotNetObjectReference } from './interop';
+import { encodeEdits } from './edit/edits-codec.js';
+import type { ModelManager } from './import/model-manager.js';
+import type { Bounds, ModelStats, TreeNode } from './import/types.js';
+import type { DotNetObjectReference } from './interop.js';
 
 /**
  * A model's tree as one array per field, parents before children (mirrors TreeColumns in

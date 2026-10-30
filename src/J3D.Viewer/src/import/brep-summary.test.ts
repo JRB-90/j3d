@@ -1,6 +1,6 @@
 import type { ImportedScene, PrototypeMesh } from '@j3d/occt/facade';
 import { describe, expect, it } from 'vitest';
-import { sceneTransferables, summariseBrepScene } from './brep-summary';
+import { sceneTransferables, summariseBrepScene } from './brep-summary.js';
 
 /** A unit cube prototype: 8 corners, 12 triangles, 3 edge segments. */
 function cube(): PrototypeMesh {

@@ -1,4 +1,4 @@
-import type { CameraSnapshot } from '../store/types';
+import type { CameraSnapshot } from '../store/types.js';
 
 /** The most views the history holds (D220), as the undo history holds 50 steps (assumption 11). */
 export const ViewHistoryCapacity = 50;

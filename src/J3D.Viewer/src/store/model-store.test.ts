@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BatchFile } from '../import/sidecars';
-import type { ModelSummary } from '../import/types';
-import { FakeDisk } from './fake-opfs';
-import { ModelStore, type ModelStoreOptions, type StoreWorker } from './model-store';
-import type { StoreRequestMessage, StoreResponse } from './protocol';
-import { respond, StoreOps, type Estimate } from './store-ops';
-import type { CameraSnapshot } from './types';
+import type { BatchFile } from '../import/sidecars.js';
+import type { ModelSummary } from '../import/types.js';
+import { FakeDisk } from './fake-opfs.js';
+import { ModelStore, type ModelStoreOptions, type StoreWorker } from './model-store.js';
+import type { StoreRequestMessage, StoreResponse } from './protocol.js';
+import { respond, StoreOps, type Estimate } from './store-ops.js';
+import type { CameraSnapshot } from './types.js';
 
 const camera: CameraSnapshot = { projection: 'orthographic', position: [100, -100, 100], target: [0, 0, 0], focalOffset: [0, 0, 0], zoom: 2 };
 

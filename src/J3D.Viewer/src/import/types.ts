@@ -1,8 +1,8 @@
 import type { Arrival, EntityMeasure, EntityRef, ExpandedPiece, ImportedScene, PairMeasure, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
 import type { Object3D } from 'three';
-import type { ArrivalContent, ModelEdits } from '../edit/structure';
-import type { ModelFormat, ModelKind } from '../formats';
-import type { BrepExportFormat } from './protocol';
+import type { ArrivalContent, ModelEdits } from '../edit/structure.js';
+import type { ModelFormat, ModelKind } from '../formats.js';
+import type { BrepExportFormat } from './protocol.js';
 
 export type ModelId = string;
 

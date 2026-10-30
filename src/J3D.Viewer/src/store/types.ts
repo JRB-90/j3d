@@ -1,6 +1,6 @@
-import type { ModelEdits } from '../edit/structure';
-import type { KeptPlacement, ModelId, ModelSummary } from '../import/types';
-import type { Projection } from '../view/camera-math';
+import type { ModelEdits } from '../edit/structure.js';
+import type { KeptPlacement, ModelId, ModelSummary } from '../import/types.js';
+import type { Projection } from '../view/camera-math.js';
 
 /** Where the camera was: what the viewer needs to put it back (D111). */
 export interface CameraSnapshot {

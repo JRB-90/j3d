@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { featureKeys } from './features';
-import type { Picked } from './measure';
+import { featureKeys } from './features.js';
+import type { Picked } from './measure.js';
 
 const ref = (kind: 0 | 1 | 2, index: number) => ({ kind, prototype: 0, index, matrix: [] });
 

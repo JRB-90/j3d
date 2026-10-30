@@ -1,7 +1,7 @@
-import type { ModelFormat } from '../formats';
-import type { MeshRunnerOptions } from './mesh/mesh-import';
-import { createOcctRunner, type OcctRunnerOptions } from './occt-import';
-import type { ImportRunner, ImportTask } from './runner';
+import type { ModelFormat } from '../formats.js';
+import type { MeshRunnerOptions } from './mesh/mesh-import.js';
+import { createOcctRunner, type OcctRunnerOptions } from './occt-import.js';
+import type { ImportRunner, ImportTask } from './runner.js';
 
 export interface RunnerOptions extends MeshRunnerOptions {
   occt?: OcctRunnerOptions;
@@ -10,7 +10,7 @@ export interface RunnerOptions extends MeshRunnerOptions {
 /** Picks the importer for each format. Mesh importers (and Three.js) load on first use. */
 export function createRunners(options: RunnerOptions = {}): (format: ModelFormat) => ImportRunner {
   const occt = createOcctRunner(options.occt);
-  const mesh = lazyRunner(() => import('./mesh/mesh-import').then((m) => m.createMeshRunner(options)));
+  const mesh = lazyRunner(() => import('./mesh/mesh-import.js').then((m) => m.createMeshRunner(options)));
   return (format) => {
     switch (format) {
       case 'step':

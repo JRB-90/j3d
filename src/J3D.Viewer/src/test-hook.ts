@@ -1,12 +1,12 @@
 // Development-only hook for the Playwright tests (docs/plan.md §6.3). It records model events,
 // exposes the model list (whose UI arrives in M4) and reports the camera and rendering state.
 
-import type { ModelEntry, ModelManager } from './import/model-manager';
-import { liveWorkers } from './import/runner';
-import type { Bounds, ImportError, ImportPhase, ModelStats, TreeNode } from './import/types';
-import type { ModelStore } from './store/model-store';
-import { findRegion } from './view/view-regions';
-import type { CameraState, PartRef, RenderStats, Viewer } from './view/viewer';
+import type { ModelEntry, ModelManager } from './import/model-manager.js';
+import { liveWorkers } from './import/runner.js';
+import type { Bounds, ImportError, ImportPhase, ModelStats, TreeNode } from './import/types.js';
+import type { ModelStore } from './store/model-store.js';
+import { findRegion } from './view/view-regions.js';
+import type { CameraState, PartRef, RenderStats, Viewer } from './view/viewer.js';
 
 /** Present only when the host renders `<meta name="j3d-test-hook">` (the Development environment). */
 export function isTestHookEnabled(): boolean {

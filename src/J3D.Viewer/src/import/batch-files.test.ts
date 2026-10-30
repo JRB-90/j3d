@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filesFromDataTransfer } from './batch-files';
+import { filesFromDataTransfer } from './batch-files.js';
 
 // Minimal stand-ins for the File and Directory Entries API, which Node doesn't have.
 const file = (fullPath: string) => ({

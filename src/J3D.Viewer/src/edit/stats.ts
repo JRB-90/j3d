@@ -1,6 +1,6 @@
 import type { InstancedMesh, Mesh } from 'three';
-import type { ModelContent, ModelStats } from '../import/types';
-import type { ModelStructure } from './structure';
+import type { ModelContent, ModelStats } from '../import/types.js';
+import type { ModelStructure } from './structure.js';
 
 /**
  * What an edited model draws (M14): its live nodes, and the placements, triangles and edge segments

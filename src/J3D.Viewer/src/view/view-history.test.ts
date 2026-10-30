@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { CameraSnapshot } from '../store/types';
-import { sameView, ViewHistory } from './view-history';
+import type { CameraSnapshot } from '../store/types.js';
+import { sameView, ViewHistory } from './view-history.js';
 
 const view = (x: number, projection: CameraSnapshot['projection'] = 'orthographic', zoom = 1): CameraSnapshot => ({
   projection,

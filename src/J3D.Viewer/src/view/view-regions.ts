@@ -1,4 +1,4 @@
-import { anglesOf } from './camera-math';
+import { anglesOf } from './camera-math.js';
 
 /** Axis steps of a view cube region: −1, 0 or +1 along X (left/right), Y (front/back) and Z (bottom/top). */
 export type RegionStep = -1 | 0 | 1;

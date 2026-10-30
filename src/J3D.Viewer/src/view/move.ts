@@ -12,8 +12,8 @@ import {
   type Camera,
 } from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import type { ModelId } from '../import/types';
-import type { Placement } from './parts';
+import type { ModelId } from '../import/types.js';
+import type { Placement } from './parts.js';
 
 /** What the triad does (D149): its arrows and planes translate, its rings rotate (keys W and E, D166). */
 export type MoveMode = 'translate' | 'rotate';

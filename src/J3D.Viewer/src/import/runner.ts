@@ -1,7 +1,7 @@
-import type { ModelFormat } from '../formats';
-import type { ProgressListener } from './progress';
-import type { Sidecars } from './sidecars';
-import type { ImportResult } from './types';
+import type { ModelFormat } from '../formats.js';
+import type { ProgressListener } from './progress.js';
+import type { Sidecars } from './sidecars.js';
+import type { ImportResult } from './types.js';
 
 /** Everything an importer needs for one file. */
 export interface ImportRequest {

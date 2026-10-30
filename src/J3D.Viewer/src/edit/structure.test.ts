@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { TreeNode } from '../import/types';
-import { EditsMismatchError, expandedFileNodes, hasEdits, ModelStructure, NoEdits, sameEdits, TopLevel, type ModelEdits } from './structure';
+import type { TreeNode } from '../import/types.js';
+import { EditsMismatchError, expandedFileNodes, hasEdits, ModelStructure, NoEdits, sameEdits, TopLevel, type ModelEdits } from './structure.js';
 
 /** root (0) › a (1, part) and sub (2) › b (3, part) and c (4, part); and a second root, d (5, part). */
 const tree: TreeNode[] = [

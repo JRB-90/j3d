@@ -1,8 +1,8 @@
 // Messages between the ModelStore on the main thread and the store worker (D112). Files travel as
 // Blobs, which the browser passes by reference rather than copying.
 
-import type { ModelId } from '../import/types';
-import type { KeptEdits, Manifest, StoredMeta } from './types';
+import type { ModelId } from '../import/types.js';
+import type { KeptEdits, Manifest, StoredMeta } from './types.js';
 
 export type StoreRequest =
   | { type: 'open' }

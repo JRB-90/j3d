@@ -7,15 +7,15 @@ import {
   PointsMaterial,
   type Object3D,
 } from 'three';
-import { NeutralGrey, SurfaceMetalness, SurfaceRoughness } from '../../view/surface';
-import { ModelImportError } from '../errors';
-import type { MeshWorkerRequest, MeshWorkerResponse, WorkerMeshFormat } from '../protocol';
-import { liveWorkers, type ImportRequest, type ImportRunner } from '../runner';
-import type { ImportResult } from '../types';
-import { describeMeshModel, disposeObject } from './describe';
-import { importGltf, type GltfImportOptions } from './gltf-import';
-import { loadObjMaterials, type ObjMaterials } from './obj-materials';
-import { buildObject, type SerializedMaterial, type SerializedMeshScene, type SerializedObjectKind } from './serialize';
+import { NeutralGrey, SurfaceMetalness, SurfaceRoughness } from '../../view/surface.js';
+import { ModelImportError } from '../errors.js';
+import type { MeshWorkerRequest, MeshWorkerResponse, WorkerMeshFormat } from '../protocol.js';
+import { liveWorkers, type ImportRequest, type ImportRunner } from '../runner.js';
+import type { ImportResult } from '../types.js';
+import { describeMeshModel, disposeObject } from './describe.js';
+import { importGltf, type GltfImportOptions } from './gltf-import.js';
+import { loadObjMaterials, type ObjMaterials } from './obj-materials.js';
+import { buildObject, type SerializedMaterial, type SerializedMeshScene, type SerializedObjectKind } from './serialize.js';
 
 export type MeshRunnerOptions = GltfImportOptions;
 

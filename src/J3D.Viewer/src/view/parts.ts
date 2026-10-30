@@ -18,9 +18,9 @@ import {
   type Material,
   type Object3D,
 } from 'three';
-import { ModelStructure, TopLevel } from '../edit/structure';
-import { isJ3dEdges } from '../import/mesh/j3d-gltf';
-import type { KeptPlacement, TreeNode, Vector3Tuple } from '../import/types';
+import { ModelStructure, TopLevel } from '../edit/structure.js';
+import { isJ3dEdges } from '../import/mesh/j3d-gltf.js';
+import type { KeptPlacement, TreeNode, Vector3Tuple } from '../import/types.js';
 
 /** The accent colour (docs/plan.md §6.6), used for the selection and, fainter, for hover (assumption 8). */
 export const AccentColour = new Color(0x4f9dff);

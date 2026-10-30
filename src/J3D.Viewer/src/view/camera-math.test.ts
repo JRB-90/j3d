@@ -13,7 +13,7 @@ import {
   perspectiveVisibleHeight,
   PoleEpsilon,
   viewDirection,
-} from './camera-math';
+} from './camera-math.js';
 
 const close = (actual: number, expected: number, digits = 9) => expect(actual).toBeCloseTo(expected, digits);
 const closeVector = (actual: Vector3, expected: [number, number, number], digits = 9) => {

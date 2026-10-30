@@ -1,38 +1,38 @@
 import type { PlanNode } from '@j3d/occt/facade';
-import { afterPaint, saveFile } from './download';
-import { addArrival } from './edit/arrive';
-import { decodeEdits } from './edit/edits-codec';
-import { expandFileParts } from './edit/expand';
-import type { ModelEdits } from './edit/structure';
-import { fileInputAccept, kindOf } from './formats';
-import { filesFromDataTransfer, filesFromInput } from './import/batch-files';
-import { ModelManager } from './import/model-manager';
-import type { BrepExportFormat } from './import/protocol';
-import { createRunners } from './import/runners';
-import type { BatchFile } from './import/sidecars';
-import { ExportCancelledError, type ModelId, type ModelStats } from './import/types';
-import type { DotNetObjectReference } from './interop';
-import { forwardModelEvents } from './model-events';
-import { ModelStore } from './store/model-store';
-import type { StoredModel, StoredScene } from './store/types';
-import { createTestHookControls, installTestHook, isTestHookEnabled } from './test-hook';
-import { installTreeDrag } from './tree-drag';
-import { installTreeKeys } from './tree-rows';
-import type { Projection } from './view/camera-math';
-import { installDropTarget } from './view/drop-target';
-import { baseName } from './view/export-scene';
-import type { MeshExportFormat } from './view/mesh-export';
-import type { MoveFrame, MoveMode, MoveTarget } from './view/move';
-import { Viewer, type SelectionMode } from './view/viewer';
+import { afterPaint, saveFile } from './download.js';
+import { addArrival } from './edit/arrive.js';
+import { decodeEdits } from './edit/edits-codec.js';
+import { expandFileParts } from './edit/expand.js';
+import type { ModelEdits } from './edit/structure.js';
+import { fileInputAccept, kindOf } from './formats.js';
+import { filesFromDataTransfer, filesFromInput } from './import/batch-files.js';
+import { ModelManager } from './import/model-manager.js';
+import type { BrepExportFormat } from './import/protocol.js';
+import { createRunners } from './import/runners.js';
+import type { BatchFile } from './import/sidecars.js';
+import { ExportCancelledError, type ModelId, type ModelStats } from './import/types.js';
+import type { DotNetObjectReference } from './interop.js';
+import { forwardModelEvents } from './model-events.js';
+import { ModelStore } from './store/model-store.js';
+import type { StoredModel, StoredScene } from './store/types.js';
+import { createTestHookControls, installTestHook, isTestHookEnabled } from './test-hook.js';
+import { installTreeDrag } from './tree-drag.js';
+import { installTreeKeys } from './tree-rows.js';
+import type { Projection } from './view/camera-math.js';
+import { installDropTarget } from './view/drop-target.js';
+import { baseName } from './view/export-scene.js';
+import type { MeshExportFormat } from './view/mesh-export.js';
+import type { MoveFrame, MoveMode, MoveTarget } from './view/move.js';
+import { Viewer, type SelectionMode } from './view/viewer.js';
 
-export { detectFormat, fileInputAccept, kindOf, supportedExtensions } from './formats';
-export type { ModelFormat, ModelKind } from './formats';
-export type { Projection } from './view/camera-math';
-export type { StoredModel, StoredScene } from './store/types';
-export type { BrepExportFormat } from './import/protocol';
-export type { MeshExportFormat } from './view/mesh-export';
-export type { SelectionMode } from './view/viewer';
-export type { ModelEdits } from './edit/structure';
+export { detectFormat, fileInputAccept, kindOf, supportedExtensions } from './formats.js';
+export type { ModelFormat, ModelKind } from './formats.js';
+export type { Projection } from './view/camera-math.js';
+export type { StoredModel, StoredScene } from './store/types.js';
+export type { BrepExportFormat } from './import/protocol.js';
+export type { MeshExportFormat } from './view/mesh-export.js';
+export type { SelectionMode } from './view/viewer.js';
+export type { ModelEdits } from './edit/structure.js';
 
 /** How an export ended (M9): the file saved, cancelled, or why it failed. Mirrors J3D.Web.Client/Interop/ExportOutcome.cs. */
 export interface ExportOutcome {
@@ -210,7 +210,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
   // A restored model's arrivals (M18) are read from its folder; a mesh model's are read into objects.
   models.arrivalReaders = {
     read: (id, file) => store.readArrival(id, file),
-    readMesh: async (file) => (await import('./view/mesh-arrival')).readMeshArrival(file),
+    readMesh: async (file) => (await import('./view/mesh-arrival.js')).readMeshArrival(file),
   };
   const undoable = new Set<ModelId>();
   const unsubscribeView = view
@@ -442,7 +442,7 @@ export function createViewer(host: HTMLElement, dotnet: DotNetObjectReference): 
         const file = `arrival-${crypto.randomUUID()}.${out.plan ? 'step' : 'glb'}`;
         const kept = view.editsOf(targetId)?.arrivals ?? [];
         const arrival = await addArrival(target.content, target.tree.length, kept, file, bytes, async (blob) =>
-          (await import('./view/mesh-arrival')).readMeshArrival(blob),
+          (await import('./view/mesh-arrival.js')).readMeshArrival(blob),
         );
         if (arrival.nodes.length !== out.order.length + 1) {
           return { error: "The objects didn't arrive whole." };
@@ -541,8 +541,8 @@ export async function copyText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
-export { revealTreeRow } from './tree-rows';
-export { watchLayout } from './shell';
+export { revealTreeRow } from './tree-rows.js';
+export { watchLayout } from './shell.js';
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

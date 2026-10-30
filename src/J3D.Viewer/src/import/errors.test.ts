@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ModelImportError, OutOfMemoryMessage, OutOfWasmMemoryMessage, toImportError } from './errors';
+import { ModelImportError, OutOfMemoryMessage, OutOfWasmMemoryMessage, toImportError } from './errors.js';
 
 class OcctImportError extends Error {
   override name = 'OcctImportError';

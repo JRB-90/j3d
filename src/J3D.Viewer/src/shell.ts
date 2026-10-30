@@ -5,7 +5,7 @@
  * view, which handles its own (`Viewer`): a long press on a tree row opens its context menu, as a right
  * click does (D242), and a swipe to the left closes the drawer (D238).
  */
-import type { DotNetObjectReference } from './interop';
+import type { DotNetObjectReference } from './interop.js';
 
 /** The compact layout (D234): a phone either way up, or a tablet held upright. */
 export const CompactQuery = '(max-width: 899.98px), (max-height: 499.98px)';

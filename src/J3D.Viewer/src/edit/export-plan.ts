@@ -1,6 +1,6 @@
 import { FileOrigin, PlanKind, type PlanNode } from '@j3d/occt/facade';
-import type { TreeNode } from '../import/types';
-import { hasEdits, TopLevel, type Expansions, type ModelStructure } from './structure';
+import type { TreeNode } from '../import/types.js';
+import { hasEdits, TopLevel, type Expansions, type ModelStructure } from './structure.js';
 
 /** What a BREP model's STEP or BREP export is planned from (M15). */
 export interface PlanSource {

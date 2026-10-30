@@ -1,4 +1,4 @@
-import type { DirectoryHandle, FileHandle, SyncHandle } from './store-ops';
+import type { DirectoryHandle, FileHandle, SyncHandle } from './store-ops.js';
 
 /**
  * An in-memory origin private file system for tests (Node has none), with a byte limit standing in
