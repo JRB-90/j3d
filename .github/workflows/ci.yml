@@ -91,6 +91,9 @@ jobs:
       - name: Build solution
         run: dotnet build J3D.slnx -c Release
 
+      - name: Test the library (xUnit + bUnit)
+        run: dotnet test --project tests/J3D.Blazor.Tests -c Release --no-build
+
       - name: Test client (xUnit + bUnit)
         run: dotnet test --project tests/J3D.Web.Client.Tests -c Release --no-build
 

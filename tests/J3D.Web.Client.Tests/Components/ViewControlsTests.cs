@@ -1,5 +1,5 @@
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Interop;
+using J3D.Blazor;
 
 namespace J3D.Web.Client.Tests.Components;
 

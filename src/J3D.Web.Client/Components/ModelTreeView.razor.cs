@@ -1,6 +1,6 @@
 using System.Globalization;
+using J3D.Blazor;
 using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
 using J3D.Web.Client.State;
 using Microsoft.AspNetCore.Components;
 
@@ -21,7 +21,7 @@ public readonly record struct TreeRowRef(int Node, int Level, int Parent, string
 /// (M19) rows are 48 px (D239), a tap adds while Add is on (D237) and else closes the compact layout's
 /// drawer (D238), and rows don't drag: a long press's Cut, Copy and Paste move them (D242).
 /// </summary>
-public sealed partial class ModelTreeView(SceneState scene, ViewerSession session, ShellState shell) : IDisposable
+public sealed partial class ModelTreeView(SceneState scene, AppScripts scripts, ShellState shell) : IDisposable
 {
     /// <summary>Every row's height, in px: DESIGN.md's 26 px nodes, which <c>Virtualize</c> counts on.</summary>
     internal const int MouseRowHeight = 26;
@@ -104,7 +104,7 @@ public sealed partial class ModelTreeView(SceneState scene, ViewerSession sessio
             _pendingReveal = null;
             if (_indexOf.TryGetValue(reveal.Node, out var index))
             {
-                await session.RevealTreeRowAsync(TreeSelector, index, RowHeight, $"[data-tree-node=\"{NodeKey(reveal.Node)}\"]", reveal.Focus);
+                await scripts.RevealTreeRowAsync(TreeSelector, index, RowHeight, $"[data-tree-node=\"{NodeKey(reveal.Node)}\"]", reveal.Focus);
             }
         }
     }

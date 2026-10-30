@@ -17,54 +17,42 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\J3D.Blazor\J3D.Blazor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="J3D.Web.Client.Tests" />
   </ItemGroup>
 
   <!--
-    Viewer (TypeScript + Vite) integration.
-    The Vite build in scripts/ bundles the compiled @j3d/viewer and @j3d/occt with the app's bridge to
-    them, as ES modules, into wwwroot/viewer, which is git-ignored.
-    Set -p:SkipViewerBuild=true to build the .NET side only (e.g. when running `npm run dev` separately).
+    The app's own browser code (TypeScript + Vite): the build in scripts/ writes it into wwwroot/app, which
+    is git-ignored. Set -p:SkipViewerBuild=true to build the .NET side only.
   -->
   <PropertyGroup>
     <ScriptsProjectDir>$(MSBuildThisFileDirectory)scripts\</ScriptsProjectDir>
-    <ViewerProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\J3D.Viewer'))\</ViewerProjectDir>
-    <OcctProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\J3D.Occt'))\</OcctProjectDir>
-    <ViewerOutputDir>$(MSBuildThisFileDirectory)wwwroot\viewer\</ViewerOutputDir>
-    <ViewerEntryFile>$(ViewerOutputDir)j3d-viewer.js</ViewerEntryFile>
+    <AppScriptsOutputDir>$(MSBuildThisFileDirectory)wwwroot\app\</AppScriptsOutputDir>
+    <AppScriptsEntryFile>$(AppScriptsOutputDir)j3d-app.js</AppScriptsEntryFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <ViewerSource Include="$(ScriptsProjectDir)src\**\*.ts" Exclude="$(ScriptsProjectDir)src\**\*.test.ts" />
-    <ViewerSource Include="$(ScriptsProjectDir)package.json;$(ScriptsProjectDir)tsconfig.json;$(ScriptsProjectDir)vite.config.ts" />
-    <ViewerSource Include="$(ViewerProjectDir)src\**\*.ts" Exclude="$(ViewerProjectDir)src\**\*.test.ts" />
-    <ViewerSource Include="$(ViewerProjectDir)package.json;$(ViewerProjectDir)tsconfig.json;$(ViewerProjectDir)tsconfig.build.json" />
-    <ViewerSource Include="$(RepoRoot)package-lock.json" />
-    <!-- The kernel: its TypeScript and the single-threaded WASM build (decision D40). -->
-    <ViewerSource Include="$(OcctProjectDir)src\**\*.ts" Exclude="$(OcctProjectDir)src\**\*.test.ts" />
-    <ViewerSource Include="$(OcctProjectDir)package.json;$(OcctProjectDir)tsconfig.json;$(OcctProjectDir)tsconfig.build.json;$(OcctProjectDir)scripts\build.mjs" />
-    <ViewerSource Include="$(OcctProjectDir)dist\j3d_occt_single.*" />
-    <Content Remove="wwwroot\viewer\**" />
+    <AppScriptSource Include="$(ScriptsProjectDir)src\**\*.ts" Exclude="$(ScriptsProjectDir)src\**\*.test.ts" />
+    <AppScriptSource Include="$(ScriptsProjectDir)package.json;$(ScriptsProjectDir)tsconfig.json;$(ScriptsProjectDir)vite.config.ts" />
+    <AppScriptSource Include="$(RepoRoot)package-lock.json" />
+    <Content Remove="wwwroot\app\**" />
   </ItemGroup>
 
-  <Target Name="J3DNpmInstall"
-          Condition="'$(SkipViewerBuild)' != 'true' And !Exists('$(RepoRoot)node_modules\.package-lock.json')">
-    <Exec Command="npm ci" WorkingDirectory="$(RepoRoot)" />
-  </Target>
-
-  <Target Name="J3DBuildViewer"
-          DependsOnTargets="J3DNpmInstall"
+  <Target Name="J3DBuildAppScripts"
           BeforeTargets="AssignTargetPaths;ResolveStaticWebAssetsInputs"
           Condition="'$(SkipViewerBuild)' != 'true'"
-          Inputs="@(ViewerSource)"
-          Outputs="$(ViewerEntryFile)">
+          Inputs="@(AppScriptSource)"
+          Outputs="$(AppScriptsEntryFile)">
     <Exec Command="npm run build --workspace @j3d/client-scripts" WorkingDirectory="$(RepoRoot)" />
   </Target>
 
   <!-- Files produced during the build are not in the evaluation-time Content glob, so add them explicitly. -->
-  <Target Name="J3DIncludeViewerOutput" AfterTargets="J3DBuildViewer" BeforeTargets="AssignTargetPaths;ResolveStaticWebAssetsInputs">
+  <Target Name="J3DIncludeAppScripts" AfterTargets="J3DBuildAppScripts" BeforeTargets="AssignTargetPaths;ResolveStaticWebAssetsInputs">
     <ItemGroup>
-      <Content Include="wwwroot\viewer\**" />
+      <Content Include="wwwroot\app\**" />
     </ItemGroup>
   </Target>
 

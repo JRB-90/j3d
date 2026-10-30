@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup Label="ASP.NET Core / Blazor (keep in step with the SDK's runtime patch)">
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.13" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.13" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.13" />
   </ItemGroup>

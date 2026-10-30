@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/J3D.Blazor/J3D.Blazor.csproj" />
     <Project Path="src/J3D.Web.Client/J3D.Web.Client.csproj" />
     <Project Path="src/J3D.Web/J3D.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/J3D.Blazor.Tests/J3D.Blazor.Tests.csproj" />
     <Project Path="tests/J3D.E2E.Tests/J3D.E2E.Tests.csproj" />
     <Project Path="tests/J3D.Web.Client.Tests/J3D.Web.Client.Tests.csproj" />
     <Project Path="tests/J3D.Web.Tests/J3D.Web.Tests.csproj" />

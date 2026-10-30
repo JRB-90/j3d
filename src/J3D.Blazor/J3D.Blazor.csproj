@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <!-- Publishing trims (TrimMode partial); the analyzer turns anything trim-unsafe in this code into a build error (D65). -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <!-- The library's browser code is its own npm workspace, built below; none of it is .NET content. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);scripts\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+  </ItemGroup>
+
+  <!-- The app has no such access, so it uses only what any project can (D270). Its tests set up scenes with the viewer's reports. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="J3D.Blazor.Tests" />
+    <InternalsVisibleTo Include="J3D.Web.Client.Tests" />
+  </ItemGroup>
+
+  <!--
+    Viewer (TypeScript + Vite) integration.
+    The Vite build in scripts/ bundles the compiled @j3d/viewer and @j3d/occt with the bridge to them, as
+    ES modules, into wwwroot/viewer, which is git-ignored and served from _content/J3D.Blazor/viewer.
+    Set -p:SkipViewerBuild=true to build the .NET side only (e.g. when running `npm run dev` separately).
+  -->
+  <PropertyGroup>
+    <ScriptsProjectDir>$(MSBuildThisFileDirectory)scripts\</ScriptsProjectDir>
+    <ViewerProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\J3D.Viewer'))\</ViewerProjectDir>
+    <OcctProjectDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\J3D.Occt'))\</OcctProjectDir>
+    <ViewerOutputDir>$(MSBuildThisFileDirectory)wwwroot\viewer\</ViewerOutputDir>
+    <ViewerEntryFile>$(ViewerOutputDir)j3d-viewer.js</ViewerEntryFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ViewerSource Include="$(ScriptsProjectDir)src\**\*.ts" Exclude="$(ScriptsProjectDir)src\**\*.test.ts" />
+    <ViewerSource Include="$(ScriptsProjectDir)package.json;$(ScriptsProjectDir)tsconfig.json;$(ScriptsProjectDir)vite.config.ts" />
+    <ViewerSource Include="$(ViewerProjectDir)src\**\*.ts" Exclude="$(ViewerProjectDir)src\**\*.test.ts" />
+    <ViewerSource Include="$(ViewerProjectDir)package.json;$(ViewerProjectDir)tsconfig.json;$(ViewerProjectDir)tsconfig.build.json" />
+    <ViewerSource Include="$(RepoRoot)package-lock.json" />
+    <!-- The kernel: its TypeScript and the single-threaded WASM build (decision D40). -->
+    <ViewerSource Include="$(OcctProjectDir)src\**\*.ts" Exclude="$(OcctProjectDir)src\**\*.test.ts" />
+    <ViewerSource Include="$(OcctProjectDir)package.json;$(OcctProjectDir)tsconfig.json;$(OcctProjectDir)tsconfig.build.json;$(OcctProjectDir)scripts\build.mjs" />
+    <ViewerSource Include="$(OcctProjectDir)dist\j3d_occt_single.*" />
+    <Content Remove="wwwroot\viewer\**" />
+  </ItemGroup>
+
+  <Target Name="J3DNpmInstall"
+          Condition="'$(SkipViewerBuild)' != 'true' And !Exists('$(RepoRoot)node_modules\.package-lock.json')">
+    <Exec Command="npm ci" WorkingDirectory="$(RepoRoot)" />
+  </Target>
+
+  <Target Name="J3DBuildViewer"
+          DependsOnTargets="J3DNpmInstall"
+          BeforeTargets="AssignTargetPaths;ResolveStaticWebAssetsInputs"
+          Condition="'$(SkipViewerBuild)' != 'true'"
+          Inputs="@(ViewerSource)"
+          Outputs="$(ViewerEntryFile)">
+    <Exec Command="npm run build --workspace @j3d/blazor-scripts" WorkingDirectory="$(RepoRoot)" />
+  </Target>
+
+  <!-- Files produced during the build are not in the evaluation-time Content glob, so add them explicitly. -->
+  <Target Name="J3DIncludeViewerOutput" AfterTargets="J3DBuildViewer" BeforeTargets="AssignTargetPaths;ResolveStaticWebAssetsInputs">
+    <ItemGroup>
+      <Content Include="wwwroot\viewer\**" />
+    </ItemGroup>
+  </Target>
+
+</Project>

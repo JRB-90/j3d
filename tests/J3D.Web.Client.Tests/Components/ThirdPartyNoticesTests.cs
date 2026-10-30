@@ -48,9 +48,9 @@ public sealed partial class ThirdPartyNoticesTests
     [Fact]
     public void Every_runtime_dependency_is_listed_with_the_version_that_ships()
     {
-        // The viewer's own dependencies, and the app's for the three.js the viewer leaves to it (D255).
+        // The viewer's own dependencies, and the bridge's for the three.js the viewer leaves to its host (D255).
         var viewer = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo, "src", "J3D.Viewer", "package.json")));
-        var scripts = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo, "src", "J3D.Web.Client", "scripts", "package.json")));
+        var scripts = JsonDocument.Parse(File.ReadAllText(Path.Combine(Repo, "src", "J3D.Blazor", "scripts", "package.json")));
         var npm = viewer.RootElement.GetProperty("dependencies").EnumerateObject()
             .Concat(scripts.RootElement.GetProperty("dependencies").EnumerateObject())
             .Where(static dependency => dependency.Name != "@j3d/viewer");

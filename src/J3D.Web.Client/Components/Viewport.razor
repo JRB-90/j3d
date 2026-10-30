@@ -1,5 +1,5 @@
-<div class="j3d-viewport" @ref="_host" data-testid="viewport">
-    @if (Capabilities is { IsSupported: false })
+<J3DViewer class="j3d-viewport" data-testid="viewport" Keys="ViewerKeys.Page" Keep="j3d" PauseKeysWhile="@OpenMenu" OnReady="OnViewerReady" OnNotice="Show">
+    @if (_capabilities is { IsSupported: false })
     {
         <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="ma-4">
             This browser does not support WebGL2, which J3D needs to display models.
@@ -8,4 +8,4 @@
     <ViewportHint />
     <ViewControls />
     <SelectionPanel />
-</div>
+</J3DViewer>

@@ -80,10 +80,20 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     /// <summary>Waits until <paramref name="count"/> models exist and none is queued or importing.</summary>
     protected async Task<IReadOnlyList<TestModel>> WaitForImportsAsync(int count)
     {
-        await Page.WaitForFunctionAsync(
-            "count => { const models = window.__j3dTest.models(); return models.length >= count && models.every(m => m.status === 'loaded' || m.status === 'failed'); }",
-            count,
-            new PageWaitForFunctionOptions { Timeout = 60_000 });
+        try
+        {
+            await Page.WaitForFunctionAsync(
+                "count => { const models = window.__j3dTest.models(); return models.length >= count && models.every(m => m.status === 'loaded' || m.status === 'failed'); }",
+                count,
+                new PageWaitForFunctionOptions { Timeout = 60_000 });
+        }
+        catch (TimeoutException exception)
+        {
+            // What the page had when the wait gave up (R35): no models and otherTab would be the store's lock.
+            var state = await EvaluateAsync<string>("() => JSON.stringify({ store: window.__j3dTest.store().status, models: window.__j3dTest.models().map(m => m.status) })");
+            throw new TimeoutException($"Waited for {count} model(s); the page had {state}.", exception);
+        }
+
         return await ModelsAsync();
     }
 

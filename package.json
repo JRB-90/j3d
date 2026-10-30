@@ -5,6 +5,7 @@
   "workspaces": [
     "src/J3D.Occt",
     "src/J3D.Viewer",
+    "src/J3D.Blazor/scripts",
     "src/J3D.Web.Client/scripts"
   ],
   "engines": {

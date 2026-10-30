@@ -1,7 +1,5 @@
 using System.Globalization;
-using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
+using J3D.Blazor;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MudBlazor;
@@ -76,9 +74,9 @@ public sealed partial class ModelListItem(SceneState scene, ViewerSession sessio
     private static string BringingText(int parts) => $"Bringing {DisplayFormat.Counted(parts, "part")}…";
 
     /// <summary>The memory the model takes in the browser (its worker's heap for a CAD model), then its counts, as edited (M14).</summary>
-    private static string StatsText(ModelLoadedInfo info, ModelStats stats) => string.Join(
+    private static string StatsText(long memoryBytes, ModelStats stats) => string.Join(
         " · ",
-        $"{DisplayFormat.Bytes(info.MemoryBytes)} in memory",
+        $"{DisplayFormat.Bytes(memoryBytes)} in memory",
         DisplayFormat.Counted(stats.Triangles, "triangle"),
         DisplayFormat.Counted(stats.Instances, "part"));
 

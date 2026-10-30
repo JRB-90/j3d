@@ -1,11 +1,9 @@
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
+using J3D.Blazor;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
-using static J3D.Web.Client.Tests.TestModels;
+using static J3D.Blazor.Tests.TestModels;
 
 namespace J3D.Web.Client.Tests.Components;
 
@@ -188,8 +186,8 @@ public sealed class MoveUiTests : BunitTestBase
         var cut = Render<Viewport>();
 
         await cut.InvokeAsync(() => Scene.Pick(Id, 3, additive: false));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("moveTranslate"));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("moveRotate"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("moveTranslate"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("moveRotate"));
         var tools = _viewer.Invocations.Where(static i => i.Identifier == "setMoveTool").ToList();
         Assert.Equal([MoveMode.Translate, MoveMode.Rotate], tools.Select(static i => (MoveMode?)i.Arguments[0]));
         Assert.Equal(new MoveTargetRef(Id, 3), tools[^1].Arguments[1]);
@@ -197,21 +195,21 @@ public sealed class MoveUiTests : BunitTestBase
         // A drag the viewer already shows is recorded, not sent back; its undo is.
         double[] before = [.. Matrix4d.Identity.ToArray()];
         double[] after = Translated(0, 0, 9);
-        await cut.InvokeAsync(() => cut.Instance.OnMoved(Id.Value, 3, before, after));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnMoved(Id.Value, 3, before, after));
         Assert.True(Scene.CanUndo);
         Assert.DoesNotContain(_viewer.Invocations, static i => i.Identifier == "setPlacement");
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("undo"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("undo"));
         var placement = Assert.Single(_viewer.Invocations, static i => i.Identifier == "setPlacement");
         Assert.Equal([Id.Value, 3, before], placement.Arguments);
 
-        await cut.InvokeAsync(() => cut.Instance.OnMoveTarget(new MoveTargetInfo(Id, 3, before, before, 1)));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnMoveTarget(new MoveTargetInfo(Id, 3, before, before, 1)));
         Assert.Equal(Pose.Zero, Scene.TargetPose);
 
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("originFrames"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("originFrames"));
         var frames = Assert.Single(_viewer.Invocations, static i => i.Identifier == "setOriginFrames");
         Assert.Equal([new MoveTargetRef(Id, 3)], (MoveTargetRef[])frames.Arguments[0]!);
 
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("clearSelection")); // Esc ends the tool
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("clearSelection")); // Esc ends the tool
         Assert.Null(Scene.Moving);
         Assert.Null(_viewer.Invocations.Last(static i => i.Identifier == "setMoveTool").Arguments[0]);
     }

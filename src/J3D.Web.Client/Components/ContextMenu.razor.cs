@@ -1,6 +1,4 @@
-using J3D.Web.Client.Models;
-using J3D.Web.Client.Interop;
-using J3D.Web.Client.State;
+using J3D.Blazor;
 using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 
@@ -13,7 +11,7 @@ namespace J3D.Web.Client.Components;
 /// all, Fit all, Export the scene), and "Measure from here" wherever there's an entity under the
 /// pointer. Iteration 3's later milestones add their commands here.
 /// </summary>
-public sealed partial class ContextMenu(SceneState scene, ViewerSession session, ISnackbar snackbar) : IDisposable
+public sealed partial class ContextMenu(SceneState scene, ViewerSession session) : IDisposable
 {
     private MudMenu? _menu;
     private ContextMenuTarget? _target;
@@ -39,12 +37,12 @@ public sealed partial class ContextMenu(SceneState scene, ViewerSession session,
         }
     });
 
-    /// <summary>Expand (M15, D154): the one compound part. A menu item awaits its click handler, so it runs on its own.</summary>
+    /// <summary>Expand (M15, D154): the one compound part.</summary>
     private void Expand()
     {
         if (Scene.ExpandTarget is { } target)
         {
-            _ = InvokeAsync(() => ExpandCommand.RunAsync(scene, session, snackbar, target.Model.Id, [target.Node]));
+            scene.RequestExpand(target.Model.Id, [target.Node]);
         }
     }
 
@@ -53,7 +51,7 @@ public sealed partial class ContextMenu(SceneState scene, ViewerSession session,
     {
         foreach (var (id, parts) in Scene.ExpandAllTargets)
         {
-            _ = InvokeAsync(() => ExpandCommand.RunAsync(scene, session, snackbar, id, parts));
+            scene.RequestExpand(id, parts);
         }
     }
 

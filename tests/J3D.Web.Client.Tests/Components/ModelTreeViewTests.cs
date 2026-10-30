@@ -1,15 +1,14 @@
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
+using J3D.Blazor;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
-using static J3D.Web.Client.Tests.TestModels;
+using static J3D.Blazor.Tests.TestModels;
 
 namespace J3D.Web.Client.Tests.Components;
 
 /// <summary>
 /// M16's tree (D198, D202): an ARIA tree with one tab stop and arrow keys, whose rows render again only
-/// when their own state changes. The model is the bracket of <see cref="TestModels.Info"/>: Bracket (0) ›
+/// when their own state changes. The model is the bracket of <see cref="J3D.Blazor.Tests.TestModels.Info"/>: Bracket (0) ›
 /// Plate (bottom) (1) and Top (2) › Plate (top) (3) and an unnamed part (4).
 /// </summary>
 public sealed class ModelTreeViewTests : BunitTestBase

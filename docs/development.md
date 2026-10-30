@@ -17,11 +17,14 @@ are in [plan.md](plan.md); this page is the practical side.
 | Path | What |
 |---|---|
 | `src/J3D.Web` | ASP.NET Core host: static assets with cross-origin isolation headers, the prerendered shell |
-| `src/J3D.Web.Client` | Blazor WebAssembly UI (MudBlazor): toolbar, model list, About, the interop wrappers and state |
-| `src/J3D.Web.Client/scripts` | The app's browser code (`@j3d/client-scripts`): the bridge from `@j3d/viewer` to .NET, and the layout's touch handling. Its Vite build is what the browser loads |
+| `src/J3D.Web.Client` | Blazor WebAssembly app (MudBlazor): toolbar, model list, selection panel, layout, About |
+| `src/J3D.Web.Client/scripts` | The app's own browser code (`@j3d/client-scripts`): the layout's touch handling, the tree's drag and keys, and Escape on a menu |
+| `src/J3D.Blazor` | The Razor library: `<J3DViewer>`, the scene's state, undo and tree edits, and the interop, with no MudBlazor |
+| `src/J3D.Blazor/scripts` | Its browser code (`@j3d/blazor-scripts`): the bridge from `@j3d/viewer` to .NET. Its Vite build is the viewer bundle the library ships |
 | `src/J3D.Viewer` | `@j3d/viewer`: the Three.js viewer, the import pipeline and its mesh and store workers |
 | `src/J3D.Occt` | `@j3d/occt`: the custom OCCT WebAssembly build (libcascade toolchain), its C++ facade, and the model worker with its main-thread API ([README](../src/J3D.Occt/README.md)) |
-| `tests/J3D.Web.Client.Tests` | xUnit v3 + bUnit: components, state, interop JSON, the third-party notices |
+| `tests/J3D.Blazor.Tests` | xUnit v3 + bUnit: `<J3DViewer>`, the state, interop JSON |
+| `tests/J3D.Web.Client.Tests` | xUnit v3 + bUnit: the app's components, the third-party notices |
 | `tests/J3D.Web.Tests` | xUnit v3 + WebApplicationFactory: the host's headers and MIME types |
 | `tests/J3D.E2E.Tests` | xUnit v3 + Playwright: the real app in Chromium and Firefox |
 | `tests/fixtures` | Generated, licence-free CAD and mesh files shared by every test ([README](../tests/fixtures/README.md)) |
@@ -32,9 +35,10 @@ are in [plan.md](plan.md); this page is the practical side.
 dotnet run --project src/J3D.Web --launch-profile https
 ```
 
-`dotnet build` runs `npm ci` the first time, then compiles `@j3d/occt` and `@j3d/viewer` into their `lib/` folders and
-bundles what they'd ship with the app's bridge, into `src/J3D.Web.Client/wwwroot/viewer/` (all git-ignored). Typechecks
-and Vitest read the packages' sources through the `j3d-source` export condition, so they need no build. The
+`dotnet build` runs `npm ci` the first time, then compiles `@j3d/occt` and `@j3d/viewer` into their `lib/` folders,
+bundles what they'd ship with the library's bridge into `src/J3D.Blazor/wwwroot/viewer/`, and builds the app's own scripts
+into `src/J3D.Web.Client/wwwroot/app/` (all git-ignored). Typechecks and Vitest read the packages' sources through the
+`j3d-source` export condition, so they need no build. The
 static-assets manifest is fixed at build time, so rebuild after changing the viewer before running the app again. To
 work on the viewer with a watch build, run both of these alongside and skip it in MSBuild:
 
@@ -43,7 +47,7 @@ npm run dev --workspace @j3d/viewer
 ```
 
 ```bash
-npm run dev --workspace @j3d/client-scripts
+npm run dev --workspace @j3d/blazor-scripts
 ```
 
 ```bash
@@ -64,6 +68,7 @@ E2E test runs in a fresh browser context, so it starts with an empty store.
 | Suite | Command |
 |---|---|
 | TypeScript typecheck and Vitest (viewer, and OCCT's integration tests on the real WebAssembly under Node) | `npm run typecheck && npm test` |
+| Library (xUnit + bUnit) | `dotnet test --project tests/J3D.Blazor.Tests` |
 | Client (xUnit + bUnit) | `dotnet test --project tests/J3D.Web.Client.Tests` |
 | Host | `dotnet test --project tests/J3D.Web.Tests` |
 | E2E (Playwright) | `dotnet test --project tests/J3D.E2E.Tests` |

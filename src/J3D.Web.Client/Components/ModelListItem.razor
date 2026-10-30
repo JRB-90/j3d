@@ -80,20 +80,20 @@
                                data-testid="model-progress" />
             break;
 
-        case ModelStatus.Loaded when Model.Info is { } info:
+        case ModelStatus.Loaded when Model.Stats is { } stats:
             <div class="j3d-model-detail" data-testid="model-status">
-                <span>@StatsText(info, Model.Stats ?? info.Stats)</span>
-                @if (info.Warnings.Count > 0)
+                <span>@StatsText(Model.MemoryBytes ?? 0, stats)</span>
+                @if (Model.Warnings.Count > 0)
                 {
                     <MudTooltip>
                         <TooltipContent>
-                            @foreach (var warning in info.Warnings)
+                            @foreach (var warning in Model.Warnings)
                             {
                                 <div>@warning</div>
                             }
                         </TooltipContent>
                         <ChildContent>
-                            <span role="img" aria-label="@string.Join(" ", info.Warnings)" data-testid="model-warnings">
+                            <span role="img" aria-label="@string.Join(" ", Model.Warnings)" data-testid="model-warnings">
                                 <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning" Size="Size.Small" />
                             </span>
                         </ChildContent>

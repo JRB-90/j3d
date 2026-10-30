@@ -1,6 +1,6 @@
 using System.Globalization;
+using J3D.Blazor;
 using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
 using J3D.Web.Client.State;
 
 namespace J3D.Web.Client.Components;
@@ -16,7 +16,7 @@ namespace J3D.Web.Client.Components;
 /// peeks at its first lines until its handle is tapped or dragged up, and it names the tool that's on,
 /// or Add, with a Stop button, since the bar may have folded them into ⋮ (D235).
 /// </summary>
-public sealed partial class SelectionPanel(SceneState scene, ViewerSession session, ShellState shell) : IDisposable
+public sealed partial class SelectionPanel(SceneState scene, AppScripts scripts, ShellState shell) : IDisposable
 {
     /// <summary>How far a drag on the sheet's handle goes before it opens or closes the sheet, in px.</summary>
     private const double SheetDrag = 24;
@@ -225,7 +225,7 @@ public sealed partial class SelectionPanel(SceneState scene, ViewerSession sessi
         }
     }
 
-    private Task CopyAsync(string text) => session.CopyTextAsync(text);
+    private Task CopyAsync(string text) => scripts.CopyTextAsync(text);
 
     private void OnSceneChanged()
     {

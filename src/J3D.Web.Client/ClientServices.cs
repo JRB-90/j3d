@@ -1,3 +1,4 @@
+using J3D.Blazor;
 using J3D.Web.Client.Interop;
 using J3D.Web.Client.State;
 using MudBlazor;
@@ -20,8 +21,8 @@ public static class ClientServices
                 options.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomRight;
                 options.SnackbarConfiguration.VisibleStateDuration = 6000;
             })
-            .AddScoped<ViewerSession>()
-            .AddScoped<SceneState>()
+            .AddJ3DBlazor()
+            .AddScoped<AppScripts>()
             .AddScoped<ShellState>();
     }
 }

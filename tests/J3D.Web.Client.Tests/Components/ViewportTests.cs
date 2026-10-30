@@ -1,297 +1,127 @@
+using J3D.Blazor;
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
-using static J3D.Web.Client.Tests.TestModels;
+using static J3D.Blazor.Tests.TestModels;
 
 namespace J3D.Web.Client.Tests.Components;
 
 public sealed class ViewportTests : BunitTestBase
 {
-    private readonly BunitJSModuleInterop _viewer;
-    private readonly JSRuntimeInvocationHandler<StoredScene> _restoreScene;
-
     public ViewportTests()
     {
         JSInterop.Mode = JSRuntimeMode.Strict;
-        _viewer = SetupViewerModule();
-        _viewer.SetupVoid("dispose").SetVoidResult();
-        _viewer.SetupVoid("setPartState", static _ => true).SetVoidResult();
-        _viewer.SetupVoid("setModelOrder", static _ => true).SetVoidResult();
-        _viewer.SetupVoid("restoreModels", static _ => true).SetVoidResult();
-        _viewer.SetupVoid("removeModel", static _ => true).SetVoidResult();
-        _viewer.SetupVoid("forgetModel", static _ => true).SetVoidResult();
-        _viewer.SetupVoid("clearAll").SetVoidResult();
-        _viewer.SetupVoid("fitAll").SetVoidResult();
-        _restoreScene = _viewer.Setup<StoredScene>("restoreScene");
-        _restoreScene.SetResult(StoredScene.Empty);
+        var viewer = SetupViewerModule();
+        viewer.SetupVoid("dispose").SetVoidResult();
+        viewer.SetupVoid("setModelOrder", static _ => true).SetVoidResult();
+        viewer.Setup<StoredScene>("restoreScene").SetResult(StoredScene.Empty with { Status = StoreStatus.Kept });
     }
 
     [Fact]
-    public void Creates_the_viewer_on_first_render()
+    public void Takes_keys_anywhere_on_the_page_keeps_models_and_leaves_keys_to_an_open_menu()
     {
         var cut = Render<Viewport>();
 
         var invocation = Assert.Single(JSInterop.Invocations, static i => i.Identifier == "createViewer");
-        Assert.Equal(2, invocation.Arguments.Count);
-        Assert.NotNull(cut.Find("[data-testid=viewport]"));
+        var options = Assert.IsType<ViewerOptions>(invocation.Arguments[2]);
+        Assert.Equal((ViewerKeys.Page, "j3d", ".mud-popover-open .mud-list"), (options.Keys, options.Keep, options.PauseKeysWhile));
+        Assert.NotNull(cut.Find("[data-testid=viewport].j3d-viewport"));
     }
 
     [Fact]
-    public async Task Reports_capabilities_and_warns_when_webgl2_is_missing()
+    public void Installs_the_pages_scripts_with_the_same_selector()
     {
-        ViewerCapabilities? reported = null;
-        var cut = Render<Viewport>(parameters => parameters
-            .Add(viewport => viewport.OnReady, capabilities => reported = capabilities));
+        Render<Viewport>();
 
-        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: false, CrossOriginIsolated: true)));
-
-        Assert.Equal(new ViewerCapabilities(false, true), reported);
-        Assert.Contains("WebGL2", cut.Find(".mud-alert").TextContent, StringComparison.Ordinal);
-        Assert.False(Session.IsReady);
+        var invocation = Assert.Single(JSInterop.Invocations, static i => i.Identifier == "installPage");
+        Assert.Equal(".mud-popover-open .mud-list", invocation.Arguments[1]);
     }
 
     [Fact]
-    public async Task Shows_no_warning_and_shares_the_viewer_when_supported()
+    public async Task Removes_the_pages_scripts_when_it_goes()
     {
-        var cut = Render<Viewport>();
-
-        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
-
-        Assert.Empty(cut.FindAll(".mud-alert"));
-        Assert.True(Session.IsReady);
-    }
-
-    [Fact]
-    public async Task Disposes_the_viewer_and_leaves_the_session()
-    {
-        var cut = Render<Viewport>();
-        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
-        await cut.InvokeAsync(() => cut.Instance.OnModelQueued(Summary("m1")));
+        Render<Viewport>();
 
         await DisposeComponentsAsync();
 
-        Assert.Single(_viewer.Invocations, static i => i.Identifier == "dispose");
-        Assert.False(Session.IsReady);
-        Assert.Empty(Scene.Models); // the models went with the viewer
+        Assert.Single(Page!.Invocations, static i => i.Identifier == "dispose");
     }
 
     [Fact]
-    public async Task Relays_the_viewers_model_events_into_the_scene()
+    public async Task Warns_when_webgl2_is_missing()
     {
         var cut = Render<Viewport>();
+        var viewer = cut.FindComponent<J3DViewer>();
+
+        await cut.InvokeAsync(() => viewer.Instance.Callbacks.OnViewerReady(new ViewerCapabilities(WebGl2: false, CrossOriginIsolated: true)));
+
+        Assert.Contains("WebGL2", cut.Find(".mud-alert").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Shows_no_warning_when_supported()
+    {
+        var cut = Render<Viewport>();
+        var viewer = cut.FindComponent<J3DViewer>();
+
+        await cut.InvokeAsync(() => viewer.Instance.Callbacks.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
+
+        Assert.Empty(cut.FindAll(".mud-alert"));
+    }
+
+    [Theory]
+    [InlineData(NoticeSeverity.Info, Severity.Info)]
+    [InlineData(NoticeSeverity.Warning, Severity.Warning)]
+    [InlineData(NoticeSeverity.Error, Severity.Error)]
+    public async Task Shows_a_notice_as_a_snackbar(NoticeSeverity from, Severity to)
+    {
+        var cut = Render<Viewport>();
+
+        await cut.InvokeAsync(() => cut.FindComponent<J3DViewer>().Instance.Notify(new ViewerNotice(NoticeKind.ImportFailed, from, "Something happened.")));
+
+        var snackbar = Assert.Single(Snackbars.ShownSnackbars);
+        Assert.Equal(("Something happened.", to), (snackbar.Message, snackbar.Severity));
+    }
+
+    [Fact]
+    public async Task Names_itself_when_open_in_another_tab()
+    {
+        var cut = Render<Viewport>();
+
+        await cut.InvokeAsync(() => cut.FindComponent<J3DViewer>().Instance.Notify(new ViewerNotice(NoticeKind.OtherTab, NoticeSeverity.Info, "This page is open in another tab.")));
+
+        Assert.Equal(
+            "J3D is open in another tab, so the models you import here won't be kept for your next visit.",
+            Assert.Single(Snackbars.ShownSnackbars).Message);
+    }
+
+    [Theory]
+    [InlineData(NoticeKind.ImportFailed, false)]
+    [InlineData(NoticeKind.ModelNotKept, false)]
+    [InlineData(NoticeKind.OtherTab, false)]
+    [InlineData(NoticeKind.KeptModelsUnreadable, false)]
+    [InlineData(NoticeKind.ExpandFailed, false)]
+    [InlineData(NoticeKind.TransferFailed, false)]
+    [InlineData(NoticeKind.ArrivalNotKept, false)]
+    [InlineData(NoticeKind.FileSkipped, true)]
+    [InlineData(NoticeKind.MeasureFailed, true)]
+    [InlineData(NoticeKind.KeepingUnavailable, true)]
+    [InlineData(NoticeKind.TransferRefused, true)]
+    public void Keeps_up_what_matters_for_longer(NoticeKind kind, bool brief) => Assert.Equal(brief, Viewport.IsBrief(kind));
+
+    [Fact]
+    public async Task A_node_dropped_in_a_tree_goes_to_the_scene()
+    {
+        var cut = Render<Viewport>();
+        var scene = Services.GetRequiredService<SceneState>();
         var id = new ModelId("m1");
+        await cut.InvokeAsync(() => scene.Add(Summary("m1")));
+        await cut.InvokeAsync(() => scene.MarkLoaded(id, Info()));
 
-        await cut.InvokeAsync(() => cut.Instance.OnModelQueued(Summary("m1", "gearbox.step")));
-        Assert.Equal(ModelStatus.Queued, Assert.Single(Scene.Models).Status);
+        await cut.InvokeAsync(() => cut.Instance.OnTreeDrop("m1:4", "m1", 0, copy: false));
 
-        await cut.InvokeAsync(() => cut.Instance.OnModelProgress(id, ImportPhase.Meshing, 0.5));
-        Assert.Equal((ModelStatus.Importing, ImportPhase.Meshing), (Scene.Models[0].Status, Scene.Models[0].Phase));
-
-        // Since M16 the tree and a restored model's edits cross packed beside the rest (D204).
-        var info = Info() with { Tree = Info().Tree with { Expandable = [4] } };
-        var (tree, names) = TreeCodec.Encode(info.Tree);
-        var kept = ModelEdits.None with { Names = ModelEdits.None.Names.Add(3, "Lid") };
-        var (edits, editNames) = EditsCodec.Encode(kept);
-        await cut.InvokeAsync(() => cut.Instance.OnModelLoaded(id, info with { Tree = null! }, tree, names, edits, editNames));
-        var loaded = Scene.Models[0].Info!;
-        Assert.Equal(info.Tree.Names, loaded.Tree.Names);
-        Assert.Equal(info.Tree.Parents, loaded.Tree.Parents);
-        Assert.Equal(info.Tree.Prototypes, loaded.Tree.Prototypes);
-        Assert.Equal([4], loaded.Tree.Expandable!);
-        Assert.Equal("Lid", Scene.Models[0].Tree!.NameOf(3));
-        Assert.Equal(info.Stats, loaded.Stats);
-
-        await cut.InvokeAsync(() => cut.Instance.OnModelRemoved(id));
-        Assert.Empty(Scene.Models);
-        Assert.Empty(Snackbars.ShownSnackbars);
+        Assert.Equal(0, scene.Find(id)!.Tree!.ParentOf(4));
     }
-
-    [Fact]
-    public async Task A_failed_import_stays_in_the_list_and_is_reported_in_a_snackbar()
-    {
-        var cut = Render<Viewport>();
-        await cut.InvokeAsync(() => cut.Instance.OnModelQueued(Summary("m1", "gearbox.step")));
-
-        await cut.InvokeAsync(() => cut.Instance.OnModelFailed(new ModelId("m1"), ParseFailed));
-
-        Assert.Equal(ModelStatus.Failed, Assert.Single(Scene.Models).Status);
-        var snackbar = Assert.Single(Snackbars.ShownSnackbars);
-        Assert.Equal(("Couldn't import gearbox.step: Not a readable STEP file.", Severity.Error), (snackbar.Message, snackbar.Severity));
-    }
-
-    [Fact]
-    public async Task A_rejected_file_is_reported_in_a_snackbar_only()
-    {
-        var cut = Render<Viewport>();
-
-        await cut.InvokeAsync(() => cut.Instance.OnImportRejected("notes.txt", ".txt files aren't supported."));
-
-        Assert.Empty(Scene.Models);
-        var snackbar = Assert.Single(Snackbars.ShownSnackbars);
-        Assert.Equal(("Skipped notes.txt: .txt files aren't supported.", Severity.Warning), (snackbar.Message, snackbar.Severity));
-    }
-
-    [Fact]
-    public async Task Relays_picks_and_key_commands_into_the_scene()
-    {
-        var cut = await LoadedAsync();
-
-        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 3, additive: false));
-        Assert.Equal([3], Scene.Models[0].Selected);
-        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 1, additive: true));
-        Assert.Equal([1, 3], Scene.Models[0].Selected.Order());
-
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("hide"));
-        Assert.Equal([1, 3], Scene.Models[0].Hidden.Order());
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("undo"));
-        Assert.Empty(Scene.Models[0].Hidden);
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("redo"));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("showAll"));
-        Assert.Empty(Scene.Models[0].Hidden);
-
-        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 4, additive: false));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("isolate"));
-        Assert.Equal([1, 3], Scene.Models[0].Hidden.Order());
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("clearSelection"));
-        Assert.False(Scene.HasSelection);
-
-        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 4, additive: false));
-        await cut.InvokeAsync(() => cut.Instance.OnPartPicked(null, -1, additive: false));
-        Assert.False(Scene.HasSelection);
-    }
-
-    [Fact]
-    public async Task Sends_a_models_hidden_and_selected_parts_to_the_viewer_only_when_they_change()
-    {
-        var cut = await LoadedAsync();
-        Assert.Empty(PartStates()); // nothing hidden or selected yet
-
-        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 3, additive: false));
-        await cut.InvokeAsync(() => cut.Instance.OnModelProgress(new ModelId("m1"), ImportPhase.Meshing, 0.5)); // no change to parts
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("hide"));
-
-        Assert.Equal(
-            [("m1", "", "3"), ("m1", "3", "")],
-            PartStates());
-    }
-
-    [Fact]
-    public async Task Isolate_fits_the_view_once_the_viewer_has_hidden_the_rest()
-    {
-        var cut = await LoadedAsync();
-        await cut.InvokeAsync(() => cut.Instance.OnPartPicked("m1", 3, additive: false));
-
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("isolate"));
-
-        cut.WaitForAssertion(() => Assert.Contains(_viewer.Invocations, static i => i.Identifier == "fitAll"));
-        var calls = _viewer.Invocations.Select(static i => i.Identifier).ToList();
-        Assert.True(calls.LastIndexOf("setPartState") < calls.IndexOf("fitAll"), "the fit comes after the parts are hidden");
-        Assert.Single(calls, static c => c == "fitAll");
-    }
-
-    [Fact]
-    public async Task Lists_the_kept_models_and_restores_the_projection_once_the_viewer_is_ready()
-    {
-        _restoreScene.SetResult(new StoredScene(
-            StoreStatus.Kept,
-            [new StoredModel(Summary("k1", "a.step"), [3]), new StoredModel(Summary("k2", "b.stl", ModelFormat.Stl), [])],
-            new StoredCamera(Projection.Perspective)));
-        var cut = Render<Viewport>();
-
-        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
-
-        cut.WaitForAssertion(() => Assert.Equal(["k1", "k2"], Scene.Models.Select(static model => model.Id.Value)));
-        Assert.Equal(Projection.Perspective, Session.Projection);
-        var restored = Assert.Single(_viewer.Invocations, static i => i.Identifier == "restoreModels");
-        var models = (StoredModel[])restored.Arguments[0]!;
-        Assert.Equal([("k1", "3"), ("k2", "")], models.Select(static m => (m.Summary.Id.Value, string.Join(',', m.Hidden))));
-        cut.WaitForAssertion(() => Assert.Equal("k1,k2", string.Join(',', (string[])_viewer.Invocations.Last(static i => i.Identifier == "setModelOrder").Arguments[0]!)));
-        Assert.Empty(Snackbars.ShownSnackbars);
-    }
-
-    [Theory]
-    [InlineData(StoreStatus.OtherTab, "J3D is open in another tab, so the models you import here won't be kept for your next visit.")]
-    [InlineData(StoreStatus.Unavailable, "This browser can't keep models for your next visit.")]
-    public async Task Says_when_this_tab_wont_keep_its_models(StoreStatus status, string message)
-    {
-        _restoreScene.SetResult(StoredScene.Empty with { Status = status });
-        var cut = Render<Viewport>();
-
-        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
-
-        cut.WaitForAssertion(() => Assert.Equal((message, Severity.Info), (Assert.Single(Snackbars.ShownSnackbars).Message, Assert.Single(Snackbars.ShownSnackbars).Severity)));
-        Assert.Equal(Projection.Orthographic, Session.Projection);
-    }
-
-    [Theory]
-    [InlineData(1, "A kept model couldn't be read this time. It's still kept, and J3D will try it again next time.")]
-    [InlineData(2, "2 kept models couldn't be read this time. They're still kept, and J3D will try them again next time.")]
-    public async Task Says_when_kept_models_couldnt_be_read(int unreadable, string message)
-    {
-        // M16 (D200): the store keeps them for the next visit rather than deleting them.
-        _restoreScene.SetResult(StoredScene.Empty with { Unreadable = unreadable });
-        var cut = Render<Viewport>();
-
-        await cut.InvokeAsync(() => cut.Instance.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
-
-        cut.WaitForAssertion(() => Assert.Equal((message, Severity.Warning), (Assert.Single(Snackbars.ShownSnackbars).Message, Assert.Single(Snackbars.ShownSnackbars).Severity)));
-    }
-
-    [Fact]
-    public async Task Has_the_viewer_delete_restore_forget_and_clear_models_as_the_scene_asks()
-    {
-        var cut = await LoadedAsync();
-
-        await cut.InvokeAsync(() => Scene.Delete(new ModelId("m1")));
-        await cut.InvokeAsync(Scene.Undo);
-        await cut.InvokeAsync(Scene.ClearAll);
-
-        var calls = _viewer.Invocations
-            .Where(static i => i.Identifier is "removeModel" or "restoreModels" or "forgetModel" or "clearAll")
-            .Select(static i => i.Identifier switch
-            {
-                "removeModel" => $"remove {i.Arguments[0]} {i.Arguments[1]}",
-                "restoreModels" => $"restore {string.Join(',', ((StoredModel[])i.Arguments[0]!).Select(static m => m.Summary.Id.Value))}",
-                _ => i.Identifier,
-            });
-        Assert.Equal(["remove m1 True", "restore m1", "clearAll"], calls);
-    }
-
-    [Fact]
-    public async Task A_model_that_could_not_be_kept_is_marked_and_reported()
-    {
-        var cut = await LoadedAsync();
-
-        await cut.InvokeAsync(() => cut.Instance.OnModelNotKept(new ModelId("m1"), full: true));
-
-        Assert.Equal("storage full", Scene.Find(new ModelId("m1"))!.NotKept);
-        var snackbar = Assert.Single(Snackbars.ShownSnackbars);
-        Assert.Equal(
-            ("Couldn't keep part.step for your next visit: the browser's storage is full. It stays open until the page is closed.", Severity.Warning),
-            (snackbar.Message, snackbar.Severity));
-    }
-
-    private async Task<IRenderedComponent<Viewport>> LoadedAsync()
-    {
-        var cut = Render<Viewport>();
-        await cut.InvokeAsync(() => cut.Instance.OnModelQueued(Summary("m1")));
-        var (tree, names) = TreeCodec.Encode(Info().Tree);
-        await cut.InvokeAsync(() => cut.Instance.OnModelLoaded(new ModelId("m1"), Info(), tree, names, null, null));
-        return cut;
-    }
-
-    /// <summary>Each setPartState call as (model, hidden nodes, selected nodes).</summary>
-    private List<(string, string, string)> PartStates() =>
-    [
-        .. _viewer.Invocations
-            .Where(static i => i.Identifier == "setPartState")
-            .Select(static i => ((string)i.Arguments[0]!, string.Join(',', (int[])i.Arguments[1]!), string.Join(',', (int[])i.Arguments[2]!))),
-    ];
-
-    private SceneState Scene => Services.GetRequiredService<SceneState>();
 
     private ISnackbar Snackbars => Services.GetRequiredService<ISnackbar>();
 }

@@ -1,10 +1,8 @@
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
+using J3D.Blazor;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
-using static J3D.Web.Client.Tests.TestModels;
+using static J3D.Blazor.Tests.TestModels;
 
 namespace J3D.Web.Client.Tests.Components;
 
@@ -222,26 +220,26 @@ public sealed class MeasureUiTests : BunitTestBase
         Scene.ContextMenuRequested += menus.Add;
         var cut = Render<Viewport>();
 
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("measure"));
-        await cut.InvokeAsync(() => cut.Instance.OnMeasureReference(Measure("reference", "Vertex of Pin", ("Point", "(0.000, 0.000, 0.000)"))));
-        await cut.InvokeAsync(() => cut.Instance.OnMeasureResult(Measure("result", "Distance 30.000 mm", ("Distance", "30.000 mm"))));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("measure"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnMeasureReference(Measure("reference", "Vertex of Pin", ("Point", "(0.000, 0.000, 0.000)"))));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnMeasureResult(Measure("result", "Distance 30.000 mm", ("Distance", "30.000 mm"))));
         Assert.Equal(["Vertex of Pin", "Distance 30.000 mm"], [Scene.MeasureReference?.Title, Scene.MeasureResult?.Title]);
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("clearSelection")); // Esc ends the measurement
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("clearSelection")); // Esc ends the measurement
         await cut.InvokeAsync(() => Scene.MeasureFromHere());
 
         var measureModes = _viewer.Invocations.Where(static i => i.Identifier == "setMeasureMode").Select(static i => ((bool)i.Arguments[0]!, (bool)i.Arguments[1]!));
         Assert.Equal([(true, false), (false, false), (true, true)], measureModes);
 
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("selectFeatures"));
-        await cut.InvokeAsync(() => cut.Instance.OnFeaturesSelected(new FeatureSelection([Measure("f1", "Face of Pin", ("Area", "1.000 mm²"))], [])));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("selectFeatures"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnFeaturesSelected(new FeatureSelection([Measure("f1", "Face of Pin", ("Area", "1.000 mm²"))], [])));
         Assert.Single(Scene.Features.Features);
         await cut.InvokeAsync(() => Scene.SetMeasureMode(false));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("clearSelection"));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("selectModels"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("clearSelection"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("selectModels"));
         Assert.Equal([SelectMode.Features, SelectMode.Models], _viewer.Invocations.Where(static i => i.Identifier == "setSelectionMode").Select(static i => (SelectMode)i.Arguments[0]!));
         Assert.Single(_viewer.Invocations, static i => i.Identifier == "clearFeatures");
 
-        await cut.InvokeAsync(() => cut.Instance.OnContextMenu(Id.Value, 4, 12, 34, canMeasure: true));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnContextMenu(Id.Value, 4, 12, 34, canMeasure: true));
         Assert.Equal([new ContextMenuTarget(12, 34, true, true)], menus);
         Assert.Equal([1, 3, 4], Scene.Find(Id)!.Selected.Order()); // Model mode: the whole bracket
     }
@@ -257,10 +255,10 @@ public sealed class MeasureUiTests : BunitTestBase
         _viewer.SetupVoid("dispose").SetVoidResult();
         var cut = Render<Viewport>();
 
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("selectFeatures"));
-        await cut.InvokeAsync(() => cut.Instance.OnFeaturesSelected(new FeatureSelection([Measure("f1", "Face of Pin", ("Area", "1.000 mm²"))], [], "[1]", ByUser: true)));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("selectObjects"));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("undo"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("selectFeatures"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnFeaturesSelected(new FeatureSelection([Measure("f1", "Face of Pin", ("Area", "1.000 mm²"))], [], "[1]", ByUser: true)));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("selectObjects"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("undo"));
 
         cut.WaitForAssertion(() => Assert.Single(_viewer.Invocations, static i => i.Identifier == "restoreFeatures"));
         Assert.Equal("[1]", _viewer.Invocations.Single(static i => i.Identifier == "restoreFeatures").Arguments[0]);

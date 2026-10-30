@@ -37,16 +37,31 @@ class FakeWorker implements StoreWorker {
   }
 }
 
-/** Web Locks with `ifAvailable`, shared by the "tabs" of a test. */
+/**
+ * Web Locks shared by the "tabs" of a test. An answer takes `delay` milliseconds, as on a page too busy to
+ * take it: by then a request's signal may have given up.
+ */
 class FakeLocks {
   readonly held = new Set<string>();
+  delay = 0;
 
-  request(name: string, _options: LockOptions, callback: (lock: Lock | null) => unknown): Promise<unknown> {
+  async request(name: string, options: LockOptions, callback: (lock: Lock | null) => unknown): Promise<unknown> {
+    if (this.delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.delay));
+    }
+    options.signal?.throwIfAborted();
     if (this.held.has(name)) {
-      return Promise.resolve(callback(null));
+      if (options.ifAvailable) {
+        return callback(null);
+      }
+      throw new Error('This fake only waits for a lock with ifAvailable.');
     }
     this.held.add(name);
-    return Promise.resolve(callback({ name, mode: 'exclusive' } as Lock)).finally(() => this.held.delete(name));
+    try {
+      return await callback({ name, mode: 'exclusive' } as Lock);
+    } finally {
+      this.held.delete(name);
+    }
   }
 }
 
@@ -71,6 +86,7 @@ function openTab(disk: FakeDisk, locks: FakeLocks, options: Partial<ModelStoreOp
     locks: locks as unknown as Pick<LockManager, 'request'>,
     persist: tab.persist,
     manifestDelay: 1,
+    lockWait: 5,
     ...options,
   });
   return tab;
@@ -300,6 +316,30 @@ describe('ModelStore', () => {
     first.store.dispose();
     await first.store.idle();
     expect((await openTab(disk, locks).store.opened).status).toBe('kept');
+  });
+
+  it("doesn't take a page still going away for a second tab (R35, D276)", async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const first = openTab(disk, locks);
+    await first.store.opened;
+    await first.store.save(summary('a'), [source('a.step')]);
+    first.store.setOrder(['a']);
+    await first.store.idle();
+
+    const reloaded = openTab(disk, locks, { lockWait: 10_000 });
+    first.store.dispose();
+
+    const opened = await reloaded.store.opened;
+    expect(opened.status).toBe('kept');
+    expect(opened.models.map(({ summary }) => summary.id)).toEqual(['a']);
+  });
+
+  it('takes a free lock however late the answer comes, as on a page too busy to take it (D276)', async () => {
+    const locks = new FakeLocks();
+    locks.delay = 20;
+
+    expect((await openTab(new FakeDisk(), locks, { lockWait: 1 }).store.opened).status).toBe('kept');
   });
 
   it("is unavailable where the browser gives the page no private file system", async () => {
