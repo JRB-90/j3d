@@ -25,6 +25,8 @@ export interface ModelStoreOptions {
   persist?: (() => Promise<boolean>) | undefined;
   /** How long changes gather before the manifest is written, in milliseconds. */
   manifestDelay?: number;
+  /** How long a page waits for the lock before taking it that another tab holds it, in milliseconds. */
+  lockWait?: number;
 }
 
 /** How a copy went: kept, or not for want of space, or not for another reason, or not tried (D109, D115). */
@@ -34,6 +36,9 @@ export type SaveOutcome = 'kept' | 'full' | 'failed' | 'notKept';
 export const lockName = (store: string): string => `${store}-store`;
 
 export const DefaultManifestDelay = 250;
+
+/** On a reload the old page may still hold the lock, which must not look like a second tab (R35, D276). */
+export const DefaultLockWait = 2000;
 
 export class StoreFailure extends Error {
   constructor(
@@ -361,19 +366,20 @@ export class ModelStore {
     return { status: 'kept', models, camera: this.camera, unreadable: unreadable.length };
   }
 
-  /** Takes the store's lock if no other tab holds it, and keeps it until the store closes. */
+  /** Takes the store's lock unless another tab keeps it past the wait, and holds it until the store closes. */
   private acquire(): Promise<boolean> {
     const locks = this.options.locks;
     if (!locks) {
       return Promise.resolve(true);
     }
+    const signal = AbortSignal.timeout(this.options.lockWait ?? DefaultLockWait);
     return new Promise<boolean>((resolve, reject) => {
       locks
-        .request(lockName(this.options.name ?? RootName), { ifAvailable: true }, (lock) => {
-          resolve(lock !== null);
-          return lock === null ? undefined : new Promise<void>((release) => (this.releaseLock = release));
+        .request(lockName(this.options.name ?? RootName), { signal }, () => {
+          resolve(true);
+          return new Promise<void>((release) => (this.releaseLock = release));
         })
-        .catch(reject);
+        .catch((error: unknown) => (signal.aborted ? resolve(false) : reject(error)));
     });
   }
 

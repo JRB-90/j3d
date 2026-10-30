@@ -37,16 +37,35 @@ class FakeWorker implements StoreWorker {
   }
 }
 
-/** Web Locks with `ifAvailable`, shared by the "tabs" of a test. */
+/** Web Locks shared by the "tabs" of a test: a request waits for the lock until its signal gives up. */
 class FakeLocks {
   readonly held = new Set<string>();
+  private readonly waiting = new Set<() => void>();
 
-  request(name: string, _options: LockOptions, callback: (lock: Lock | null) => unknown): Promise<unknown> {
-    if (this.held.has(name)) {
-      return Promise.resolve(callback(null));
+  async request(name: string, options: LockOptions, callback: (lock: Lock | null) => unknown): Promise<unknown> {
+    if (options.ifAvailable && this.held.has(name)) {
+      return callback(null);
+    }
+    while (this.held.has(name)) {
+      await new Promise<void>((resolve, reject) => {
+        const free = () => {
+          this.waiting.delete(free);
+          resolve();
+        };
+        this.waiting.add(free);
+        options.signal?.addEventListener('abort', () => {
+          this.waiting.delete(free);
+          reject(options.signal!.reason);
+        });
+      });
     }
     this.held.add(name);
-    return Promise.resolve(callback({ name, mode: 'exclusive' } as Lock)).finally(() => this.held.delete(name));
+    try {
+      return await callback({ name, mode: 'exclusive' } as Lock);
+    } finally {
+      this.held.delete(name);
+      [...this.waiting].forEach((free) => free());
+    }
   }
 }
 
@@ -71,6 +90,7 @@ function openTab(disk: FakeDisk, locks: FakeLocks, options: Partial<ModelStoreOp
     locks: locks as unknown as Pick<LockManager, 'request'>,
     persist: tab.persist,
     manifestDelay: 1,
+    lockWait: 5,
     ...options,
   });
   return tab;
@@ -300,6 +320,23 @@ describe('ModelStore', () => {
     first.store.dispose();
     await first.store.idle();
     expect((await openTab(disk, locks).store.opened).status).toBe('kept');
+  });
+
+  it("doesn't take a page still going away for a second tab (R35, D276)", async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const first = openTab(disk, locks);
+    await first.store.opened;
+    await first.store.save(summary('a'), [source('a.step')]);
+    first.store.setOrder(['a']);
+    await first.store.idle();
+
+    const reloaded = openTab(disk, locks, { lockWait: 10_000 });
+    first.store.dispose();
+
+    const opened = await reloaded.store.opened;
+    expect(opened.status).toBe('kept');
+    expect(opened.models.map(({ summary }) => summary.id)).toEqual(['a']);
   });
 
   it("is unavailable where the browser gives the page no private file system", async () => {
