@@ -2,25 +2,14 @@
 // meshes back (transferred, not copied) and then keeps the C++ model, and with it the BREP, alive
 // until the main thread terminates the worker (docs/plan.md §6.2).
 
-import { ExportFormat, ExportStatus, ImportFormat, OcctExportError, OcctModel, type OcctModule } from '@j3d/occt/facade';
-import createOcct, { type InitOpenCascadeOptions } from '@j3d/occt/single';
-import { sceneTransferables, summariseBrepScene } from '../brep-summary';
-import { toImportError } from '../errors';
-import { occtOutput } from '../occt-output';
-import { throttleProgress } from '../progress';
-import type {
-  ArriveRequest,
-  BrepExportFormat,
-  ExpandRequest,
-  ExportRequest,
-  ImportRequestMessage,
-  MeasureRequest,
-  ModelWorkerRequest,
-  ModelWorkerResponse,
-  OcctFormat,
-  WorkerScope,
-} from '../protocol';
-import type { ImportPhase } from '../types';
+import { sceneTransferables, summariseBrepScene } from './brep-summary.js';
+import { toImportError } from './errors.js';
+import { ExportFormat, ExportStatus, ImportFormat, OcctExportError, OcctModel, type OcctModule } from './facade.js';
+import createOcct, { type InitOpenCascadeOptions } from './j3d_occt_single.js';
+import { occtOutput } from './occt-output.js';
+import { throttleProgress } from './progress.js';
+import type { ArriveRequest, ExpandRequest, ExportRequest, ImportRequestMessage, MeasureRequest, ModelWorkerRequest, ModelWorkerResponse, WorkerScope } from './protocol.js';
+import type { BrepExportFormat, ImportPhase, OcctFormat } from './types.js';
 
 const scope = globalThis as unknown as WorkerScope<ModelWorkerRequest, ModelWorkerResponse>;
 

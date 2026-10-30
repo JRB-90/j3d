@@ -1,0 +1,22 @@
+{
+  "name": "@j3d/client-scripts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The J3D app's browser code: @j3d/viewer's bridge to Blazor, and what the app's own layout needs.",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build --workspace @j3d/occt && npm run build --workspace @j3d/viewer && tsc && vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@j3d/viewer": "0.0.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
+  }
+}

@@ -1,8 +1,8 @@
 import { DoubleSide, LoadingManager, MeshStandardMaterial, type Material, type MeshPhongMaterial } from 'three';
 import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-import { SurfaceMetalness, SurfaceRoughness } from '../../view/surface';
-import type { ImportRequest } from '../runner';
-import { SidecarUrls } from './sidecar-urls';
+import { SurfaceMetalness, SurfaceRoughness } from '../../view/surface.js';
+import type { ImportRequest } from '../runner.js';
+import { SidecarUrls } from './sidecar-urls.js';
 
 export interface ObjMaterials {
   /** The MTL material of that name, or undefined when no supplied library defines it. */

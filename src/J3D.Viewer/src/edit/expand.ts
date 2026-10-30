@@ -1,5 +1,5 @@
-import type { ModelContent } from '../import/types';
-import { EditsMismatchError, type Expansions } from './structure';
+import type { ModelContent } from '../import/types.js';
+import { EditsMismatchError, type Expansions } from './structure.js';
 
 const None: Expansions = new Map();
 

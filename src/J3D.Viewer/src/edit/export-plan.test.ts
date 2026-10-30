@@ -1,8 +1,8 @@
 import { FileOrigin, PlanKind, type PlanNode } from '@j3d/occt/facade';
 import { describe, expect, it } from 'vitest';
-import type { TreeNode } from '../import/types';
-import { exportPlan, writesAsImported, type PlanSource } from './export-plan';
-import { ModelStructure, NoEdits, TopLevel, type Expansions, type ModelEdits } from './structure';
+import type { TreeNode } from '../import/types.js';
+import { exportPlan, writesAsImported, type PlanSource } from './export-plan.js';
+import { ModelStructure, NoEdits, TopLevel, type Expansions, type ModelEdits } from './structure.js';
 
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const shift = (x: number, y = 0) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, 0, 1];

@@ -97,6 +97,45 @@ jobs:
       - name: Test host (xUnit + WebApplicationFactory)
         run: dotnet test --project tests/J3D.Web.Tests -c Release --no-build
 
+  # The packed packages in an app built with Vite and with webpack, nothing configured for them (D268).
+  packaging:
+    name: Packaging (Vite, webpack)
+    needs: build-test
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # Git LFS objects (the OCCT WASM) are cached by content to save LFS bandwidth quota.
+      - name: List Git LFS objects
+        run: git lfs ls-files --long | cut -d ' ' -f1 | sort > .lfs-assets-id
+
+      - name: Cache Git LFS objects
+        uses: actions/cache@v6
+        with:
+          path: .git/lfs/objects
+          key: lfs-${{ hashFiles('.lfs-assets-id') }}
+
+      - name: Fetch Git LFS objects
+        run: git lfs pull
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install npm workspaces
+        run: npm ci
+
+      - name: Install the check's bundlers and browser
+        working-directory: tests/packaging
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright-core install --with-deps chromium-headless-shell
+
+      - name: Pack, install, build and run
+        working-directory: tests/packaging
+        run: npm test
+
   e2e:
     name: E2E (${{ matrix.browser }})
     needs: build-test

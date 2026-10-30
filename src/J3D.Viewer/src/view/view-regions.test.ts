@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { PoleEpsilon, viewDirection } from './camera-math';
-import { findRegion, HomeRegion, regionView, ViewRegions } from './view-regions';
+import { PoleEpsilon, viewDirection } from './camera-math.js';
+import { findRegion, HomeRegion, regionView, ViewRegions } from './view-regions.js';
 
 describe('view cube regions', () => {
   it('has 6 faces, 12 edges and 8 corners with unique ids', () => {

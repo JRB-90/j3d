@@ -4,7 +4,8 @@
   "description": "npm workspaces for the J3D browser-side code. The .NET build drives these via MSBuild; see docs/plan.md.",
   "workspaces": [
     "src/J3D.Occt",
-    "src/J3D.Viewer"
+    "src/J3D.Viewer",
+    "src/J3D.Web.Client/scripts"
   ],
   "engines": {
     "node": ">=22"

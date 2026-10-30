@@ -1,4 +1,4 @@
-import type { ImportError, ImportErrorCode } from './types';
+import type { ImportError, ImportErrorCode } from './types.js';
 
 export const OutOfWasmMemoryMessage = "Model too large for the browser's 4 GB WebAssembly limit.";
 export const OutOfMemoryMessage = "Model too large for the browser's memory.";

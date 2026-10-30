@@ -1,13 +1,12 @@
-import { kindOf, type ModelFormat } from '../formats';
-import { ModelImportError, toImportError } from './errors';
-import { throttleProgress, type ProgressListener } from './progress';
-import type { ImportRunner, ImportTask } from './runner';
-import { planBatch, SidecarSet, UnusedSidecarReason, type BatchFile } from './sidecars';
-import { editedStats } from '../edit/stats';
-import { arrivalsOf, readArrivals, type MeshArrivalReader } from '../edit/arrive';
-import { expandFileParts, expansionsOf } from '../edit/expand';
-import { EditsMismatchError, expandedFileNodes, hasEdits, ModelStructure, type ModelEdits } from '../edit/structure';
-import type { ImportError, ImportPhase, ImportResult, KeptPlacement, KeptState, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types';
+import { kindOf, type ModelFormat } from '../formats.js';
+import { ModelImportError, throttleProgress, toImportError, type ProgressListener } from '@j3d/occt/core';
+import type { ImportRunner, ImportTask } from './runner.js';
+import { planBatch, SidecarSet, UnusedSidecarReason, type BatchFile } from './sidecars.js';
+import { editedStats } from '../edit/stats.js';
+import { arrivalsOf, readArrivals, type MeshArrivalReader } from '../edit/arrive.js';
+import { expandFileParts, expansionsOf } from '../edit/expand.js';
+import { EditsMismatchError, expandedFileNodes, hasEdits, ModelStructure, type ModelEdits } from '../edit/structure.js';
+import type { ImportError, ImportPhase, ImportResult, KeptPlacement, KeptState, LoadedModel, ModelId, ModelStatus, ModelSummary } from './types.js';
 
 /** Model lifecycle events. Progress is limited to 10 reports per second per model. */
 export interface ModelManagerListener {

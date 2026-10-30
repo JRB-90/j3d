@@ -1,8 +1,13 @@
-import type { BatchFile } from './sidecars';
+import type { BatchFile } from './sidecars.js';
 
 /** The files of one picker selection. */
 export function filesFromInput(input: HTMLInputElement): BatchFile[] {
-  return [...(input.files ?? [])].map((file) => ({ file, path: file.name }));
+  return filesFromList(input.files ?? []);
+}
+
+/** Files handed over by name alone: a batch whose sidecars match by file name (D43). */
+export function filesFromList(files: Iterable<File>): BatchFile[] {
+  return [...files].map((file) => ({ file, path: file.name }));
 }
 
 /**

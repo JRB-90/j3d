@@ -1,7 +1,7 @@
 import { BoxGeometry, Group, Matrix4, Mesh, MeshStandardMaterial, type Object3D } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { ModelStructure } from '../edit/structure';
-import { readMeshArrival, writeMeshArrival } from './mesh-arrival';
+import { ModelStructure } from '../edit/structure.js';
+import { readMeshArrival, writeMeshArrival } from './mesh-arrival.js';
 
 /** A group (0) holding a box (1, translated) and a box of two materials (2), the second hidden in its model. */
 function model(): { objects: Object3D[]; structure: ModelStructure } {

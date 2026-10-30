@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BatchFile } from '../import/sidecars';
-import type { ModelSummary } from '../import/types';
-import { FakeDisk } from './fake-opfs';
-import { ModelStore, type ModelStoreOptions, type StoreWorker } from './model-store';
-import type { StoreRequestMessage, StoreResponse } from './protocol';
-import { respond, StoreOps, type Estimate } from './store-ops';
-import type { CameraSnapshot } from './types';
+import type { BatchFile } from '../import/sidecars.js';
+import type { ModelSummary } from '../import/types.js';
+import { FakeDisk } from './fake-opfs.js';
+import { ModelStore, type ModelStoreOptions, type StoreWorker } from './model-store.js';
+import type { StoreRequestMessage, StoreResponse } from './protocol.js';
+import { respond, StoreOps, type Estimate } from './store-ops.js';
+import type { CameraSnapshot } from './types.js';
 
 const camera: CameraSnapshot = { projection: 'orthographic', position: [100, -100, 100], target: [0, 0, 0], focalOffset: [0, 0, 0], zoom: 2 };
 
@@ -367,5 +367,54 @@ describe('ModelStore', () => {
 
     expect(disk.files()).toEqual({});
     expect(tab.store.state).toMatchObject({ stored: [], order: [] });
+  });
+});
+
+describe('ModelStore options (D256)', () => {
+  it('keeps a named store in its own folder under its own lock, apart from another on the origin', async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const first = openTab(disk, locks, { name: 'first' });
+    const second = openTab(disk, locks, { name: 'second' });
+
+    expect((await first.store.opened).status).toBe('kept');
+    expect((await second.store.opened).status).toBe('kept');
+    expect(locks.held).toEqual(new Set(['first-store', 'second-store']));
+
+    await first.store.save(summary('a'), [source('a.step')]);
+    await second.store.save(summary('b'), [source('b.step')]);
+
+    const files = Object.keys(disk.files());
+    expect(files).toContain('first/models/a/0');
+    expect(files).toContain('second/models/b/0');
+    first.store.dispose();
+    second.store.dispose();
+  });
+
+  it('is j3d when no name is given, so the app finds what it kept', async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const tab = openTab(disk, locks);
+
+    await tab.store.opened;
+    await tab.store.save(summary('a'), [source('a.step')]);
+
+    expect(locks.held).toEqual(new Set(['j3d-store']));
+    expect(Object.keys(disk.files())).toContain('j3d/models/a/0');
+    tab.store.dispose();
+  });
+
+  it('keeps nothing when off: no worker, no lock and no files', async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const tab = openTab(disk, locks, { off: true });
+
+    expect(await tab.store.opened).toEqual({ status: 'unavailable', models: [], camera: null, unreadable: 0 });
+    expect(await tab.store.save(summary('a'), [source('a.step')])).toBe('notKept');
+
+    expect(tab.worker).toBeUndefined();
+    expect(locks.held.size).toBe(0);
+    expect(disk.files()).toEqual({});
+    tab.store.dispose();
   });
 });

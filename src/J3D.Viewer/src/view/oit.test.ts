@@ -1,6 +1,6 @@
 import { BoxGeometry, Group, InstancedMesh, Mesh, MeshStandardMaterial } from 'three';
 import { describe, expect, it } from 'vitest';
-import { sceneMaterials } from './oit';
+import { sceneMaterials } from './oit.js';
 
 describe('sceneMaterials', () => {
   it('sorts the models\' materials into translucent and opaque, and lists what draws translucent ones', () => {

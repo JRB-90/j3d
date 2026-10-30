@@ -12,8 +12,8 @@ import {
   Vector3,
   type Intersection,
 } from 'three';
-import type { BrepMeasurer, ModelId, Vector3Tuple } from '../import/types';
-import { AccentColour, type Highlight, type HighlightMaterials, type ModelParts, type PickedEntity, type ScreenSpace } from './parts';
+import type { BrepMeasurer, ModelId, Vector3Tuple } from '../import/types.js';
+import { AccentColour, type Highlight, type HighlightMaterials, type ModelParts, type PickedEntity, type ScreenSpace } from './parts.js';
 import {
   angle,
   area,
@@ -27,7 +27,7 @@ import {
   size,
   type MeasureInfo,
   type MeasureRow,
-} from './measure-format';
+} from './measure-format.js';
 
 /** What the Measure tool and feature selection need of a model. */
 export interface MeasureModel {

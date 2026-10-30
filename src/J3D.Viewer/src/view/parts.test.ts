@@ -14,12 +14,12 @@ import {
   type Object3D,
 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { ModelStructure, NoEdits } from '../edit/structure';
-import type { TreeNode } from '../import/types';
-import { buildBrepObject, InstancingThreshold } from './brep-object';
-import { EdgeVisibilityAttribute, MaterialCache } from './materials';
-import { HiddenLayer, HighlightMaterials, MeshParts, ModelFrame } from './parts';
-import { keyCommand } from './viewer';
+import { ModelStructure, NoEdits } from '../edit/structure.js';
+import type { TreeNode } from '../import/types.js';
+import { buildBrepObject, InstancingThreshold } from './brep-object.js';
+import { EdgeVisibilityAttribute, MaterialCache } from './materials.js';
+import { HiddenLayer, HighlightMaterials, MeshParts, ModelFrame } from './parts.js';
+import { keyCommand } from './viewer.js';
 
 const translated = (x: number) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1];
 

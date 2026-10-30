@@ -15,7 +15,7 @@ import {
   type Camera,
   type WebGLRenderer,
 } from 'three';
-import { ViewRegions, type ViewRegion } from './view-regions';
+import { ViewRegions, type ViewRegion } from './view-regions.js';
 
 /** Size of the view cube's square, in CSS pixels, and its distance from the top-right corner (D31). */
 export const ViewCubeSize = 110;

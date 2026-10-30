@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectFormat, extensionOf, fileInputAccept, isSidecar, kindOf, type ModelFormat } from './formats';
+import { detectFormat, extensionOf, fileInputAccept, isSidecar, kindOf, type ModelFormat } from './formats.js';
 
 describe('detectFormat', () => {
   it.each<[string, ModelFormat]>([

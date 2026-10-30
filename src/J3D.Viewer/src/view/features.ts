@@ -1,8 +1,8 @@
 import type { EntityMeasure } from '@j3d/occt/facade';
-import type { ModelId } from '../import/types';
-import { area, length, type MeasureInfo, type MeasureRow } from './measure-format';
-import { describeEntity, entityAt, modelOf, removeHighlight, sameEntity, type MeasureHost, type Picked } from './measure';
-import type { Highlight } from './parts';
+import type { ModelId } from '../import/types.js';
+import { area, length, type MeasureInfo, type MeasureRow } from './measure-format.js';
+import { describeEntity, entityAt, modelOf, removeHighlight, sameEntity, type MeasureHost, type Picked } from './measure.js';
+import type { Highlight } from './parts.js';
 
 /**
  * What Feature selection holds (D146, D163; mirrors J3D.Web.Client/Interop/FeatureSelection.cs): each

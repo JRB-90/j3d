@@ -1,10 +1,10 @@
 import type { ImportedScene, PrototypeMesh } from '@j3d/occt/facade';
 import { BatchedMesh, Box3, Group, InstancedBufferGeometry, InstancedMesh, LineSegments, Matrix4, type MeshStandardMaterial } from 'three';
 import { describe, expect, it } from 'vitest';
-import { ModelStructure, NoEdits, type ModelEdits } from '../edit/structure';
-import { buildBrepObject, InstancingThreshold, toUnorm8 } from './brep-object';
-import { MaterialCache } from './materials';
-import { ModelFrame } from './parts';
+import { ModelStructure, NoEdits, type ModelEdits } from '../edit/structure.js';
+import { buildBrepObject, InstancingThreshold, toUnorm8 } from './brep-object.js';
+import { MaterialCache } from './materials.js';
+import { ModelFrame } from './parts.js';
 
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const translated = (x: number) => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, 0, 0, 1];

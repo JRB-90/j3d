@@ -3,10 +3,10 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import { ModelImportError, toImportError } from '../errors';
-import type { ImportRequest } from '../runner';
-import { isJ3dEdges, isJ3dGltf, J3dRangesTag } from './j3d-gltf';
-import { SidecarUrls } from './sidecar-urls';
+import { ModelImportError, toImportError } from '@j3d/occt/core';
+import type { ImportRequest } from '../runner.js';
+import { isJ3dEdges, isJ3dGltf, J3dRangesTag } from './j3d-gltf.js';
+import { SidecarUrls } from './sidecar-urls.js';
 
 /**
  * The Draco and Basis decoders need no configuration: three's loaders locate them with

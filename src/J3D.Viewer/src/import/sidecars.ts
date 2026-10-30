@@ -1,4 +1,4 @@
-import { detectFormat, extensionOf, isSidecar, type ModelFormat } from '../formats';
+import { detectFormat, extensionOf, isSidecar, type ModelFormat } from '../formats.js';
 
 /** A file from one picker selection or drop. */
 export interface BatchFile {

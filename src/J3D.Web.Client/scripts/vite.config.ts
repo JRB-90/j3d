@@ -1,24 +1,8 @@
 import { fileURLToPath } from 'node:url';
-import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 
 // Output goes straight into the Blazor client's wwwroot so it is served as a static web asset.
-const outDir = fileURLToPath(new URL('../J3D.Web.Client/wwwroot/viewer', import.meta.url));
-
-/**
- * The Emscripten glue imports `node:module` only when it runs under Node. Give the browser bundle a
- * stub instead of Vite's "externalized for browser compatibility" shim and warning.
- */
-function nodeModuleStub(): Plugin {
-  const id = '\0j3d-node-module-stub';
-  return {
-    name: 'j3d-node-module-stub',
-    apply: 'build',
-    enforce: 'pre',
-    resolveId: (source) => (source === 'node:module' ? id : undefined),
-    load: (source) => (source === id ? 'export function createRequire() { throw new Error("node:module is unavailable in browsers."); }' : undefined),
-  };
-}
+const outDir = fileURLToPath(new URL('../wwwroot/viewer', import.meta.url));
 
 export default defineConfig({
   // Relative asset URLs (resolved against import.meta.url), since the bundle is served from /viewer/.
@@ -47,7 +31,6 @@ export default defineConfig({
   },
   worker: {
     format: 'es',
-    plugins: () => [nodeModuleStub()],
     rolldownOptions: {
       output: {
         entryFileNames: 'workers/[name]-[hash].js',
@@ -56,6 +39,8 @@ export default defineConfig({
       },
     },
   },
+  // Tests read the packages' sources, so they run without a build; the bundle above is of what's packed (D264).
+  resolve: process.env['VITEST'] ? { conditions: ['j3d-source'] } : {},
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',

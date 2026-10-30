@@ -14,7 +14,7 @@ import {
   type EntityRef,
   type OcctModule,
   type PrototypeMesh,
-} from './facade';
+} from './facade.js';
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`../../../tests/fixtures/${name}`, import.meta.url)));
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];

@@ -1,11 +1,11 @@
 import type { EntityMeasure, EntityRef, PairMeasure } from '@j3d/occt/facade';
 import { Box3, Group, Vector3, type Intersection } from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import type { BrepMeasurer } from '../import/types';
-import { totals, FeatureSelection, type FeatureSelectionInfo } from './features';
-import { MeasureTool, primaryValue, type MeasureHost, type MeasureModel } from './measure';
-import { angle, area, entityRows, length, pairLabel, pairRows, partRows, point, size } from './measure-format';
-import { HighlightMaterials, type ModelParts, type PickedEntity } from './parts';
+import type { BrepMeasurer } from '../import/types.js';
+import { totals, FeatureSelection, type FeatureSelectionInfo } from './features.js';
+import { MeasureTool, primaryValue, type MeasureHost, type MeasureModel } from './measure.js';
+import { angle, area, entityRows, length, pairLabel, pairRows, partRows, point, size } from './measure-format.js';
+import { HighlightMaterials, type ModelParts, type PickedEntity } from './parts.js';
 
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const face = (index: number, x = 0): PickedEntity => ({

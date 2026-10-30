@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ProgressIntervalMs, throttleProgress } from './progress';
-import type { ImportPhase } from './types';
+import { ProgressIntervalMs, throttleProgress } from './progress.js';
+import type { ImportPhase } from './types.js';
 
 function harness() {
   let time = 0;

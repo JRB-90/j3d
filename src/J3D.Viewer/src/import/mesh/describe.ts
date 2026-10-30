@@ -1,6 +1,6 @@
 import { Box3, type BufferGeometry, type InstancedMesh, type Material, type Mesh, type Object3D, type Texture } from 'three';
-import type { ImportResult, TreeNode } from '../types';
-import { isJ3dEdges } from './j3d-gltf';
+import type { ImportResult, TreeNode } from '../types.js';
+import { isJ3dEdges } from './j3d-gltf.js';
 
 /**
  * Tree, counts, bounds and memory of a loaded mesh model.

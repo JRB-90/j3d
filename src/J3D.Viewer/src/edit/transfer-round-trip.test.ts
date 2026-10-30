@@ -7,10 +7,10 @@ import { ExportFormat, ImportFormat, OcctModel, type Arrival, type ImportedScene
 import init from '@j3d/occt/single';
 import { Matrix4 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { buildBrepObject } from '../view/brep-object';
-import { MaterialCache } from '../view/materials';
-import { exportPlan, transferPlan } from './export-plan';
-import { ModelStructure, TopLevel, type Arrivals, type ModelEdits } from './structure';
+import { buildBrepObject } from '../view/brep-object.js';
+import { MaterialCache } from '../view/materials.js';
+import { exportPlan, transferPlan } from './export-plan.js';
+import { ModelStructure, TopLevel, type Arrivals, type ModelEdits } from './structure.js';
 
 const fixture = (name: string) => new Uint8Array(readFileSync(new URL(`../../../../tests/fixtures/${name}`, import.meta.url)));
 

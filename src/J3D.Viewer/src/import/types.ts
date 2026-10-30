@@ -1,25 +1,26 @@
-import type { Arrival, EntityMeasure, EntityRef, ExpandedPiece, ImportedScene, PairMeasure, PlanNode, PrototypeMesh } from '@j3d/occt/facade';
+import type { Bounds, BrepArriver, BrepExpander, BrepExporter, BrepMeasurer, ImportError, ImportPhase, ModelStats } from '@j3d/occt/core';
+import type { ExpandedPiece, ImportedScene } from '@j3d/occt/facade';
 import type { Object3D } from 'three';
-import type { ArrivalContent, ModelEdits } from '../edit/structure';
-import type { ModelFormat, ModelKind } from '../formats';
-import type { BrepExportFormat } from './protocol';
+import type { ArrivalContent, ModelEdits } from '../edit/structure.js';
+import type { ModelFormat, ModelKind } from '../formats.js';
+
+export { ExportCancelledError } from '@j3d/occt/core';
+export type {
+  Bounds,
+  BrepArriver,
+  BrepExpander,
+  BrepExporter,
+  BrepExportFormat,
+  BrepMeasurer,
+  ImportError,
+  ImportErrorCode,
+  ImportPhase,
+  ModelStats,
+  OcctFormat,
+  Vector3Tuple,
+} from '@j3d/occt/core';
 
 export type ModelId = string;
-
-/**
- * Import phases in the order they occur. OCCT imports go through all of them; mesh imports use
- * only `reading` and `parsing`.
- */
-/** Since M16 a restored model with kept edits ends with `applying` them (D203). */
-export type ImportPhase = 'reading' | 'parsing' | 'transferring' | 'meshing' | 'extracting' | 'applying';
-
-/** Error codes shown in the model list (docs/plan.md §6.2). */
-export type ImportErrorCode = 'Unsupported' | 'MissingFile' | 'ParseFailed' | 'Empty' | 'OutOfMemory' | 'Internal';
-
-export interface ImportError {
-  code: ImportErrorCode;
-  message: string;
-}
 
 export type ModelStatus = 'queued' | 'importing' | 'loaded' | 'failed';
 
@@ -29,14 +30,6 @@ export interface ModelSummary {
   format: ModelFormat;
   kind: ModelKind;
   sizeBytes: number;
-}
-
-export type Vector3Tuple = [number, number, number];
-
-/** Axis-aligned bounds in world (Z-up) coordinates. */
-export interface Bounds {
-  min: Vector3Tuple;
-  max: Vector3Tuple;
 }
 
 /** A moved node's placement in its parent's frame (node -1: the model's frame), column-major (M13, D145). */
@@ -54,52 +47,12 @@ export interface TreeNode {
   prototype: number;
 }
 
-export interface ModelStats {
-  nodes: number;
-  /** Unique meshes (BREP: unique part + style; mesh models: geometries). */
-  prototypes: number;
-  /** Placements of those meshes in the scene. */
-  instances: number;
-  /** Triangles drawn, counting every instance. */
-  triangles: number;
-  /** BREP edge segments drawn, counting every instance. Always 0 for mesh models. */
-  edges: number;
-  /** Textures referenced by materials. */
-  textures: number;
-}
-
 /**
  * The geometry of a loaded model, handed to the viewer.
  * - BREP models arrive as plain buffers: each prototype in its part's own coordinates, placed by
  *   world matrices (docs/plan.md §6.1). The viewer builds the Three.js objects.
  * - Mesh models arrive as a ready Three.js object, already rotated to Z-up, with each tree node's object.
  */
-/** Measurement queries to a BREP model's worker (M7), answered one at a time. */
-export interface BrepMeasurer {
-  entity(entity: EntityRef): Promise<EntityMeasure>;
-  /** `shapeB`: entity B exported from another model's worker (D102). */
-  pair(a: EntityRef, b: EntityRef, shapeB?: string): Promise<PairMeasure>;
-  /** BREP text of an entity, for a pair measured in another model's worker. */
-  exportEntity(entity: EntityRef): Promise<string>;
-}
-
-/** Saving a BREP model, in its worker (M9, D83, D125): as imported, or its edited tree from a plan (M15). */
-export interface BrepExporter {
-  /**
-   * The file's bytes. `onProgress` gets a fraction, or null while OCCT writes a STEP file. Aborting
-   * `signal` stops OCCT and rejects with an {@link ExportCancelledError}; so does removing the model.
-   */
-  export(
-    format: BrepExportFormat,
-    options?: { plan?: PlanNode[]; onProgress?: (fraction: number | null) => void; signal?: AbortSignal },
-  ): Promise<ArrayBuffer>;
-}
-
-/** Reading objects from another model into a BREP model, in its worker (M18, D225). */
-export interface BrepArriver {
-  /** An arrival's nodes (from `base` on), and the prototypes its parts draw, numbered after the model's others. */
-  arrive(file: Blob, base: number): Promise<{ arrival: Arrival; prototypes: PrototypeMesh[] }>;
-}
 
 /**
  * The arrivals a model has read in (M18), in the order the facade numbers them (a BREP model) or in the
@@ -109,20 +62,6 @@ export interface BrepArriver {
 export interface ArrivalsState {
   loaded: (ArrivalContent & { file: string; base: number })[];
   files: Map<string, Blob>;
-}
-
-/** Expanding a BREP model's file parts, in its worker (M15, D154). */
-export interface BrepExpander {
-  /** A file part's pieces, and the prototypes they draw that the model didn't have yet, numbered after its others. */
-  expand(node: number): Promise<{ pieces: ExpandedPiece[]; prototypes: PrototypeMesh[] }>;
-}
-
-/** An export that was cancelled, or whose model was removed, before it finished. */
-export class ExportCancelledError extends Error {
-  constructor(message = 'Export cancelled.') {
-    super(message);
-    this.name = 'ExportCancelledError';
-  }
 }
 
 export type ModelContent =

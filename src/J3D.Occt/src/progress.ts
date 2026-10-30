@@ -1,4 +1,4 @@
-import type { ImportPhase } from './types';
+import type { ImportPhase } from './types.js';
 
 /** `fraction` is in [0, 1], or `null` while the phase has no measurable progress. */
 export type ProgressListener = (phase: ImportPhase, fraction: number | null) => void;

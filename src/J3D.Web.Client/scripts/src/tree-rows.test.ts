@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTreeNavigationKey, scrollTopFor } from './tree-rows';
+import { isTreeNavigationKey, scrollTopFor } from './tree-rows.js';
 
 describe('scrollTopFor', () => {
   // A list 260 px high (ten 26 px rows) scrolled down by 520 px: rows 20 to 29 show.

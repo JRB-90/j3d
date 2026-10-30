@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { occtOutput } from './occt-output';
+import { occtOutput } from './occt-output.js';
 
 describe('occtOutput', () => {
   it('passes lines on, except while muted', () => {

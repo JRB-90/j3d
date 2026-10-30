@@ -5,19 +5,8 @@
  * view, which handles its own (`Viewer`): a long press on a tree row opens its context menu, as a right
  * click does (D242), and a swipe to the left closes the drawer (D238).
  */
-import type { DotNetObjectReference } from './interop';
-
-/** The compact layout (D234): a phone either way up, or a tablet held upright. */
-export const CompactQuery = '(max-width: 899.98px), (max-height: 499.98px)';
-
-/** A touch screen (D239): the main pointer is a finger. */
-export const TouchQuery = '(pointer: coarse)';
-
-/** A finger held still this long opens a context menu (D242). */
-export const LongPressMilliseconds = 500;
-
-/** A finger moves more in a tap than a mouse does in a click (D242), in pixels. */
-export const TapTolerance = 10;
+import { CompactQuery, LongPressMilliseconds, swallowClickAfter, TapTolerance, TouchQuery } from '@j3d/viewer/touch';
+import type { DotNetObjectReference } from './interop.js';
 
 /** A swipe this far to the left, more across than down, closes the drawer (D238), in pixels. */
 const SwipeDistance = 60;
@@ -134,36 +123,6 @@ export function installLongPress(root: Document): () => void {
     root.removeEventListener('pointercancel', onEnd, true);
     window.removeEventListener('contextmenu', onContextMenu, true);
   };
-}
-
-/**
- * Once a long press has opened a menu, the finger lifting may still make a click, which would land on the
- * menu's backdrop and close it: the next click before another press, or shortly after the finger lifts,
- * is dropped.
- */
-export function swallowClickAfter(pointerId: number): void {
-  let timer = 0;
-  const done = () => {
-    window.clearTimeout(timer);
-    window.removeEventListener('click', onClick, true);
-    window.removeEventListener('pointerdown', done, true);
-    window.removeEventListener('pointerup', onUp, true);
-  };
-  const onClick = (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    done();
-  };
-  const onUp = (event: PointerEvent) => {
-    if (event.pointerId === pointerId) {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(done, 300);
-    }
-  };
-  window.addEventListener('click', onClick, true);
-  window.addEventListener('pointerdown', done, true);
-  window.addEventListener('pointerup', onUp, true);
-  timer = window.setTimeout(done, 5000);
 }
 
 /** A finger swiping left across the open drawer closes it (D238); the drawer lets the page pan only up and down. */

@@ -1,6 +1,6 @@
-import type { ModelId } from '../import/types';
-import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol';
-import type { KeptEdits, Manifest, ManifestModel, StoredMeta } from './types';
+import type { ModelId } from '../import/types.js';
+import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol.js';
+import type { KeptEdits, Manifest, ManifestModel, StoredMeta } from './types.js';
 
 // The parts of the origin private file system the store worker uses (docs/plan.md §6.2, D112).
 // Declared here because TypeScript's DOM library lacks the worker-only synchronous access handle,
@@ -77,6 +77,8 @@ export interface OpenedStore {
 export class StoreOps {
   private seq = 0;
   private readonly editsSeq = new Map<ModelId, number>();
+  /** The folder under the origin's private file system: a store's name (D256). */
+  private rootName = RootName;
 
   constructor(
     private readonly origin: DirectoryHandle,
@@ -89,7 +91,8 @@ export class StoreOps {
    * cut short (D113), which are never listed. A listed model whose meta can't be read is kept (D200):
    * deleting it lost a model in M16's timings.
    */
-  async open(): Promise<OpenedStore> {
+  async open(name = RootName): Promise<OpenedStore> {
+    this.rootName = name;
     const root = await this.root();
     let manifest: Manifest | null = null;
     for (const name of ManifestNames) {
@@ -243,7 +246,7 @@ export class StoreOps {
 
   /** Removes everything stored (Clear all, D110). */
   async clear(): Promise<void> {
-    await removeIfPresent(this.origin, RootName);
+    await removeIfPresent(this.origin, this.rootName);
     this.seq = 0;
   }
 
@@ -291,7 +294,7 @@ export class StoreOps {
   }
 
   private root(): Promise<DirectoryHandle> {
-    return this.origin.getDirectoryHandle(RootName, { create: true });
+    return this.origin.getDirectoryHandle(this.rootName, { create: true });
   }
 
   private async models(): Promise<DirectoryHandle> {
@@ -316,7 +319,7 @@ export async function respond(store: Promise<StoreOps>, { requestId, ...request 
 function run(store: StoreOps, request: StoreRequest): Promise<unknown> {
   switch (request.type) {
     case 'open':
-      return store.open();
+      return store.open(request.name);
     case 'save':
       return store.save(request.id, request.meta, request.files);
     case 'load':

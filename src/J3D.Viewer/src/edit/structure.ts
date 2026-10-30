@@ -1,6 +1,6 @@
 import type { ExpandedPiece, SceneNode } from '@j3d/occt/facade';
 import type { Object3D } from 'three';
-import type { TreeNode } from '../import/types';
+import type { TreeNode } from '../import/types.js';
 
 /**
  * A model's edits to its tree (M14, D151–D152, D180–D187), as .NET makes them and the store keeps them

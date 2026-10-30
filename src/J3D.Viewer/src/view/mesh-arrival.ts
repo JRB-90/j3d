@@ -3,11 +3,11 @@
 
 import { Group, Matrix4, type Mesh, type Object3D } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { TopLevel, type ArrivalContent, type ModelStructure } from '../edit/structure';
-import { joinRanges } from '../import/mesh/gltf-import';
-import { isJ3dEdges, J3dRangesTag } from '../import/mesh/j3d-gltf';
-import { writeMeshFile } from './mesh-export';
-import { cloneNode } from './parts';
+import { TopLevel, type ArrivalContent, type ModelStructure } from '../edit/structure.js';
+import { joinRanges } from '../import/mesh/gltf-import.js';
+import { isJ3dEdges, J3dRangesTag } from '../import/mesh/j3d-gltf.js';
+import { writeMeshFile } from './mesh-export.js';
+import { cloneNode } from './parts.js';
 
 /** `userData` (glTF `extras`) key of each written node's place in the arrival, so it's found again whatever the loader adds. */
 const ArrivalTag = 'j3dArrival';

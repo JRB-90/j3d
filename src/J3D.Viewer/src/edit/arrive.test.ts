@@ -1,8 +1,8 @@
 import type { Arrival, ImportedScene, PrototypeMesh, SceneNode } from '@j3d/occt/facade';
 import { describe, expect, it } from 'vitest';
-import type { ModelContent } from '../import/types';
-import { addArrival, arrivalsOf, readArrivals } from './arrive';
-import { arrivalBase, EditsMismatchError, ModelStructure, TopLevel, type KeptArrival, type ModelEdits } from './structure';
+import type { ModelContent } from '../import/types.js';
+import { addArrival, arrivalsOf, readArrivals } from './arrive.js';
+import { arrivalBase, EditsMismatchError, ModelStructure, TopLevel, type KeptArrival, type ModelEdits } from './structure.js';
 
 const node = (parent: number, prototype: number, name = ''): SceneNode => ({ name, parent, prototype, matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 9, 0, 0, 1] });
 /** What each file arrives as: J3D's assembly, then an assembly with one part. */

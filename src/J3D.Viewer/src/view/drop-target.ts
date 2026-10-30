@@ -1,5 +1,5 @@
 /** Shown on the viewport's host while files are dragged over it. */
-export const DropClass = 'j3d-viewport--drop';
+export const DropClass = 'j3d-viewer--drop';
 
 /**
  * Turns the viewport into a drop target for files (docs/plan.md §6.3): an overlay appears while files

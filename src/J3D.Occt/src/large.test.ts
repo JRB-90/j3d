@@ -22,7 +22,7 @@ import {
   OcctImportError,
   OcctModel,
   type OcctModule,
-} from './facade';
+} from './facade.js';
 
 const sizes = (process.env['J3D_LARGE_FIXTURES'] ?? '').split(',').filter(Boolean);
 /**

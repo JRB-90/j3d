@@ -4,7 +4,7 @@ import type { Object3D, Texture, WebGLRenderer } from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
 import { decompress } from 'three/addons/utils/WebGLTextureUtils.js';
-import { J3dGltfMarker } from '../import/mesh/j3d-gltf';
+import { J3dGltfMarker } from '../import/mesh/j3d-gltf.js';
 
 /** GLB, or STL in binary or ASCII (D127). */
 export type MeshExportFormat = 'glb' | 'stl' | 'stl-ascii';

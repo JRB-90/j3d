@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { probeTextureSupport } from './gltf-import';
+import { probeTextureSupport } from './gltf-import.js';
 
 /** A canvas whose getContext('webgl2') returns `gl`. */
 function stubDocument(gl: unknown) {

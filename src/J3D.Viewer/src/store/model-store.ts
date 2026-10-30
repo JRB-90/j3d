@@ -1,9 +1,10 @@
-import { hasEdits, type ModelEdits } from '../edit/structure';
-import { basename, type BatchFile } from '../import/sidecars';
-import type { KeptPlacement, ModelId, ModelSummary } from '../import/types';
-import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol';
-import type { OpenedStore } from './store-ops';
-import type { CameraSnapshot, KeptEdits, ManifestModel, StoredMeta, StoredScene, StoreStatus } from './types';
+import { hasEdits, type ModelEdits } from '../edit/structure.js';
+import { basename, type BatchFile } from '../import/sidecars.js';
+import type { KeptPlacement, ModelId, ModelSummary } from '../import/types.js';
+import type { StoreRequest, StoreRequestMessage, StoreResponse } from './protocol.js';
+import { RootName } from './store-ops.js';
+import type { OpenedStore } from './store-ops.js';
+import type { CameraSnapshot, KeptEdits, ManifestModel, StoredMeta, StoredScene, StoreStatus } from './types.js';
 
 /** The store worker, or a stand-in for tests. */
 export interface StoreWorker {
@@ -14,6 +15,10 @@ export interface StoreWorker {
 
 export interface ModelStoreOptions {
   createWorker?: () => StoreWorker;
+  /** Keeps nothing: the store stays closed, as on a page with no private file system. */
+  off?: boolean;
+  /** Names the store's folder and lock, so viewers on one origin keep apart (D256). J3D's own is `j3d`. */
+  name?: string;
   /** The browser's Web Locks; without them the tab keeps the store. */
   locks?: Pick<LockManager, 'request'> | undefined;
   /** Asks the browser not to evict the store (D115). */
@@ -25,8 +30,8 @@ export interface ModelStoreOptions {
 /** How a copy went: kept, or not for want of space, or not for another reason, or not tried (D109, D115). */
 export type SaveOutcome = 'kept' | 'full' | 'failed' | 'notKept';
 
-/** Held by the tab that keeps the store (D109). */
-export const LockName = 'j3d-store';
+/** Held by the tab that keeps a store (D109). */
+export const lockName = (store: string): string => `${store}-store`;
 
 export const DefaultManifestDelay = 250;
 
@@ -310,6 +315,9 @@ export class ModelStore {
   }
 
   private async open(): Promise<StoredScene> {
+    if (this.options.off) {
+      return { status: 'unavailable', models: [], camera: null, unreadable: 0 };
+    }
     if (!(await this.acquire())) {
       this.status = 'otherTab';
       return { status: 'otherTab', models: [], camera: null, unreadable: 0 };
@@ -322,7 +330,7 @@ export class ModelStore {
     worker.onmessage = ({ data }) => this.answer(data);
     this.worker = worker;
 
-    const { manifest, metas, edits, unreadable } = await this.request<OpenedStore>({ type: 'open' });
+    const { manifest, metas, edits, unreadable } = await this.request<OpenedStore>({ type: 'open', name: this.options.name ?? RootName });
     this.status = 'kept';
     this.unreadable = unreadable;
     const models = (manifest?.models ?? []).map(({ id, hidden }) => {
@@ -361,7 +369,7 @@ export class ModelStore {
     }
     return new Promise<boolean>((resolve, reject) => {
       locks
-        .request(LockName, { ifAvailable: true }, (lock) => {
+        .request(lockName(this.options.name ?? RootName), { ifAvailable: true }, (lock) => {
           resolve(lock !== null);
           return lock === null ? undefined : new Promise<void>((release) => (this.releaseLock = release));
         })
@@ -464,5 +472,5 @@ export class ModelStore {
 }
 
 function createStoreWorker(): StoreWorker {
-  return new Worker(new URL('./workers/store-worker.ts', import.meta.url), { type: 'module', name: 'J3D store' });
+  return new Worker(new URL('./workers/store-worker.js', import.meta.url), { type: 'module', name: 'J3D store' });
 }

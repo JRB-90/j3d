@@ -1,9 +1,8 @@
+import type { LoadedModel, ModelManagerListener, ModelSummary } from '@j3d/viewer';
 import { Object3D } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ModelManagerListener } from './import/model-manager';
-import type { LoadedModel, ModelSummary } from './import/types';
-import type { DotNetObjectReference } from './interop';
-import { forwardModelEvents, packTree } from './model-events';
+import type { DotNetObjectReference } from './interop.js';
+import { forwardModelEvents, packTree } from './model-events.js';
 
 function setup(invoke: (method: string, ...args: unknown[]) => Promise<unknown> = () => Promise.resolve()) {
   const listeners = new Set<ModelManagerListener>();
