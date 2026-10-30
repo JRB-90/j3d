@@ -1,6 +1,4 @@
-using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
+using J3D.Blazor;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MudBlazor;

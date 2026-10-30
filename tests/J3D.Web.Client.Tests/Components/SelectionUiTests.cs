@@ -1,16 +1,15 @@
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
+using J3D.Blazor;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
-using static J3D.Web.Client.Tests.TestModels;
+using static J3D.Blazor.Tests.TestModels;
 
 namespace J3D.Web.Client.Tests.Components;
 
 /// <summary>
 /// The M6 UI over <see cref="SceneState"/>: eyes and selection in the list and tree (D96), the
 /// floating panel (D87) and the toolbar's visibility and history buttons (D97). The model is the
-/// bracket of <see cref="TestModels.Info"/>, whose parts are nodes 1, 3 and 4.
+/// bracket of <see cref="J3D.Blazor.Tests.TestModels.Info"/>, whose parts are nodes 1, 3 and 4.
 /// </summary>
 public sealed class SelectionUiTests : BunitTestBase
 {
@@ -99,13 +98,13 @@ public sealed class SelectionUiTests : BunitTestBase
     {
         // M16 (D198): the tree is virtualised, so the row is found by its index, not paged to (D60).
         await StartViewerAsync();
-        List<J3D.Web.Client.Interop.TreeNode> tree = [new("Group", Parent: -1, Prototype: -1)];
-        tree.AddRange(Enumerable.Range(1, 350).Select(static i => new J3D.Web.Client.Interop.TreeNode($"Inner {i}", Parent: 0, Prototype: 0)));
+        List<TreeNode> tree = [new("Group", Parent: -1, Prototype: -1)];
+        tree.AddRange(Enumerable.Range(1, 350).Select(static i => new TreeNode($"Inner {i}", Parent: 0, Prototype: 0)));
         var id = new ModelId("wide");
         await Act(() =>
         {
             Scene.Add(Summary(id.Value, "wide.step"));
-            Scene.MarkLoaded(id, Info() with { Tree = J3D.Web.Client.Interop.TreeColumns.From(tree) });
+            Scene.MarkLoaded(id, Info() with { Tree = TreeColumns.From(tree) });
         });
         var cut = Render<ModelList>();
 

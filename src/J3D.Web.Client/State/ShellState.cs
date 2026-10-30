@@ -42,7 +42,7 @@ public sealed class ShellState : IAsyncDisposable
         }
 
         _self = DotNetObjectReference.Create(this);
-        var module = await js.InvokeAsync<IJSObjectReference>("import", ViewerInterop.ModulePath);
+        var module = await js.InvokeAsync<IJSObjectReference>("import", AppScripts.ModulePath);
         _watch = await module.InvokeAsync<IJSObjectReference>("watchLayout", _self);
     }
 

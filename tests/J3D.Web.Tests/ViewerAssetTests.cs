@@ -31,12 +31,12 @@ public sealed class ViewerAssetTests(WebApplicationFactory<Program> factory)
     [Fact]
     public async Task Occt_webassembly_is_served_as_application_wasm()
     {
-        // The Vite build fingerprints the file name, so find it in the client's build output.
-        var assets = Path.Combine(RepoRoot(), "src", "J3D.Web.Client", "wwwroot", "viewer", "assets");
+        // The Vite build fingerprints the file name, so find it in the library's build output.
+        var assets = Path.Combine(RepoRoot(), "src", "J3D.Blazor", "wwwroot", "viewer", "assets");
         var wasm = Path.GetFileName(Assert.Single(Directory.GetFiles(assets, "j3d_occt_single-*.wasm")));
         using var client = factory.CreateClient();
 
-        using var response = await client.GetAsync(new Uri($"/viewer/assets/{wasm}", UriKind.Relative), TestContext.Current.CancellationToken);
+        using var response = await client.GetAsync(new Uri($"/_content/J3D.Blazor/viewer/assets/{wasm}", UriKind.Relative), TestContext.Current.CancellationToken);
 
         response.EnsureSuccessStatusCode();
         // WebAssembly.compileStreaming rejects any other MIME type.

@@ -25,7 +25,7 @@ export interface ModelStoreOptions {
   persist?: (() => Promise<boolean>) | undefined;
   /** How long changes gather before the manifest is written, in milliseconds. */
   manifestDelay?: number;
-  /** How long a page waits for the lock before taking it that another tab holds it, in milliseconds. */
+  /** How long a page keeps asking for the lock before taking it that another tab holds it, in milliseconds. */
   lockWait?: number;
 }
 
@@ -39,6 +39,8 @@ export const DefaultManifestDelay = 250;
 
 /** On a reload the old page may still hold the lock, which must not look like a second tab (R35, D276). */
 export const DefaultLockWait = 2000;
+
+const LockRetry = 100;
 
 export class StoreFailure extends Error {
   constructor(
@@ -366,20 +368,35 @@ export class ModelStore {
     return { status: 'kept', models, camera: this.camera, unreadable: unreadable.length };
   }
 
-  /** Takes the store's lock unless another tab keeps it past the wait, and holds it until the store closes. */
-  private acquire(): Promise<boolean> {
+  /**
+   * Takes the store's lock unless another tab keeps it past the wait, and holds it until the store closes.
+   * Each try gets the lock's own answer. A request timed out by a signal instead can lose to its timer
+   * on a page too busy to take the grant, and give up a free lock (found in M22).
+   */
+  private async acquire(): Promise<boolean> {
     const locks = this.options.locks;
     if (!locks) {
-      return Promise.resolve(true);
+      return true;
     }
-    const signal = AbortSignal.timeout(this.options.lockWait ?? DefaultLockWait);
+    const wait = this.options.lockWait ?? DefaultLockWait;
+    const start = performance.now();
+    for (;;) {
+      const acquired = await this.tryLock(locks);
+      if (acquired || performance.now() - start >= wait) {
+        return acquired;
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(LockRetry, wait)));
+    }
+  }
+
+  private tryLock(locks: Pick<LockManager, 'request'>): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
       locks
-        .request(lockName(this.options.name ?? RootName), { signal }, () => {
-          resolve(true);
-          return new Promise<void>((release) => (this.releaseLock = release));
+        .request(lockName(this.options.name ?? RootName), { ifAvailable: true }, (lock) => {
+          resolve(lock !== null);
+          return lock === null ? undefined : new Promise<void>((release) => (this.releaseLock = release));
         })
-        .catch((error: unknown) => (signal.aborted ? resolve(false) : reject(error)));
+        .catch(reject);
     });
   }
 

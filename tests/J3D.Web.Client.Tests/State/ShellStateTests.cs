@@ -81,7 +81,7 @@ public sealed class ShellStateTests : BunitTestBase
     [Fact]
     public async Task Follows_the_page_through_the_viewer_module()
     {
-        var module = JSInterop.SetupModule(ViewerInterop.ModulePath);
+        var module = JSInterop.SetupModule(AppScripts.ModulePath);
         module.SetupModule(static invocation => invocation.Identifier == "watchLayout");
 
         await _shell.StartAsync(JSInterop.JSRuntime);

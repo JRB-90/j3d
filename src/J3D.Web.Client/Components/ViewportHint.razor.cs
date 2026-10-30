@@ -1,4 +1,4 @@
-using J3D.Web.Client.Interop;
+using J3D.Blazor;
 using J3D.Web.Client.State;
 
 namespace J3D.Web.Client.Components;

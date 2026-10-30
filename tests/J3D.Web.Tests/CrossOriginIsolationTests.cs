@@ -8,7 +8,8 @@ public sealed class CrossOriginIsolationTests(WebApplicationFactory<Program> fac
     [Theory]
     [InlineData("/")]
     [InlineData("/app.css")]
-    [InlineData("/viewer/j3d-viewer.js")]
+    [InlineData("/_content/J3D.Blazor/viewer/j3d-viewer.js")]
+    [InlineData("/app/j3d-app.js")]
     [InlineData("/_framework/blazor.web.js")]
     public async Task Responses_are_cross_origin_isolated(string path)
     {

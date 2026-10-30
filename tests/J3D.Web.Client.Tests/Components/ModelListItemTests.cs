@@ -1,8 +1,6 @@
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
-using static J3D.Web.Client.Tests.TestModels;
+using J3D.Blazor;
+using static J3D.Blazor.Tests.TestModels;
 
 namespace J3D.Web.Client.Tests.Components;
 

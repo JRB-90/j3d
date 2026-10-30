@@ -37,34 +37,30 @@ class FakeWorker implements StoreWorker {
   }
 }
 
-/** Web Locks shared by the "tabs" of a test: a request waits for the lock until its signal gives up. */
+/**
+ * Web Locks shared by the "tabs" of a test. An answer takes `delay` milliseconds, as on a page too busy to
+ * take it: by then a request's signal may have given up.
+ */
 class FakeLocks {
   readonly held = new Set<string>();
-  private readonly waiting = new Set<() => void>();
+  delay = 0;
 
   async request(name: string, options: LockOptions, callback: (lock: Lock | null) => unknown): Promise<unknown> {
-    if (options.ifAvailable && this.held.has(name)) {
-      return callback(null);
+    if (this.delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.delay));
     }
-    while (this.held.has(name)) {
-      await new Promise<void>((resolve, reject) => {
-        const free = () => {
-          this.waiting.delete(free);
-          resolve();
-        };
-        this.waiting.add(free);
-        options.signal?.addEventListener('abort', () => {
-          this.waiting.delete(free);
-          reject(options.signal!.reason);
-        });
-      });
+    options.signal?.throwIfAborted();
+    if (this.held.has(name)) {
+      if (options.ifAvailable) {
+        return callback(null);
+      }
+      throw new Error('This fake only waits for a lock with ifAvailable.');
     }
     this.held.add(name);
     try {
       return await callback({ name, mode: 'exclusive' } as Lock);
     } finally {
       this.held.delete(name);
-      [...this.waiting].forEach((free) => free());
     }
   }
 }
@@ -337,6 +333,13 @@ describe('ModelStore', () => {
     const opened = await reloaded.store.opened;
     expect(opened.status).toBe('kept');
     expect(opened.models.map(({ summary }) => summary.id)).toEqual(['a']);
+  });
+
+  it('takes a free lock however late the answer comes, as on a page too busy to take it (D276)', async () => {
+    const locks = new FakeLocks();
+    locks.delay = 20;
+
+    expect((await openTab(new FakeDisk(), locks, { lockWait: 1 }).store.opened).status).toBe('kept');
   });
 
   it("is unavailable where the browser gives the page no private file system", async () => {

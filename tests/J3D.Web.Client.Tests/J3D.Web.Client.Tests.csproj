@@ -19,4 +19,8 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\J3D.Blazor.Tests\TestModels.cs" Link="TestModels.cs" />
+  </ItemGroup>
+
 </Project>

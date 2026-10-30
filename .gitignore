@@ -428,8 +428,9 @@ FodyWeavers.xsd
 #*.lscache
 
 # --- J3D ---
-# Vite output (built by MSBuild from src/J3D.Web.Client/scripts)
-src/J3D.Web.Client/wwwroot/viewer/
+# Vite output (built by MSBuild from src/J3D.Blazor/scripts and src/J3D.Web.Client/scripts)
+src/J3D.Blazor/wwwroot/viewer/
+src/J3D.Web.Client/wwwroot/app/
 # The packages' compiled output
 src/J3D.Occt/lib/
 src/J3D.Viewer/lib/

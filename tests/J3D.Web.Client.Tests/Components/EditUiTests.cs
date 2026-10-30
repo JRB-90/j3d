@@ -1,12 +1,10 @@
 using J3D.Web.Client.Components;
-using J3D.Web.Client.Interop;
-using J3D.Web.Client.Models;
-using J3D.Web.Client.State;
+using J3D.Blazor;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
-using static J3D.Web.Client.Tests.TestModels;
+using static J3D.Blazor.Tests.TestModels;
 
 namespace J3D.Web.Client.Tests.Components;
 
@@ -164,7 +162,9 @@ public sealed class EditUiTests : BunitTestBase
             Scene.MarkLoaded(id, Info() with { Tree = Info().Tree with { Expandable = [4] } });
         });
         var expand = _viewer.Setup<ExpandOutcome>("expandParts", static _ => true);
-        await StartViewerAsync();
+        _viewer.Setup<StoredScene>("restoreScene").SetResult(StoredScene.Empty);
+        var viewer = Render<J3DViewer>(); // Expand runs in it, with the scene's other requests of the viewer
+        await Act(() => viewer.Instance.Callbacks.OnViewerReady(new ViewerCapabilities(WebGl2: true, CrossOriginIsolated: true)));
         var popovers = Render<MudPopoverProvider>();
         Render<ContextMenu>();
         var list = Render<ModelList>();
@@ -221,8 +221,8 @@ public sealed class EditUiTests : BunitTestBase
         var cut = Render<Viewport>();
 
         await cut.InvokeAsync(() => Scene.Pick(Id, 1, additive: false));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("copy"));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("paste"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("copy"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("paste"));
 
         // (bUnit lists the calls by name, so their order across names can't be checked here; E2E covers it.)
         // Since M16 the viewer's share comes in a task after .NET's (D199), and the edits cross packed.
@@ -236,18 +236,19 @@ public sealed class EditUiTests : BunitTestBase
         await cut.InvokeAsync(() => cut.Instance.OnTreeDrop($"{Id.Value}:5", Id.Value, 2, copy: false));
         Assert.Equal([3, 4, 5], Scene.Find(Id)!.Tree!.ChildrenOf(2));
 
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("delete"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("delete"));
         Assert.False(Scene.Find(Id)!.Tree!.Contains(5));
-        await cut.InvokeAsync(() => cut.Instance.OnViewerCommand("undo"));
+        await cut.InvokeAsync(() => CallbacksOf(cut).OnViewerCommand("undo"));
         Assert.True(Scene.Find(Id)!.Tree!.Contains(5));
     }
 
     private Task Act(Action action) => Renderer.Dispatcher.InvokeAsync(action);
 
     /// <summary>Waits for something no render shows, such as a call the Viewport makes after yielding (D199).</summary>
-    private static async Task EventuallyAsync(Func<bool> condition)
+    private async Task EventuallyAsync(Func<bool> condition)
     {
-        for (var tries = 0; tries < 100 && !condition(); tries++)
+        // On the renderer's thread, as what it reads is being written there.
+        for (var tries = 0; tries < 100 && !await Renderer.Dispatcher.InvokeAsync(condition); tries++)
         {
             await Task.Delay(10, Xunit.TestContext.Current.CancellationToken);
         }
