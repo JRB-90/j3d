@@ -113,7 +113,7 @@ treats as metres, is exported 1,000 times larger, in millimetres.
 
 | Action | Mouse | Touch | Keys and buttons |
 |---|---|---|---|
-| Rotate (turntable, Z stays up) | Right-drag | One finger | Click a face, edge or corner of the **view cube** (top right) for one of 26 standard views |
+| Rotate (turntable, Z stays up, about the model in the middle of the view) | Right-drag | One finger | Click a face, edge or corner of the **view cube** (top right) for one of 26 standard views |
 | Pan | Left-drag or middle-drag | Two-finger drag | |
 | Zoom | Wheel (towards the pointer) | Pinch | |
 | Fit everything visible in view | | | **Fit all** in the toolbar, or `F` |
@@ -183,8 +183,10 @@ stands in for `Ctrl`.
   placement (and the model's, if you moved it) in its children. A model whose kept edits no longer fit it (if a new
   version of J3D reads its file differently) comes back as imported, with a warning in the list.
 - Objects moved between models are written and read again (a CAD model's as STEP, a mesh model's as J3D's GLB), so
-  moving a large sub-assembly takes a moment, and a CAD part is drawn at the detail of the model it went to. Each
-  move or copy keeps its own file in that model's storage, until the model is deleted, even when it's undone.
+  moving a large sub-assembly takes a moment (copying the 270-part SO-101 arm into the 10,000-part plant takes about
+  8 seconds on a laptop, with "Bringing 270 parts…" in the plant's item), and a CAD part is drawn at the detail of
+  the model it went to. Each move or copy keeps its own file in that model's storage; one that was undone is deleted
+  the next time the page loads.
 - Expanding a part that the file places many times makes each expanded occurrence a copy of its own in an exported
   STEP, so Expand all on a large assembly makes a much larger file: the generated 10,000-part plant's grows from
   1.8 MB to about 15 MB. On that plant, selecting, moving and editing take 0.05–0.2 seconds on a laptop, Expand all of
@@ -244,7 +246,9 @@ adb reverse tcp:5274 tcp:5274
 ```
 
 Then open `http://localhost:5274` in Chrome, Edge or Firefox on the phone. `chrome://inspect` on the PC shows the
-phone's page for debugging.
+phone's page for debugging. On an Android phone (tested in Chrome), STEP files of up to at least 200 MB of unique
+parts load and work, as do the 10,000-part generated plant and the real SO-101 arm (20 MB). Larger files weren't
+tried on a phone.
 
 Building, testing, rebuilding the OCCT WebAssembly and the CI are covered in [docs/development.md](docs/development.md).
 The design, decisions and milestones are in [docs/plan.md](docs/plan.md).

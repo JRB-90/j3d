@@ -468,9 +468,10 @@ public sealed partial class SceneState
     /// A click in the viewport (D77): on a part, it becomes the selection, or with Ctrl it's added
     /// or removed; on empty space (no model), the selection is cleared unless Ctrl was held. The
     /// tree then reveals the part (D96). In Model mode the part's whole model is selected (D146). A pick
-    /// that changes the selection is an undo step (D219).
+    /// that changes the selection is an undo step (D219). Since M19 Add makes it additive too (D237), here as
+    /// well as in the viewer, which may not have heard of it yet.
     /// </summary>
-    public void Pick(ModelId? id, int node, bool additive) => Selecting(() => PickPart(id, node, additive));
+    public void Pick(ModelId? id, int node, bool additive) => Selecting(() => PickPart(id, node, additive || AddMode));
 
     private void PickPart(ModelId? id, int node, bool additive)
     {

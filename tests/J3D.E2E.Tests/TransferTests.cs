@@ -74,6 +74,37 @@ public sealed class TransferTests(J3DAppFixture app) : ViewerPageTest(app)
         AssertNoConsoleErrors();
     }
 
+    /// <summary>
+    /// D246 (M20): an undone copy's arrival file stays while the undo history could bring it back, and goes
+    /// when the model is restored after a reload, since the history doesn't survive one.
+    /// </summary>
+    [Fact]
+    public async Task An_undone_copy_leaves_no_file_behind_after_a_reload()
+    {
+        var (bracket, other) = await LoadAsync("assembly.step", "translucent.step");
+        var before = (await PartStateAsync(other)).Parts.Length;
+        await OpenTreeAsync("assembly.step", bracket);
+        await TreeNode(bracket, Pin).Locator(".j3d-tree-node-name").First.ClickAsync();
+        await Page.Keyboard.PressAsync("Control+c");
+        await OpenTreeAsync("translucent.step", other);
+        await TreeNode(other, 0).Locator(".j3d-tree-node-name").First.ClickAsync();
+        await Page.Keyboard.PressAsync("Control+v");
+        await WaitForNewPartAsync(other, before);
+        await Page.Keyboard.PressAsync("Control+z");
+        await Page.WaitForFunctionAsync("([id, count]) => window.__j3dTest.partState(id)?.parts.length === count", new object[] { other, before });
+        Assert.Single(await ArrivalFilesAsync(other)); // Redo could still use it
+
+        await Page.ReloadAsync();
+        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await WaitForImportsAsync(2);
+        await Page.WaitForFunctionAsync("([id, count]) => window.__j3dTest.partState(id)?.parts.length === count", new object[] { other, before });
+
+        await Page.WaitForFunctionAsync(
+            "async id => { await window.__j3dTest.storeIdle(); const models = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('j3d')).getDirectoryHandle('models'); for await (const name of (await models.getDirectoryHandle(id)).keys()) if (name.startsWith('arrival-')) return false; return true; }",
+            other);
+        AssertNoConsoleErrors();
+    }
+
     [Fact]
     public async Task A_cad_part_dropped_on_a_mesh_model_is_refused_saying_why()
     {
@@ -114,6 +145,12 @@ public sealed class TransferTests(J3DAppFixture app) : ViewerPageTest(app)
     }
 
     /// <summary>Imports two fixtures through the toolbar and waits until both are loaded; their ids, in that order.</summary>
+    /// <summary>The arrival files kept in a model's folder (M18), once the store has written everything asked of it.</summary>
+    private async Task<string[]> ArrivalFilesAsync(string id) =>
+        await Page.EvaluateAsync<string[]>(
+            "async id => { await window.__j3dTest.storeIdle(); const models = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('j3d')).getDirectoryHandle('models'); const names = []; for await (const name of (await models.getDirectoryHandle(id)).keys()) if (name.startsWith('arrival-')) names.push(name); return names; }",
+            id);
+
     private async Task<(string First, string Second)> LoadAsync(string first, string second)
     {
         await ImportWithToolbarAsync(first, second);

@@ -51,13 +51,38 @@ public sealed class NavigationTests(J3DAppFixture app) : ViewerPageTest(app)
         var turned = await CameraAsync();
         Assert.True(Math.Abs(AngleBetween(turned.Azimuth, before.Azimuth)) > 0.3, "a horizontal drag turns about Z");
         Assert.Equal(before.Polar, turned.Polar, 3);
-        AssertVector(before.Target, turned.Target);
+        await AssertAtCentreAsync(turned.Target); // the pivot, now on the part (D248), stays in the middle
 
         await DragAsync(MouseButton.Right, dx: 0, dy: 80);
         var tilted = await CameraAsync();
         Assert.True(Math.Abs(tilted.Polar - turned.Polar) > 0.2, "a vertical drag tilts");
         AssertAngle(turned.Azimuth, tilted.Azimuth);
         Assert.Equal(before.VisibleHeight, tilted.VisibleHeight, 6);
+    }
+
+    /// <summary>
+    /// D248 (M20): a turn turns about the model under the screen centre. From Home on the bracket, the
+    /// centre's ray first meets the top plate (z 35 to 40), not the box's centre (z = 20) where the fit put
+    /// the target; so a right-drag moves the pivot there without moving the view, and that point
+    /// stays in the middle as it turns.
+    /// </summary>
+    [Fact]
+    public async Task A_turn_turns_about_the_model_under_the_centre()
+    {
+        await ImportAsync("assembly.step");
+        await WaitForImportsAsync(1);
+        await Page.GetByTestId("home-button").ClickAsync();
+        await WaitForCameraRestAsync();
+        Assert.Equal(20, (await CameraAsync()).Target[2], 3);
+
+        await DragAsync(MouseButton.Left, dx: 30, dy: 0); // a pan leaves the target where it was in depth
+        Assert.Equal(20, (await CameraAsync()).Target[2], 3);
+        await DragAsync(MouseButton.Right, dx: 120, dy: 0);
+
+        var turned = await CameraAsync();
+        Assert.InRange(turned.Target[2], 35, 40.001); // on the top plate (its pin's hole is near the centre)
+        await AssertAtCentreAsync(turned.Target);
+        AssertNoConsoleErrors();
     }
 
     [Theory]
@@ -233,6 +258,14 @@ public sealed class NavigationTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.WaitForSelectorAsync("[data-testid=fit-all-button]:not([disabled])");
         await WaitForCameraRestAsync();
         return await CameraAsync();
+    }
+
+    /// <summary>A world point is drawn in the middle of the view.</summary>
+    private async Task AssertAtCentreAsync(double[] point)
+    {
+        var centre = await ViewportCentreAsync();
+        var drawn = await ProjectAsync(point[0], point[1], point[2]);
+        Assert.True(Math.Abs(drawn.X - centre.X) < 1 && Math.Abs(drawn.Y - centre.Y) < 1, $"({drawn.X}, {drawn.Y}) should be the view's centre ({centre.X}, {centre.Y})");
     }
 
     private async Task<ScreenPoint> ViewportCentreAsync()

@@ -15,7 +15,8 @@ export type StoreRequest =
   | { type: 'edits'; id: ModelId; kept: KeptEdits | null }
   /** Objects that arrived from another model, as a file in this one's folder (M18, D225). */
   | { type: 'writeArrival'; id: ModelId; name: string; file: Blob }
-  | { type: 'readArrival'; id: ModelId; name: string };
+  | { type: 'readArrival'; id: ModelId; name: string }
+  | { type: 'pruneArrivals'; id: ModelId; keep: string[] };
 
 /** A request with the id its answer echoes. The worker answers them one at a time, in order. */
 export type StoreRequestMessage = StoreRequest & { requestId: number };

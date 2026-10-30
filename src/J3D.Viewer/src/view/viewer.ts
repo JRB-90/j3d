@@ -1505,7 +1505,7 @@ export class Viewer {
    * never gets here (see {@link installViewCubeInput}).
    */
   private installPartInput(canvas: HTMLCanvasElement): void {
-    let press: { id: number; button: number; x: number; y: number; touch: boolean } | undefined;
+    let press: { id: number; button: number; x: number; y: number; touch: boolean; pivoted?: boolean } | undefined;
     // Fingers down on the canvas, which a touch's implicit capture keeps until they lift: a second finger
     // makes a pinch, not a tap (M19).
     const fingers = new Set<number>();
@@ -1541,8 +1541,18 @@ export class Viewer {
       }
     });
     this.listen(canvas, 'pointermove', (event) => {
-      if (longPress && press?.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > TapTolerance) {
+      if (press?.id !== event.pointerId) {
+        return;
+      }
+      const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
+      if (longPress && moved > TapTolerance) {
         cancelLongPress();
+      }
+      // A turn (a right-drag, or one finger) turns about the model under the screen centre (M20, D248).
+      const turning = press.touch ? fingers.size === 1 && press.button === 0 : press.button === 2;
+      if (turning && !press.pivoted && moved > (press.touch ? TapTolerance : ClickTolerance) && !this.handlePress) {
+        press.pivoted = true;
+        this.pivotAtCentre();
       }
     });
     this.listen(canvas, 'pointercancel', (event) => {
@@ -1602,6 +1612,21 @@ export class Viewer {
       this.measureTool.hover(undefined, undefined);
       this.features.hover(undefined, undefined);
     });
+  }
+
+  /**
+   * Moves the point the view turns about to the model's surface under the screen centre, leaving the view
+   * where it is (M20, D248): after a pan, or a zoom toward the pointer, the camera's target can lie in
+   * front of or behind the model, which then swings round rather than turning in place. With nothing
+   * under the centre it stays put.
+   */
+  private pivotAtCentre(): void {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const found = this.hitAt(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    if (found) {
+      const { x, y, z } = found.hit.point;
+      this.controls.setOrbitPoint(x, y, z);
+    }
   }
 
   /**

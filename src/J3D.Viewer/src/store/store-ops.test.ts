@@ -204,4 +204,19 @@ describe('StoreOps', () => {
     await ops.save('c', meta('c'), [new Blob(['c'])]); // usable again after a clear
     expect(Object.keys(disk.files())).toContain('j3d/models/c/0');
   });
+
+  it("deletes the arrivals a restored model's edits no longer name, and nothing else (M20, D246)", async () => {
+    const disk = new FakeDisk();
+    const ops = await saved(disk, 'a');
+    await ops.writeEdits('a', { placements: [] });
+    await ops.writeArrival('a', 'arrival-kept.step', new Blob(['kept']));
+    await ops.writeArrival('a', 'arrival-undone.step', new Blob(['undone']));
+    await ops.writeArrival('a', 'arrival-undone-too.glb', new Blob(['undone too']));
+
+    expect(await ops.pruneArrivals('a', ['arrival-kept.step'])).toBe(2);
+
+    expect(Object.keys(disk.files()).sort()).toEqual(['j3d/models/a/0', 'j3d/models/a/arrival-kept.step', 'j3d/models/a/edits-1.json', 'j3d/models/a/meta.json']);
+    expect(await ops.pruneArrivals('a', [])).toBe(1);
+    expect(await ops.pruneArrivals('a', [])).toBe(0);
+  });
 });
