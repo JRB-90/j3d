@@ -123,6 +123,8 @@ NuGet can't install from a URL, so download the package into a folder:
 curl -L --create-dirs -o packages/J3D.Blazor.0.1.0.nupkg https://github.com/JRB-90/j3d/releases/download/v0.1.0/J3D.Blazor.0.1.0.nupkg
 ```
 
+In Windows PowerShell, `curl` is another command, so type `curl.exe`.
+
 Name that folder in a `nuget.config` beside the solution. `J3D.Blazor` isn't on nuget.org, so the mapping makes sure that's never where it comes from:
 
 ```xml

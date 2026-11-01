@@ -9,6 +9,15 @@ namespace J3D.E2E.Tests;
 /// </summary>
 public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
 {
+    /// <summary>Keeps the store from opening until <c>__releaseStore</c>, as on a page too busy to get to it (R35).</summary>
+    private const string HoldTheStore = """
+        const request = LockManager.prototype.request;
+        const held = new Promise((resolve) => (window.__releaseStore = resolve));
+        LockManager.prototype.request = function (...args) {
+          return held.then(() => request.apply(this, args));
+        };
+        """;
+
     private readonly Uri _address = app.BaseAddress;
 
     private ILocator Items => Page.GetByTestId("model-item");
@@ -50,6 +59,24 @@ public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
         // The toolbar knows the projection: switching back to orthographic works.
         await SetProjectionAsync("orthographic");
         Assert.Equal("orthographic", (await CameraAsync()).Projection);
+        AssertNoConsoleErrors();
+    }
+
+    [Fact]
+    public async Task A_model_that_loads_before_the_store_has_opened_is_kept()
+    {
+        await Page.AddInitScriptAsync(HoldTheStore);
+        await ReloadAsync();
+        await ImportWithToolbarAsync("part.glb");
+        var before = await WaitForImportsAsync(1);
+        Assert.Equal("unavailable", await Page.EvaluateAsync<string>("() => window.__j3dTest.store().status"));
+        await Page.EvaluateAsync("() => window.__releaseStore()");
+
+        await ReloadAsync();
+        await Page.EvaluateAsync("() => window.__releaseStore()");
+        var after = await WaitForImportsAsync(1);
+
+        Assert.Equal(before.Select(static m => (m.Id, m.FileName)), after.Select(static m => (m.Id, m.FileName)));
         AssertNoConsoleErrors();
     }
 
@@ -133,14 +160,6 @@ public sealed class PersistenceTests(J3DAppFixture app) : ViewerPageTest(app)
     {
         var status = await Page.EvaluateAsync<string>("async () => { await window.__j3dTest.storeIdle(); return window.__j3dTest.store().status; }");
         Assert.Equal("kept", status);
-    }
-
-    /// <summary>Waits for the store to write everything, then reloads the page.</summary>
-    private async Task ReloadAsync()
-    {
-        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
-        await Page.ReloadAsync();
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
     }
 
     private async Task ClickWorldAsync(double x, double y, double z)

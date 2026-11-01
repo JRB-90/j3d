@@ -105,9 +105,7 @@ public sealed class MoveTests(J3DAppFixture app) : ViewerPageTest(app)
         await TypeAsync("move-y", "-50");
         await WaitForPlacementAsync(id, Model, 0, -50, 0);
 
-        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
-        await Page.ReloadAsync();
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await ReloadAsync();
         await WaitForImportsAsync(1);
         await Page.WaitForFunctionAsync("id => window.__j3dTest.models().some(m => m.id === id && m.status === 'loaded')", id);
 

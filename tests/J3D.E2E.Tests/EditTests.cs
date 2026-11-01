@@ -105,9 +105,7 @@ public sealed class EditTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.GetByTestId("tree-rename").PressAsync("Enter");
         await Expect(Page.GetByTestId("tree-rename")).ToHaveCountAsync(0);
 
-        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
-        await Page.ReloadAsync();
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await ReloadAsync();
         await WaitForImportsAsync(1);
         await Page.WaitForFunctionAsync("id => window.__j3dTest.partState(id)?.parts.length === 3", id);
 
@@ -163,9 +161,7 @@ public sealed class EditTests(J3DAppFixture app) : ViewerPageTest(app)
         var copy = (await PartStateAsync(id)).Selected.Single();
         Assert.Equal(world, await WorldAsync(id, copy));
 
-        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
-        await Page.ReloadAsync();
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await ReloadAsync();
         await WaitForImportsAsync(1);
         await Page.WaitForFunctionAsync("id => window.__j3dTest.partState(id)?.parts.length === 3", id);
         Assert.Equal(world, await WorldAsync(id, copy));

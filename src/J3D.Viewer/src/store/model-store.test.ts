@@ -95,6 +95,71 @@ function openTab(disk: FakeDisk, locks: FakeLocks, options: Partial<ModelStoreOp
 describe('ModelStore', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it('keeps a model that loads while the store is opening (R35)', async () => {
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const tab = openTab(disk, locks);
+    tab.store.setOrder(['a']);
+
+    expect(await tab.store.save(summary('a'), [source('a.step')])).toBe('kept');
+
+    await tab.store.idle();
+    tab.store.dispose();
+    await vi.waitFor(() => expect(locks.held.size).toBe(0));
+    expect((await openTab(disk, locks).store.opened).models).toEqual([{ summary: summary('a'), hidden: [] }]);
+  });
+
+  it('copies nothing of a model deleted while the store was opening', async () => {
+    const disk = new FakeDisk();
+    const tab = openTab(disk, new FakeLocks());
+    const saving = tab.store.save(summary('a'), [source('a.step')]);
+
+    tab.store.delete('a');
+
+    expect(await saving).toBe('kept');
+    expect(tab.store.has('a')).toBe(false);
+    expect(tab.worker!.requests).toEqual(['open']);
+  });
+
+  it("keeps an arrival for a model that's waiting for the store to open", async () => {
+    const tab = openTab(new FakeDisk(), new FakeLocks());
+    const saving = tab.store.save(summary('a'), [source('a.step')]);
+
+    expect(await tab.store.keepArrival('a', 'arrival-1.glb', new Blob(['glb']))).toBe('kept');
+    await saving;
+  });
+
+  it('writes, when idle, the manifest a save goes on to schedule as its request ends (R35)', async () => {
+    const tab = openTab(new FakeDisk(), new FakeLocks(), { manifestDelay: 60_000 });
+    await tab.store.opened;
+    tab.store.setOrder(['a']);
+    await tab.store.idle();
+
+    const saving = tab.store.save(summary('a'), [source('a.step')]);
+    await tab.store.idle();
+    await saving;
+
+    expect(tab.worker!.requests).toEqual(['open', 'manifest', 'save', 'manifest']);
+    tab.store.dispose();
+  });
+
+  it('warns when a manifest could not be read', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const disk = new FakeDisk();
+    const locks = new FakeLocks();
+    const first = openTab(disk, locks);
+    await first.store.opened;
+    first.store.setCamera(camera);
+    await first.store.idle();
+    first.store.dispose();
+    await vi.waitFor(() => expect(locks.held.size).toBe(0));
+    (await (await disk.root.getDirectoryHandle('j3d')).getFileHandle('manifest-1.json')).data = new TextEncoder().encode('{"ver');
+
+    await openTab(disk, locks).store.opened;
+
+    expect(warn).toHaveBeenCalledWith("J3D: 1 of the store's manifests couldn't be read.");
+  });
+
   it('keeps loaded models in the order .NET lists them, with their hidden parts and the camera', async () => {
     const disk = new FakeDisk();
     const locks = new FakeLocks();

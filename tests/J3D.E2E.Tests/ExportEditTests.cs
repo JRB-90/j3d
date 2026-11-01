@@ -83,9 +83,7 @@ public sealed class ExportEditTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.WaitForFunctionAsync("([id, parts]) => window.__j3dTest.partState(id).parts.length === parts + 1", new object[] { id, parts });
         await Expect(Page.Locator($"[data-tree-node^=\"{id}:\"] .j3d-tree-node-name", new PageLocatorOptions { HasText = "Gripper 2" })).ToHaveCountAsync(1);
 
-        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
-        await Page.ReloadAsync();
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await ReloadAsync();
         await WaitForImportsAsync(1);
         await Page.WaitForFunctionAsync("([id, parts]) => window.__j3dTest.partState(id)?.parts.length === parts + 1", new object[] { id, parts });
         await Expect(Items.Nth(0).GetByTestId("model-warnings")).ToHaveCountAsync(0);

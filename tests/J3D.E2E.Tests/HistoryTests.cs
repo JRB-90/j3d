@@ -131,13 +131,16 @@ public sealed class HistoryTests(J3DAppFixture app) : ViewerPageTest(app)
         await WaitForCameraRestAsync();
         await Expect(Page.GetByTestId("next-view")).ToBeDisabledAsync();
 
-        // A burst of wheel steps is one view (D220).
-        var centre = (await Page.GetByTestId("viewer-canvas").BoundingBoxAsync())!;
-        await Page.Mouse.MoveAsync(centre.X + (centre.Width / 2), centre.Y + (centre.Height / 2));
-        for (var i = 0; i < 3; i++)
-        {
-            await Page.Mouse.WheelAsync(0, -120);
-        }
+        // A burst of wheel steps is one view (D220). They go together: sent one at a time, a busy machine
+        // can leave them far enough apart for the camera to come to rest between them.
+        await Page.GetByTestId("viewer-canvas").EvaluateAsync("""
+            canvas => {
+              const { left, top, width, height } = canvas.getBoundingClientRect();
+              for (let step = 0; step < 3; step++) {
+                canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, clientX: left + width / 2, clientY: top + height / 2, bubbles: true, cancelable: true }));
+              }
+            }
+            """);
 
         await WaitForViewsAsync(views + 2);
         await WaitForCameraRestAsync();

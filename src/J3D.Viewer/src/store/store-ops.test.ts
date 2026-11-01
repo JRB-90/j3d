@@ -28,7 +28,7 @@ async function saved(disk: FakeDisk, ...ids: string[]): Promise<StoreOps> {
 describe('StoreOps', () => {
   it('opens an empty store', async () => {
     const disk = new FakeDisk();
-    expect(await new StoreOps(disk.root).open()).toEqual({ manifest: null, metas: {}, edits: {}, unreadable: [] });
+    expect(await new StoreOps(disk.root).open()).toEqual({ manifest: null, metas: {}, edits: {}, unreadable: [], unreadManifests: 0 });
   });
 
   it("copies a model's files and then its meta, closing every handle", async () => {
@@ -87,6 +87,37 @@ describe('StoreOps', () => {
 
     await reopened.writeManifest({ version: 1, models: [], camera: null }); // over the broken one, with a higher seq
     expect(JSON.parse(disk.files()['j3d/manifest-0.json']!).seq).toBe(2);
+  });
+
+  it('deletes nothing while a manifest cannot be read, and the models come back when it can (D294)', async () => {
+    const disk = new FakeDisk();
+    const ops = await saved(disk, 'a');
+    await ops.writeManifest({ version: 2, models: [{ id: 'a', hidden: [] }], camera: null });
+    const file = await (await disk.root.getDirectoryHandle('j3d')).getFileHandle('manifest-1.json');
+    const getFile = file.getFile.bind(file);
+    file.getFile = () => Promise.reject(new DOMException('It is in use.', 'NoModificationAllowedError'));
+
+    const { manifest, unreadManifests } = await new StoreOps(disk.root).open();
+
+    expect(manifest).toBeNull();
+    expect(unreadManifests).toBe(1);
+    expect(disk.files()['j3d/models/a/0']).toBe('a data');
+
+    file.getFile = getFile;
+    const { manifest: later, metas } = await new StoreOps(disk.root).open();
+    expect(later?.models).toEqual([{ id: 'a', hidden: [] }]);
+    expect(Object.keys(metas)).toEqual(['a']);
+  });
+
+  it("takes a manifest it doesn't understand for one it can't read", async () => {
+    const disk = new FakeDisk();
+    const ops = await saved(disk, 'a');
+    await ops.writeManifest({ version: 2, models: [{ id: 'a', hidden: [] }], camera: null });
+    const file = await (await disk.root.getDirectoryHandle('j3d')).getFileHandle('manifest-1.json');
+    file.data = new TextEncoder().encode('{"version":99}');
+
+    expect((await new StoreOps(disk.root).open()).unreadManifests).toBe(1);
+    expect(disk.files()['j3d/models/a/0']).toBe('a data');
   });
 
   it('deletes model folders the manifest no longer lists, and copies that never finished', async () => {
