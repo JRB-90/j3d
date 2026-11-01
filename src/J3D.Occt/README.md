@@ -9,7 +9,7 @@ The [Open CASCADE Technology](https://dev.opencascade.org/) kernel compiled to W
 It's a file on a [GitHub Release](https://github.com/JRB-90/j3d/releases), not on the npm registry:
 
 ```bash
-npm install https://github.com/JRB-90/j3d/releases/download/v0.1.0/j3d-occt-0.1.0.tgz
+npm install https://github.com/JRB-90/j3d/releases/download/v0.1.1/j3d-occt-0.1.1.tgz
 ```
 
 Vite and webpack need no configuration: your bundler copies the worker and the WebAssembly itself.

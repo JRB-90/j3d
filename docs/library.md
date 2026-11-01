@@ -27,7 +27,7 @@ cd my-viewer
 Install the viewer from the release. Its dependency on `@j3d/occt` is that release's URL too, so one install brings both. `three` is a peer dependency, so your app and the viewer share one copy.
 
 ```bash
-npm install https://github.com/JRB-90/j3d/releases/download/v0.1.0/j3d-viewer-0.1.0.tgz three@0.186.1
+npm install https://github.com/JRB-90/j3d/releases/download/v0.1.1/j3d-viewer-0.1.1.tgz three@0.186.1
 ```
 
 Put an input and an element for the viewer in `index.html`, in place of the template's `#app`:
@@ -120,7 +120,7 @@ cd MyViewer
 NuGet can't install from a URL, so download the package into a folder:
 
 ```bash
-curl -L --create-dirs -o packages/J3D.Blazor.0.1.0.nupkg https://github.com/JRB-90/j3d/releases/download/v0.1.0/J3D.Blazor.0.1.0.nupkg
+curl -L --create-dirs -o packages/J3D.Blazor.0.1.1.nupkg https://github.com/JRB-90/j3d/releases/download/v0.1.1/J3D.Blazor.0.1.1.nupkg
 ```
 
 In Windows PowerShell, `curl` is another command, so type `curl.exe`.
@@ -147,7 +147,7 @@ Name that folder in a `nuget.config` beside the solution. `J3D.Blazor` isn't on 
 ```
 
 ```bash
-dotnet add MyViewer.Client package J3D.Blazor --version 0.1.0
+dotnet add MyViewer.Client package J3D.Blazor --version 0.1.1
 ```
 
 Register its services in **both** projects' `Program.cs`, since the page prerenders on the server first:

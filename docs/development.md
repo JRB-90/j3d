@@ -269,8 +269,9 @@ holds it, so a release needs no version commit.
    files, and creates a prerelease with them. If a job fails on a flake, rerun it from the Actions page.
 3. **The release turns latest by itself** once both samples install from its public URLs. If that check fails, the
    release stays a prerelease: fix the fault and release the next version.
-4. **Point the docs at it.** `samples/` and `docs/library.md` name a version, which `tests/packaging` swaps for what it's
-   testing, so they don't fail when they fall behind. Update them with the next change.
+4. **Point the docs at it.** `samples/`, `docs/library.md` and the viewer's and kernel's READMEs name a version. Update
+   them with the next change: nothing fails when they fall behind, as `tests/packaging` swaps the samples' for what it's
+   testing.
 
 ## Conventions
 

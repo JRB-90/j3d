@@ -7,7 +7,7 @@ A three.js viewer for CAD and mesh models, for any web app. It opens STEP, IGES 
 It's a file on a [GitHub Release](https://github.com/JRB-90/j3d/releases), not on the npm registry. Installing its URL brings `@j3d/occt` from the same release, and `three` is a peer dependency, so your app and the viewer share one copy:
 
 ```bash
-npm install https://github.com/JRB-90/j3d/releases/download/v0.1.0/j3d-viewer-0.1.0.tgz three@0.186.1
+npm install https://github.com/JRB-90/j3d/releases/download/v0.1.1/j3d-viewer-0.1.1.tgz three@0.186.1
 ```
 
 Vite and webpack need no configuration: the packages ship ES modules, and your bundler copies the workers and the WebAssembly itself.
