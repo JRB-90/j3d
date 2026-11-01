@@ -2,7 +2,7 @@
 
 > Web-based 3D CAD viewer built on BREP and the Open CASCADE Technology (OCCT) kernel, with a Blazor UI.
 >
-> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). Iteration 3 complete (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) merged** (D165–D171), then a **clarity pass merged** (D172–D179); **M14 (assembly editing) merged** (D180–D187); **M15 (exporting edits, and Expand) merged** (D188–D197); **M16 (hardening) merged** (D198–D205, R27). Iteration 4 complete (§1, D206–D217): **M17 (Rotate, and undoing selection and the camera) merged** (D218–D224); **M18 (moving and copying between models) merged** (D225–D233); **M19 (phone and tablet layouts) merged** (D234–D243); **M20 (hardening) merged** (D244–D248). Iteration 5 (a reusable library, D214) planned (§1, D249–D263): **M21 (kernel and viewer packages) merged** (D264–D269); **M22 (the Razor library) merged** (D270–D277); **M23 (packing, samples and the release) in a draft PR** (D278–D285) · **Last updated:** 2026-10-30
+> **Branches:** one per milestone, squash-merged · **Status:** iteration 1 complete: M0 (scaffold), M1 (OCCT WASM build), M2 (import pipeline), M3 (viewer), M4 (Blazor UI) and M5 (hardening) merged. Iteration 2 complete (§1, D73–D92): **M6 (selection and visibility) merged** (D93–D100), **M7 (measurement) merged** (D101–D108), **M8 (persistence) merged** (D109–D117), **M9 (export) merged** (D118–D128), **M10 (hardening) merged** (D129–D136). **M11 (loose ends) merged** (D137–D141). Iteration 3 complete (§1, D142–D159): **M12 (selection modes, context menu and measurement) merged** (D160–D164); **M13 (origin frames and moving) merged** (D165–D171), then a **clarity pass merged** (D172–D179); **M14 (assembly editing) merged** (D180–D187); **M15 (exporting edits, and Expand) merged** (D188–D197); **M16 (hardening) merged** (D198–D205, R27). Iteration 4 complete (§1, D206–D217): **M17 (Rotate, and undoing selection and the camera) merged** (D218–D224); **M18 (moving and copying between models) merged** (D225–D233); **M19 (phone and tablet layouts) merged** (D234–D243); **M20 (hardening) merged** (D244–D248). Iteration 5 (a reusable library, D214) complete (§1, D249–D263): **M21 (kernel and viewer packages) merged** (D264–D269); **M22 (the Razor library) merged** (D270–D277); **M23 (packing, samples and the release) merged** (D278–D285), and **0.1.0 released**; D215's testing round is next · **Last updated:** 2026-11-01
 
 ---
 
@@ -183,7 +183,7 @@ Edits still change placements and structure, never shapes (D144), and each can b
 
 The reusable library (iteration 5, D214); iPhones, iPads and Safari (D137, D211); moving or copying between a BREP model and a mesh model (D210). **Dropped** (D143, D207): users and auth, deployment, sectioning, exploded views, exact (BREP) measurement of mesh models, keeping measurements or selections, and editing geometry.
 
-### Iteration 5 (planned)
+### Iteration 5 (complete)
 
 Wrap J3D up as a **reusable library** that the owner's other projects can reference (D214):
 
@@ -214,13 +214,13 @@ Nothing changes for someone using the app. After this iteration comes the owner'
 
 **M23: packing, samples and the release**
 
-- [ ] Pushing a `v*` tag tests, packs and creates a GitHub Release with the three files, all one version; `@j3d/viewer`'s dependency on `@j3d/occt` is that release's tarball URL (D254, D257).
-- [ ] `samples/` holds a plain Vite TypeScript app and a minimal Blazor app, built in CI from the packed files, each with a Playwright smoke test that loads a fixture and clicks a part (D259).
-- [ ] Each package carries its licence and the notices for what it ships, with the kernel a separate LGPL file (D249, §7).
-- [ ] `docs/library.md` and each package's README take a new project from nothing to a loaded model, the NuGet folder feed included (D249, D262).
-- [ ] On the large generated assembly and the real one (D156), the app's steps stay within D63's ~200 ms line or show their progress, as they did in M20 (D258).
-- [ ] Every criterion above is covered by tests that pass in CI, and by the owner's manual pass in Chrome and Edge and on their Android phone (D64, D211).
-- [ ] 0.1.0 is released, on the owner's go-ahead (D260).
+- [x] Pushing a `v*` tag tests, packs and creates a GitHub Release with the three files, all one version; `@j3d/viewer`'s dependency on `@j3d/occt` is that release's tarball URL (D254, D257).
+- [x] `samples/` holds a plain Vite TypeScript app and a minimal Blazor app, built in CI from the packed files, each with a Playwright smoke test that loads a fixture and clicks a part (D259).
+- [x] Each package carries its licence and the notices for what it ships, with the kernel a separate LGPL file (D249, §7).
+- [x] `docs/library.md` and each package's README take a new project from nothing to a loaded model, the NuGet folder feed included (D249, D262).
+- [x] On the large generated assembly and the real one (D156), the app's steps stay within D63's ~200 ms line or show their progress, as they did in M20 (D258).
+- [x] Every criterion above is covered by tests that pass in CI, and by the owner's manual pass in Chrome and Edge and on their Android phone (D64, D211).
+- [x] 0.1.0 is released, on the owner's go-ahead (D260).
 
 #### Out of scope for iteration 5
 
@@ -914,7 +914,7 @@ user picks/drops files (dropped folders expanded recursively, D43)
 
 OCCT and libcascade are **LGPL-2.1 with the Open CASCADE exception**. Three.js, camera-controls and MudBlazor are MIT, and the Draco decoder is Apache-2.0. The OCCT WASM ships as a separate, replaceable file loaded at runtime (dynamic-linking style), and its full build recipe (config, facade source, toolchain digest, provenance) is in this **public** repo (D35), which covers source availability. **As built (M5, D66):** [`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) lists everything that ships to the browser, including the runtime libraries Emscripten links into the OCCT WebAssembly (musl, LLVM's libc++/libc++abi/libunwind/compiler-rt, mimalloc), with their licence texts copied from the pinned toolchain image, and says where the OCCT build recipe is. The **About** dialog (the info button at the right of the app bar) shows the same list with links, the build's commit, and the notice the Open CASCADE exception asks for. `ThirdParty.Components` is the dialog's list, and `ThirdPartyNoticesTests` fails if it, the notices table and the shipped dependency versions disagree. *This isn't legal advice. Get a review before any public deployment.*
 
-**Iteration 5 (D249, D253, D254):** released packages carry the OCCT WebAssembly beyond a clone of this repo, though still as files on its own releases, beside the recipe that builds them. As Replicad does with `replicad-opencascadejs`, the kernel stays a package of its own, a separate and replaceable LGPL file: `@j3d/occt` is `LGPL-2.1-only WITH OCCT-exception-1.0`, and `@j3d/viewer` is MIT. `J3D.Blazor`'s own code is MIT, but it ships the same WASM inside its bundle, as a separate file, so it declares `MIT AND LGPL-2.1-only` (D281). Each package carries the notices for what it ships (M23). The review above hasn't been done; it's the owner's call, put to them again right before 0.1.0 is tagged (D280), and moving to npm or NuGet would raise it again.
+**Iteration 5 (D249, D253, D254):** released packages carry the OCCT WebAssembly beyond a clone of this repo, though still as files on its own releases, beside the recipe that builds them. As Replicad does with `replicad-opencascadejs`, the kernel stays a package of its own, a separate and replaceable LGPL file: `@j3d/occt` is `LGPL-2.1-only WITH OCCT-exception-1.0`, and `@j3d/viewer` is MIT. `J3D.Blazor`'s own code is MIT, but it ships the same WASM inside its bundle, as a separate file, so it declares `MIT AND LGPL-2.1-only` (D281). Each package carries the notices for what it ships (M23). The review above hasn't been done. Asked once more right before tagging (D280), the owner chose on 2026-11-01 to release 0.1.0 without one. Moving to npm or NuGet would raise it again.
 
 ---
 
@@ -1486,7 +1486,7 @@ Branch `feature/m20-hardening`, from `main` at `c676f64`, with M19's close-out i
 - The README (controls, touch, between models, limits), PRODUCT.md, DESIGN.md, `docs/development.md` and `THIRD-PARTY-NOTICES.md` (if anything new ships) brought up to date; a CI dispatch with large fixtures; Firefox in CI (D247).
 - **Exit:** every iteration 4 criterion in §1 is ticked.
 
-### Iteration 5 milestones
+### Iteration 5 milestones (complete)
 
 Planned on 2026-10-30 (D249–D263, three milestones by D258). Each starts with its own short question round (D263), so a scope below can still change; what's decided then is recorded in §2 and here.
 
@@ -1548,7 +1548,7 @@ Branch `feature/m22-razor-library`, from `main` at `98387f0`, with M21's close-o
 - **Firefox** is left to CI (D247).
 - **CI:** the PR's run 41085848628 was green on its last commit, and so was the merge's run 41089944553 on `main`, Firefox included, the first merge since R35 appeared without that failure. The owner tried M22 by hand on 2026-10-30, and its criteria are ticked.
 
-### M23 — Packing, samples and the release
+### M23 — Packing, samples and the release ✅ ([JRB-90/j3d#29](https://github.com/JRB-90/j3d/pull/29), squash-merged as `798002d`)
 
 Branch `feature/m23-release`, from `main` at `1db9166`, with M22's close-out in its first commit. Decided at its start: D278–D285.
 
@@ -1588,8 +1588,10 @@ Branch `feature/m23-release`, from `main` at `1db9166`, with M22's close-out in 
 
   Nothing crosses D63's line, about 200 ms of stall, without feedback, so nothing needed fixing. This run timed each step to the viewer's own state, which can come before the rest of the page, so times lower than M20's aren't gains: the long tasks are the fairer comparison. Those match, but for `1`, with one task of 111 ms against none over 50 in M20. It wasn't chased, being well inside the line. One ⋮ read 198 ms, right after a step of mine had timed out, and six more read 22–50. The sheet takes pointer events, so its figure is from those. The emulated phone reported no touch points to `navigator.maxTouchPoints`, though `pointer: coarse` matched and the compact layout showed.
 - **Manual checklist** in the built-in browser: on the app, both models imported and listed, a reload at 375 × 812 brought both back, and the tree, copying, moving, undo, the drawer, the sheet and ⋮ worked as timed above. On each sample, served from the packed files outside the repo: `so101.step` opened, a real mouse click highlighted a part and named it, and the console stayed clean.
-- **The rehearsal** (D278): tag `v0.1.0-rc.1` on `a73ca65`, [run 41122722300](https://github.com/JRB-90/j3d/actions/runs/41122722300). Its first attempt failed `Packaging` before that job ran anything: `npm install` in `tests/packaging` got a 404 for `tslib-2.9.1.tgz`, npm's newest version, needed by `webpack-dev-server` through `selfsigned`. The same file answered 200 minutes later, and the local lock still says 2.8.1. That's R36, and the owner chose to rerun rather than pin it. Rerunning the failed jobs passed: `Packaging`, then packing and both samples on those files, then the draft. All of CI on the tag had passed in the first attempt, Firefox included. The draft holds the three files from that commit at `0.1.0-rc.1`, with the viewer's kernel URL naming that release, the real WASM in the kernel's tarball and the `.nupkg`, the licences as D281 and D285 say, and the notices' links pinned to the tag. A hyphenated tag skips the last job as designed, so the install from public URLs and the step that marks a release latest run for the first time on `v0.1.0`.
+- **The rehearsal** (D278): tag `v0.1.0-rc.1` on `a73ca65`, [run 41122722300](https://github.com/JRB-90/j3d/actions/runs/41122722300). Its first attempt failed `Packaging` before that job ran anything: `npm install` in `tests/packaging` got a 404 for `tslib-2.9.1.tgz`, npm's newest version, needed by `webpack-dev-server` through `selfsigned`. The same file answered 200 minutes later, and the local lock still says 2.8.1. That's R36, and the owner chose to rerun rather than pin it. Rerunning the failed jobs passed: `Packaging`, then packing and both samples on those files, then the draft. All of CI on the tag had passed in the first attempt, Firefox included. The draft held the three files from that commit at `0.1.0-rc.1`, with the viewer's kernel URL naming that release, the real WASM in the kernel's tarball and the `.nupkg`, the licences as D281 and D285 say, and the notices' links pinned to the tag. Once that was read, the draft and the tag were removed, with the owner's OK. A hyphenated tag skips the last job as designed, so the install from public URLs and the step that marks a release latest ran for the first time on `v0.1.0`.
 - **Firefox** is left to CI (D247), and Docker wasn't started.
+- **CI:** the PR's run 41137630369 was green on its last commit, and so was the merge's run 41139819913 on `main`, on its first attempt, Firefox included.
+- **0.1.0** (D260, D283, §7): tag `v0.1.0` on `798002d`, the merge, [run 41302327007](https://github.com/JRB-90/j3d/actions/runs/41302327007), which passed on its first attempt in 22 minutes: all of CI, packing and both samples on those files, the prerelease, both samples installed from its public URLs, then the step that marks it latest. That install is what R33 says no earlier step can try, and each sample drew 24.1% of its viewer and picked "Plate (top)". The [release](https://github.com/JRB-90/j3d/releases/tag/v0.1.0) was published on 2026-11-01 with the three files, and the URLs the docs and samples name now answer. R35's and R36's failures didn't recur, which proves nothing about either. The owner confirmed their pass by hand in Chrome and Edge and on their Android phone on 2026-11-01, and M23's criteria are ticked, which completes iteration 5.
 
 ---
 
