@@ -8,7 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@j3d/viewer": "https://github.com/JRB-90/j3d/releases/download/v0.1.0/j3d-viewer-0.1.0.tgz",
+    "@j3d/viewer": "https://github.com/JRB-90/j3d/releases/download/v0.1.1/j3d-viewer-0.1.1.tgz",
     "three": "0.186.1"
   },
   "devDependencies": {
