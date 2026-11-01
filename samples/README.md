@@ -35,6 +35,8 @@ cd samples/blazor
 curl -L --create-dirs -o packages/J3D.Blazor.0.1.0.nupkg https://github.com/JRB-90/j3d/releases/download/v0.1.0/J3D.Blazor.0.1.0.nupkg
 ```
 
+In Windows PowerShell, `curl` is another command, so type `curl.exe`.
+
 ```bash
 dotnet run --project BlazorSample
 ```

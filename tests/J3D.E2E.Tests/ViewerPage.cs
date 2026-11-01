@@ -17,6 +17,7 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
     private readonly List<string> _consoleWarnings = [];
     private int _screenshots;
     private ScreenPoint[] _sampledPoints = [];
+    private string? _storedBeforeReload;
 
     public override async ValueTask InitializeAsync()
     {
@@ -89,12 +90,22 @@ public abstract class ViewerPageTest(J3DAppFixture app) : PageTest, IClassFixtur
         }
         catch (TimeoutException exception)
         {
-            // What the page had when the wait gave up (R35): no models and otherTab would be the store's lock.
+            // What the page had when the wait gave up (R35). With no models, otherTab is the store's lock; kept,
+            // with nothing held before the reload, is a model never kept; kept, with something held, is a lost manifest.
             var state = await EvaluateAsync<string>("() => JSON.stringify({ store: window.__j3dTest.store().status, models: window.__j3dTest.models().map(m => m.status) })");
-            throw new TimeoutException($"Waited for {count} model(s); the page had {state}.", exception);
+            throw new TimeoutException($"Waited for {count} model(s); the page had {state}, and before the reload the store held {_storedBeforeReload ?? "(no reload)"}. {ConsoleReport()}", exception);
         }
 
         return await ModelsAsync();
+    }
+
+    /// <summary>Waits for the store to write everything, notes what it held, then reloads the page.</summary>
+    protected async Task ReloadAsync()
+    {
+        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
+        _storedBeforeReload = await EvaluateAsync<string>("() => JSON.stringify(window.__j3dTest.store().stored)");
+        await Page.ReloadAsync();
+        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
     }
 
     protected Task WaitForAsync(string predicate) => Page.WaitForFunctionAsync(predicate);

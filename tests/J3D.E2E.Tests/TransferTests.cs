@@ -39,9 +39,7 @@ public sealed class TransferTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.WaitForFunctionAsync("([id, count]) => window.__j3dTest.partState(id)?.parts.length === count + 1", new object[] { other, before });
 
         // Kept with the model it went to: its file comes back from that model's folder (D225).
-        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
-        await Page.ReloadAsync();
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await ReloadAsync();
         await WaitForImportsAsync(2);
         await Page.WaitForFunctionAsync("([id, count]) => window.__j3dTest.partState(id)?.parts.length === count + 1", new object[] { other, before });
         Assert.Equal(PinWorld, await WorldAsync(other, copy));
@@ -94,8 +92,7 @@ public sealed class TransferTests(J3DAppFixture app) : ViewerPageTest(app)
         await Page.WaitForFunctionAsync("([id, count]) => window.__j3dTest.partState(id)?.parts.length === count", new object[] { other, before });
         Assert.Single(await ArrivalFilesAsync(other)); // Redo could still use it
 
-        await Page.ReloadAsync();
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await ReloadAsync();
         await WaitForImportsAsync(2);
         await Page.WaitForFunctionAsync("([id, count]) => window.__j3dTest.partState(id)?.parts.length === count", new object[] { other, before });
 
@@ -135,9 +132,7 @@ public sealed class TransferTests(J3DAppFixture app) : ViewerPageTest(app)
         var copy = await WaitForNewPartAsync(obj, before);
         Assert.Equal(world, await WorldAsync(obj, copy));
 
-        await Page.EvaluateAsync("() => window.__j3dTest.storeIdle()");
-        await Page.ReloadAsync();
-        await Page.WaitForFunctionAsync("() => window.__j3dTest !== undefined");
+        await ReloadAsync();
         await WaitForImportsAsync(2);
         await Page.WaitForFunctionAsync("([id, count]) => window.__j3dTest.partState(id)?.parts.length === count + 1", new object[] { obj, before });
         Assert.Equal(world, await WorldAsync(obj, copy));

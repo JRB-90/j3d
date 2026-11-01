@@ -108,17 +108,22 @@ export class ModelStore {
     return this.complete.has(id);
   }
 
-  /** Copies a loaded model's file and the sidecars it used (D113). */
+  /** Copies a loaded model's file and the sidecars it used (D113), once the store has opened: a model can load first (R35). */
   async save(summary: ModelSummary, sources: readonly BatchFile[]): Promise<SaveOutcome> {
+    this.saving.add(summary.id);
+    await this.opened;
     if (this.status !== 'kept') {
+      this.saving.delete(summary.id);
       return 'notKept';
+    }
+    if (!this.saving.has(summary.id)) {
+      return 'kept'; // deleted while the store was opening, so there's nothing to copy
     }
     this.askToPersist();
     const meta: StoredMeta = {
       summary,
       files: sources.map(({ file, path }, index) => ({ name: String(index), path, type: file.type, lastModified: file.lastModified })),
     };
-    this.saving.add(summary.id);
     try {
       await this.request({ type: 'save', id: summary.id, meta, files: sources.map(({ file }) => file) });
     } catch (error) {
@@ -239,6 +244,7 @@ export class ModelStore {
    * that name it. Nothing is kept for a model this tab doesn't keep.
    */
   async keepArrival(id: ModelId, name: string, file: Blob): Promise<SaveOutcome> {
+    await this.opened;
     if (this.status !== 'kept' || !(this.complete.has(id) || this.saving.has(id))) {
       return 'notKept';
     }
@@ -293,10 +299,13 @@ export class ModelStore {
     this.scheduleManifest();
   }
 
-  /** Once the store has opened, writes a waiting manifest now and resolves when every request so far is done (tests). */
+  /**
+   * Once the store has opened, writes a waiting manifest now and resolves when every request so far is
+   * done (tests). A save schedules its manifest as its request ends, so that's looked for after each wait.
+   */
   async idle(): Promise<void> {
     await this.opened;
-    for (let last = undefined as Promise<unknown> | undefined; last !== this.last; ) {
+    for (let last = undefined as Promise<unknown> | undefined; last !== this.last || this.manifestTimer !== undefined; ) {
       if (this.manifestTimer !== undefined) {
         this.writeManifest();
       }
@@ -337,7 +346,10 @@ export class ModelStore {
     worker.onmessage = ({ data }) => this.answer(data);
     this.worker = worker;
 
-    const { manifest, metas, edits, unreadable } = await this.request<OpenedStore>({ type: 'open', name: this.options.name ?? RootName });
+    const { manifest, metas, edits, unreadable, unreadManifests } = await this.request<OpenedStore>({ type: 'open', name: this.options.name ?? RootName });
+    if (unreadManifests > 0) {
+      console.warn(`J3D: ${unreadManifests} of the store's manifests couldn't be read.`);
+    }
     this.status = 'kept';
     this.unreadable = unreadable;
     const models = (manifest?.models ?? []).map(({ id, hidden }) => {

@@ -66,6 +66,8 @@ export interface OpenedStore {
   edits: Record<ModelId, KeptEdits>;
   /** Models the manifest lists whose meta couldn't be read: kept for the next visit, not restored (D200). */
   unreadable: ManifestModel[];
+  /** How many manifest files are there but couldn't be read: a write cut short, or a failed read (D294). */
+  unreadManifests: number;
 }
 
 /**
@@ -89,15 +91,19 @@ export class StoreOps {
    * Reads the newest readable manifest and each listed model's meta and edits, and deletes every model
    * folder it doesn't list: models deleted before the page closed (assumption 11) and copies a refresh
    * cut short (D113), which are never listed. A listed model whose meta can't be read is kept (D200):
-   * deleting it lost a model in M16's timings.
+   * deleting it lost a model in M16's timings. Nothing is deleted when a manifest can't be read (D294):
+   * it may be the one that lists them, and a later visit may read it.
    */
   async open(name = RootName): Promise<OpenedStore> {
     this.rootName = name;
     const root = await this.root();
     let manifest: Manifest | null = null;
+    let unreadManifests = 0;
     for (const name of ManifestNames) {
-      const read = await readJson(root, name).then(toManifest, () => null);
-      if (read && (!manifest || read.seq > manifest.seq)) {
+      const read = await readJson(root, name).then(toManifest, (error: unknown) => (isNotFound(error) ? undefined : null));
+      if (read === null) {
+        unreadManifests++;
+      } else if (read && (!manifest || read.seq > manifest.seq)) {
         manifest = read;
       }
     }
@@ -129,16 +135,18 @@ export class StoreOps {
       manifest = { ...manifest, models: manifest.models.filter((entry) => metas[entry.id] !== undefined) };
     }
 
-    const stale: string[] = [];
-    for await (const name of models.keys()) {
-      if (!listed.has(name)) {
-        stale.push(name);
+    if (unreadManifests === 0) {
+      const stale: string[] = [];
+      for await (const name of models.keys()) {
+        if (!listed.has(name)) {
+          stale.push(name);
+        }
+      }
+      for (const name of stale) {
+        await removeIfPresent(models, name);
       }
     }
-    for (const name of stale) {
-      await removeIfPresent(models, name);
-    }
-    return { manifest, metas, edits, unreadable };
+    return { manifest, metas, edits, unreadable, unreadManifests };
   }
 
   /** Writes a model's edits and moves over the older of its two files, or removes both when it has none (D205). */
@@ -350,10 +358,14 @@ async function removeIfPresent(folder: DirectoryHandle, name: string): Promise<v
   try {
     await folder.removeEntry(name, { recursive: true });
   } catch (error) {
-    if (!(error instanceof DOMException && error.name === 'NotFoundError')) {
+    if (!isNotFound(error)) {
       throw error;
     }
   }
+}
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'NotFoundError';
 }
 
 function isQuotaError(error: unknown): boolean {
